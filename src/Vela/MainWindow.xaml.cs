@@ -42,6 +42,7 @@ public partial class MainWindow : Window
 
     private CoreWebView2Environment? _env;
     private BrowserTab? _active;
+    private IntPtr _hwnd;
     private string? _transientStatus;
     private MemorySnapshot _lastMemory;
     private bool _shuttingDown;
@@ -73,6 +74,15 @@ public partial class MainWindow : Window
         _statusTimer.Tick += OnStatusTick;
 
         PreviewKeyDown += OnWindowPreviewKeyDown;
+
+        // WebView2 keeps the page in a child window: without this, shortcuts only worked
+        // while the chrome itself had focus.
+        SourceInitialized += (_, _) =>
+        {
+            _hwnd = new WindowInteropHelper(this).Handle;
+            KeyboardShortcuts.Register(_hwnd, HandleShortcut);
+        };
+        Closed += (_, _) => KeyboardShortcuts.Unregister(_hwnd);
     }
 
     // =====================================================================
@@ -631,10 +641,24 @@ public partial class MainWindow : Window
             ? (Brush)FindResource("Accent")
             : (Brush)FindResource("TextSecondary");
 
-        SecurityGlyph.Text = tab.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? IconLock : IconUnlock;
-        SecurityGlyph.ToolTip = tab.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-            ? "Conexiune criptată"
-            : "Fără criptare / pagină internă";
+        if (tab.IsInternalPage)
+        {
+            SecurityGlyph.Text = "\uE721"; // search glyph, like Brave's new tab
+            SecurityGlyph.Foreground = (Brush)FindResource("TextMuted");
+            SecurityGlyph.ToolTip = "Pagină internă Vela";
+        }
+        else if (tab.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            SecurityGlyph.Text = IconLock;
+            SecurityGlyph.Foreground = (Brush)FindResource("TextMuted");
+            SecurityGlyph.ToolTip = "Conexiune criptată";
+        }
+        else
+        {
+            SecurityGlyph.Text = IconUnlock;
+            SecurityGlyph.Foreground = (Brush)FindResource("TextMuted");
+            SecurityGlyph.ToolTip = "Fără criptare";
+        }
 
         UpdateStatusBar();
     }
@@ -690,10 +714,15 @@ public partial class MainWindow : Window
 
     private void SetOmnibox(string url)
     {
-        var display = FormatForDisplay(url);
+        // A fresh tab looks empty, the way Brave does it: no vela.internal URL in the omnibox.
+        var display = IsInternalUrl(url) ? "" : FormatForDisplay(url);
         Omnibox.Text = display;
         OmniboxPlaceholder.Visibility = display.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private static bool IsInternalUrl(string? url) =>
+        !string.IsNullOrEmpty(url) &&
+        url.StartsWith("https://" + AppConstants.InternalHost + "/", StringComparison.OrdinalIgnoreCase);
 
     private static string FormatForDisplay(string? url)
     {
