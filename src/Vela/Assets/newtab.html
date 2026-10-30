@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tab nou</title>
+<style>
+  :root {
+    --bg: #101114;
+    --surface: #1b1d23;
+    --surface-2: #24262d;
+    --border: #2e313a;
+    --text: #ecedf1;
+    --muted: #9aa0ad;
+    --dim: #6e7280;
+    --accent: #fb542b;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(900px 380px at 50% -160px, rgba(251, 84, 43, 0.16), transparent 70%);
+    color: var(--text);
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 34px;
+    padding: 40px 24px;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: -1.2px;
+  }
+
+  .brand .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+    transform: translateY(-3px);
+  }
+
+  .brand small {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    color: var(--dim);
+    margin-left: 8px;
+  }
+
+  .search {
+    width: min(620px, 92vw);
+    height: 52px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px 0 16px;
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+
+  .search:focus-within {
+    border-color: rgba(251, 84, 43, 0.55);
+    background: #262931;
+    box-shadow: 0 0 0 3px rgba(251, 84, 43, 0.10);
+  }
+
+  .search svg { flex: none; opacity: .55; }
+
+  .search input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    padding: 0 12px;
+    height: 100%;
+  }
+
+  .search input::placeholder { color: var(--dim); }
+
+  .search .hint {
+    font-size: 11px;
+    color: var(--dim);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 7px;
+    margin-right: 6px;
+    white-space: nowrap;
+  }
+
+  .tiles {
+    display: grid;
+    grid-template-columns: repeat(6, 88px);
+    gap: 14px;
+  }
+
+  @media (max-width: 700px) {
+    .tiles { grid-template-columns: repeat(3, 88px); }
+  }
+
+  .tile {
+    width: 88px;
+    height: 82px;
+    border-radius: 14px;
+    background: var(--surface);
+    border: 1px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text);
+    transition: transform .12s ease, background .12s ease, border-color .12s ease;
+  }
+
+  .tile:hover {
+    background: var(--surface-2);
+    border-color: var(--border);
+    transform: translateY(-2px);
+  }
+
+  .tile:active { transform: translateY(0) scale(.98); }
+
+  .avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-weight: 600;
+    font-size: 15px;
+    color: #fff;
+  }
+
+  .tile span {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 76px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 6px;
+  }
+
+  .stat {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .stat b {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat .led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5fcb7c;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 16px;
+    font-size: 11px;
+    color: var(--dim);
+    display: flex;
+    gap: 18px;
+  }
+
+  kbd {
+    font-family: inherit;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 5px;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+  <div class="brand">vela<span class="dot"></span><small>tab nou</small></div>
+
+  <label class="search">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa0ad" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"></circle>
+      <line x1="20" y1="20" x2="16.65" y2="16.65"></line>
+    </svg>
+    <input id="q" type="text" placeholder="Caută pe web sau tastează o adresă" autocomplete="off"
+           spellcheck="false" autofocus>
+    <span class="hint">Enter</span>
+  </label>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="stats">
+    <div class="stat"><span class="led"></span>RAM <b id="ram">–</b></div>
+    <div class="stat">Procese <b id="procs">–</b></div>
+    <div class="stat">Tab-uri <b id="tabs">–</b></div>
+    <div class="stat">În repaus <b id="sleeping">–</b></div>
+    <div class="stat">Blocate <b id="blocked">–</b></div>
+  </div>
+
+  <div class="footer">
+    <span><kbd>Ctrl</kbd>+<kbd>T</kbd> tab nou</span>
+    <span><kbd>Ctrl</kbd>+<kbd>L</kbd> adresă</span>
+    <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> redeschide</span>
+  </div>
+
+<script>
+  const sites = [
+    { name: 'YouTube',  url: 'https://www.youtube.com',        color: '#e5372b' },
+    { name: 'GitHub',   url: 'https://github.com',             color: '#5b6472' },
+    { name: 'Wikipedia',url: 'https://ro.wikipedia.org',       color: '#339966' },
+    { name: 'Reddit',   url: 'https://www.reddit.com',         color: '#ff5a1f' },
+    { name: 'Gmail',    url: 'https://mail.google.com',        color: '#c5453a' },
+    { name: 'Meteo',    url: 'https://www.meteoblue.com',      color: '#3a7bd5' }
+  ];
+
+  const tiles = document.getElementById('tiles');
+  for (const site of sites) {
+    const a = document.createElement('a');
+    a.className = 'tile';
+    a.href = site.url;
+    a.title = site.url;
+    a.addEventListener('click', (event) => {
+      event.preventDefault();
+      post({ type: 'navigate', url: site.url });
+    });
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.style.background = site.color;
+    avatar.textContent = site.name[0];
+
+    const label = document.createElement('span');
+    label.textContent = site.name;
+
+    a.append(avatar, label);
+    tiles.append(a);
+  }
+
+  function post(message) {
+    if (window.chrome && chrome.webview) chrome.webview.postMessage(message);
+  }
+
+  const input = document.getElementById('q');
+  input.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    const value = input.value.trim();
+    if (!value) return;
+    post({ type: 'search', q: value });
+  });
+
+  if (window.chrome && chrome.webview) {
+    chrome.webview.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || data.type !== 'stats') return;
+
+      document.getElementById('ram').textContent = data.ramMB + ' MB';
+      document.getElementById('procs').textContent = data.processes;
+      document.getElementById('tabs').textContent = data.tabs;
+      document.getElementById('sleeping').textContent = data.sleeping;
+      document.getElementById('blocked').textContent = data.blocked;
+    });
+  }
+
+  input.focus();
+
+  // Keep the clock-free page calm but let Esc clear the box.
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') input.value = '';
+  });
+</script>
+</body>
+</html>
