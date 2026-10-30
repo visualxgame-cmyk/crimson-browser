@@ -428,18 +428,24 @@ public partial class MainWindow : Window
             await using var stream = await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png);
             if (stream is null) return;
 
+            // The native favicon stream is not seekable (and cannot be frozen), so copy it
+            // into memory first: WPF needs a seekable stream for BitmapImage.
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            buffer.Position = 0;
+
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.StreamSource = stream;
+            bitmap.StreamSource = buffer;
             bitmap.EndInit();
             bitmap.Freeze();
 
             tab.Favicon = bitmap;
         }
-        catch
+        catch (Exception ex)
         {
-            // Favicons are best effort.
+            Log.Write("Favicon: " + ex.Message);
         }
     }
 

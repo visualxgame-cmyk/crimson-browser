@@ -10,6 +10,7 @@
     <AssemblyName>Vela</AssemblyName>
     <RootNamespace>Vela</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\vela.ico</ApplicationIcon>
     <Authors>Vela</Authors>
     <Product>Vela Browser</Product>
     <Version>0.1.0</Version>
@@ -21,6 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="Assets\vela.ico" />
+    <Resource Include="Assets\vela.ico" />
     <None Update="Assets\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

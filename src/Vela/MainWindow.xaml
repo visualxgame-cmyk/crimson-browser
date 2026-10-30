@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Vela"
+        Icon="Assets/vela.ico"
         Height="860" Width="1380" MinHeight="520" MinWidth="760"
         WindowStyle="None" AllowsTransparency="False"
         WindowStartupLocation="CenterScreen"
@@ -84,7 +85,7 @@
                                                        HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Visible" />
+                                                        <Setter Property="Visibility" Value="Collapsed" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Favicon}" Value="{x:Null}">
                                                                 <Setter Property="Visibility" Value="Visible" />
