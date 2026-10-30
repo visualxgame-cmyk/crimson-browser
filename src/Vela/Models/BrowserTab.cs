@@ -28,6 +28,9 @@ public sealed class BrowserTab : ObservableObject
     /// <summary>Backing WebView2 control; null while the tab has never been shown or was discarded.</summary>
     public WebView2? View { get; set; }
 
+    /// <summary>Id of the cosmetic/adblock script registered on this tab's WebView (null when off).</summary>
+    public string? InjectionScriptId { get; set; }
+
     public bool HasView => View is not null;
 
     /// <summary>URL to load the next time a view is created for this tab.</summary>

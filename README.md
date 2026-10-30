@@ -6,7 +6,7 @@ rotunjit, temă întunecată și accent portocaliu `#FB542B` — dar consumul de
 control printr-o politică agresivă de adormire/eliberare a tab-urilor.
 
 - Fără fork de Chromium, fără Electron, fără extensii: un singur executabil WPF (~1 MB) + runtime-ul WebView2 deja prezent pe Windows 11.
-- Blocare de reclame și trackere la nivel de rețea, cu listă inclusă și suport pentru liste proprii.
+- Blocare de reclame și trackere pe trei niveluri (rețea + cosmetic + playerul YouTube), cu listă inclusă de peste 76.000 de domenii și suport pentru liste proprii.
 - Tab-uri din fundal înghețate și, la nevoie, aruncate complet din memorie.
 
 ---
@@ -63,16 +63,35 @@ Toate pragurile se schimbă din **Meniu → Economie de memorie** sau direct în
 
 ## Blocarea reclamelor
 
-Fără extensii: fiecare cerere a unui tab trece prin `WebResourceRequested` și este comparată cu lista
-încărcată la pornire.
+Funcționează fără extensii, pe trei niveluri:
 
-- Lista inclusă: `src\Vela\Assets\blocklist.txt` (domenii, format hosts, `||domeniu^`, fragmente de cale).
-- Liste suplimentare: orice `*.txt` în `%LOCALAPPDATA%\Vela\Filters\` (poți copia liste ABP/uBlock; regulile complexe cu regex sunt ignorate, cele pe domenii funcționează).
+1. **Rețea** — fiecare cerere a unui tab trece prin `WebResourceRequested` și este comparată cu lista
+   încărcată la pornire. Lista mare vine din StevenBlack unified hosts (peste 76.000 de domenii de
+   reclame, trackere și malware), peste care se adaugă lista curată Vela.
+2. **Cosmetic** — un script injectat înainte de scripturile paginii ascunde containerele de reclame
+   rămase (bannere, sloturi GPT, casete sponsorizate, feed-uri). Folosește `adoptedStyleSheets`, deci
+   funcționează și pe site-uri cu CSP strict.
+3. **YouTube** — scriptul elimină `adPlacements`, `adSlots` și `playerAds` din răspunsul playerului
+   înainte ca playerul să le vadă: atât din `ytInitialPlayerResponse` (încărcare directă), cât și din
+   cererile `/youtubei/v1/player` (navigare în interiorul site-ului). Reclamele pre-roll și mid-roll
+   dispar, la fel bannerul din feed și overlay-urile din player.
+
+Detalii:
+
+- Lista inclusă: `src\Vela\Assets\blocklist.txt` (domenii, format hosts, `||domeniu^`, fragmente de cale)
+  și `src\Vela\Assets\blocklist-big.txt` (lista extinsă).
+- Filtrele cosmetice și scriptul YouTube: `src\Vela\Assets\adblock.js`.
+- Liste suplimentare: orice `*.txt` în `%LOCALAPPDATA%\Vela\Filters\` (poți copia liste ABP/uBlock; regulile complexe cu regex sunt ignorate, cele pe domenii și `@@||domeniu^` funcționează).
 - Excepții: `%LOCALAPPDATA%\Vela\Filters\allowlist.txt`, un domeniu pe linie.
 - Cererile **first-party** (același host ca pagina) nu sunt niciodată blocate, ca să nu stricăm site-ul.
-- Comutator global: `BlockAds` în `settings.json`; per site: butonul Scut din toolbar.
+- Comutator global: `BlockAds` în `settings.json`; per site: butonul Scut din toolbar. Scutul oprit
+  reîncarcă pagina fără filtre cosmetice, ca să vezi site-ul exact cum arată fără blocare.
 
 Cererile blocate primesc un răspuns `403` gol, deci scripturile de tracking nu se încarcă deloc.
+
+**Limite:** YouTube își schimbă des playerul; dacă într-o zi apar din nou reclame, partea de scriptlet
+trebuie actualizată. Reclamele livrate first-party sau lipite direct în fluxul video nu pot fi eliminate
+prin rețea — cosmeticul ascunde doar containerele, nu conținutul video.
 
 ## Datele tale
 
@@ -117,7 +136,7 @@ src\Vela\
   Theme\Theme.xaml         culori + stiluri (temă întunecată, accent Brave)
   Models\                  BrowserTab (starea unui tab), ObservableObject
   Services\
-    AdBlocker.cs           parsare reguli + blocare la nivel de rețea
+    AdBlocker.cs           parsare reguli + blocare la nivel de rețea + injectarea filtrelor
     Settings.cs            settings.json (praguri de memorie, căutare, scut)
     HistoryStore.cs        istoric local (ultimele 8000 de intrări)
     BookmarksStore.cs      favorite
@@ -128,7 +147,9 @@ src\Vela\
     Log.cs                 log rotativ
   Assets\
     newtab.html            pagina de tab nou (dark, căutare, tile-uri, statistici live)
-    blocklist.txt          lista de blocare inclusă
+    blocklist.txt          lista de blocare inclusă (curată, comentată)
+    blocklist-big.txt      lista extinsă de domenii (StevenBlack unified hosts)
+    adblock.js             filtre cosmetice + eliminarea reclamelor YouTube din player
 ```
 
 ## Limitări cunoscute

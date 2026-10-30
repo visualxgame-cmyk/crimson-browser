@@ -22,6 +22,9 @@ public sealed class AdBlocker
 
     public long BlockedTotal { get; private set; }
 
+    /// <summary>Cosmetic + YouTube scriptlet injected into every document while the shield is on.</summary>
+    public string InjectionScript { get; private set; } = string.Empty;
+
     public void Load()
     {
         _hosts.Clear();
@@ -29,6 +32,17 @@ public sealed class AdBlocker
         _pathFragments.Clear();
 
         TryLoadFile(Path.Combine(AppPaths.Assets, "blocklist.txt"));
+        TryLoadFile(Path.Combine(AppPaths.Assets, "blocklist-big.txt"));
+
+        try
+        {
+            var scriptPath = Path.Combine(AppPaths.Assets, "adblock.js");
+            if (File.Exists(scriptPath)) InjectionScript = File.ReadAllText(scriptPath);
+        }
+        catch
+        {
+            // Cosmetic filtering is optional; network blocking still works.
+        }
 
         try
         {
@@ -63,8 +77,15 @@ public sealed class AdBlocker
         {
             var line = raw.Trim();
 
-            if (line.Length == 0 || line[0] is '#' or '!' or '[' || line.StartsWith("@@", StringComparison.Ordinal))
+            if (line.Length == 0 || line[0] is '#' or '!' or '[') continue;
+
+            // ABP allow rule: "@@||example.com^"
+            if (line.StartsWith("@@", StringComparison.Ordinal))
+            {
+                var allowHost = NormalizeHost(line[2..].TrimStart('|').TrimEnd('^').Split('$')[0]);
+                if (allowHost is not null) _allowHosts.Add(allowHost);
                 continue;
+            }
 
             // Hosts-file format: "0.0.0.0 ads.example.com"
             var parts = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
@@ -75,10 +96,14 @@ public sealed class AdBlocker
                 continue;
             }
 
-            // ABP domain anchor: "||ads.example.com^"
+            // ABP domain anchor: "||ads.example.com^" or "||ads.example.com^$third-party"
             if (line.StartsWith("||", StringComparison.Ordinal))
             {
-                var body = line[2..].TrimEnd('^');
+                var body = line[2..];
+                var caret = body.IndexOf('^');
+                if (caret >= 0) body = body[..caret];
+                var dollar = body.IndexOf('$');
+                if (dollar >= 0) body = body[..dollar];
                 var anchorHost = NormalizeHost(body);
                 if (anchorHost is not null) _hosts.Add(anchorHost);
                 continue;

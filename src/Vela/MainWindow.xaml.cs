@@ -288,7 +288,7 @@ public partial class MainWindow : Window
         }
 
         var core = view.CoreWebView2;
-        ConfigureCore(tab, core);
+        await ConfigureCoreAsync(tab, core);
 
         var target = string.IsNullOrWhiteSpace(tab.PendingUrl) ? _settings.HomePage : tab.PendingUrl;
         tab.PendingUrl = "";
@@ -297,7 +297,7 @@ public partial class MainWindow : Window
         return view;
     }
 
-    private void ConfigureCore(BrowserTab tab, CoreWebView2 core)
+    private async Task ConfigureCoreAsync(BrowserTab tab, CoreWebView2 core)
     {
         var settings = core.Settings;
         settings.AreDefaultContextMenusEnabled = true;
@@ -384,6 +384,41 @@ public partial class MainWindow : Window
                 tab.BlockedCount++;
                 if (ReferenceEquals(tab, _active) && ShieldPopup.IsOpen) UpdateShieldPopup(tab);
             });
+
+        if (tab.ShieldEnabled && _settings.BlockAds)
+            await AddInjectionAsync(tab, core);
+    }
+
+    private async Task AddInjectionAsync(BrowserTab tab, CoreWebView2 core)
+    {
+        if (tab.InjectionScriptId is not null || string.IsNullOrEmpty(_blocker.InjectionScript)) return;
+
+        try
+        {
+            tab.InjectionScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(_blocker.InjectionScript);
+        }
+        catch (Exception ex)
+        {
+            Log.Write("Cosmetic injection: " + ex.Message);
+        }
+    }
+
+    private Task RemoveInjectionAsync(BrowserTab tab, CoreWebView2 core)
+    {
+        var id = tab.InjectionScriptId;
+        if (id is null) return Task.CompletedTask;
+
+        tab.InjectionScriptId = null;
+        try
+        {
+            core.RemoveScriptToExecuteOnDocumentCreated(id);
+        }
+        catch (Exception ex)
+        {
+            Log.Write("Cosmetic removal: " + ex.Message);
+        }
+
+        return Task.CompletedTask;
     }
 
     private static async Task UpdateFaviconAsync(BrowserTab tab, CoreWebView2 core)
@@ -504,6 +539,7 @@ public partial class MainWindow : Window
         var url = !string.IsNullOrWhiteSpace(tab.Url) ? tab.Url : tab.PendingUrl;
 
         tab.View = null;
+        tab.InjectionScriptId = null;
         ContentHost.Children.Remove(view);
         try { view.Dispose(); }
         catch (Exception ex) { Log.Write("Discard tab: " + ex.Message); }
@@ -835,7 +871,7 @@ public partial class MainWindow : Window
         ShieldSavedText.Text = tab.IsInternalPage
             ? "Pagină internă Vela — fără trafic extern."
             : _settings.BlockAds
-                ? "Reclamele și trackerele sunt blocate în rețea, fără extensii."
+                ? "Reclamele sunt blocate în rețea și ascunse în pagină, inclusiv în playerul YouTube."
                 : "Blocarea globală este oprită din meniu.";
     }
 
@@ -1294,14 +1330,24 @@ public partial class MainWindow : Window
         ShieldPopup.IsOpen = true;
     }
 
-    private void ShieldToggle_Click(object sender, RoutedEventArgs e)
+    private async void ShieldToggle_Click(object sender, RoutedEventArgs e)
     {
         if (_active is null) return;
 
         var enabled = ShieldToggle.IsChecked == true;
         _active.ShieldEnabled = enabled;
 
-        if (enabled) _active.View?.CoreWebView2?.Reload();
+        var core = _active.View?.CoreWebView2;
+        if (core is not null)
+        {
+            // Cosmetic filters live in a script registered per document, so they have to be
+            // added/removed as well when the shield changes. Reload to apply immediately.
+            if (enabled) await AddInjectionAsync(_active, core);
+            else await RemoveInjectionAsync(_active, core);
+
+            try { core.Reload(); } catch { }
+        }
+
         UpdateChrome();
         UpdateShieldPopup(_active);
 
