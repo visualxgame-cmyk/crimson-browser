@@ -858,11 +858,15 @@ public partial class MainWindow : Window
 
         try
         {
-            var raw = e.TryGetWebMessageAsString();
+            // The new tab page posts JSON objects, so read the JSON form: TryGetWebMessageAsString
+            // throws for object messages (it only accepts strings).
+            var raw = e.WebMessageAsJson;
             if (string.IsNullOrWhiteSpace(raw)) return;
 
             using var document = JsonDocument.Parse(raw);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return;
+
             var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
 
             switch (type)
