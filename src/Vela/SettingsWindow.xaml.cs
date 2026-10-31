@@ -118,19 +118,9 @@ public partial class SettingsWindow : Window
             };
             name.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
 
-            var tagline = new TextBlock
-            {
-                Text = theme.Tagline,
-                FontSize = 10.5,
-                Margin = new Thickness(2, 0, 0, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            tagline.SetResourceReference(TextBlock.ForegroundProperty, "TextMuted");
-
             var stack = new StackPanel { Width = 148 };
             stack.Children.Add(frame);
             stack.Children.Add(name);
-            stack.Children.Add(tagline);
 
             var button = new Button
             {
@@ -363,8 +353,6 @@ public partial class SettingsWindow : Window
         // A theme change also changes the "auto" accent swatch, so rebuild it.
         BuildAccentSwatches();
         SetAccent(_draft.CustomAccent, updateBox: true);
-
-        HeaderSubtitle.Text = "Tema " + ThemeCatalog.Get(_draft.Theme).Name;
     }
 
     private void ThemeCard_Click(object sender, RoutedEventArgs e)
@@ -382,9 +370,7 @@ public partial class SettingsWindow : Window
         if (updateBox)
             AccentHexBox.Text = hex ?? ThemeCatalog.Get(_draft.Theme).Accent;
 
-        AccentStatusText.Text = hex is null
-            ? "Se folosește accentul temei."
-            : "Accent personalizat peste temă.";
+        AccentStatusText.Visibility = Visibility.Collapsed;
 
         UpdateAccentRings();
     }
@@ -423,6 +409,7 @@ public partial class SettingsWindow : Window
         if (!ThemeCatalog.TryParse(AccentHexBox.Text, out var color))
         {
             AccentStatusText.Text = "Cod de culoare invalid. Folosește #RRGGBB.";
+            AccentStatusText.Visibility = Visibility.Visible;
             return;
         }
 
@@ -529,7 +516,6 @@ public partial class SettingsWindow : Window
             UpdateImageText();
             UpdateBackgroundPreview();
             Preview();
-            FooterStatusText.Text = "Imaginea a fost copiată în folderul Vela.";
         }
         catch (Exception ex)
         {
@@ -578,7 +564,7 @@ public partial class SettingsWindow : Window
         RemoveImageButton.IsEnabled = hasImage;
         ImageNameText.Text = hasImage
             ? _draft.NewTabBackgroundImage
-            : "Nicio imagine aleasă.";
+            : "";
     }
 
     private void UpdateBackgroundSwatches()
@@ -653,8 +639,6 @@ public partial class SettingsWindow : Window
             case "maxlive": _draft.MaxLiveTabs = value; break;
             default: return;
         }
-
-        FooterStatusText.Text = "Politica de memorie se aplică după Salvează.";
     }
 
     private void BlockAds_Click(object sender, RoutedEventArgs e) =>
@@ -744,7 +728,6 @@ public partial class SettingsWindow : Window
         if (_syncing) return;
 
         _preview(_draft);
-        FooterStatusText.Text = "Previzualizare. Salvează pentru a păstra modificările.";
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
