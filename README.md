@@ -39,11 +39,60 @@ Sau, fără publish: `dotnet run --project src\Vela\Vela.csproj`.
 - **Omnibox** — acceptă URL sau text de căutat (căutare implicită DuckDuckGo, configurabilă în `settings.json`). `https://` este adăugat automat, iar dacă scrii doar un cuvânt merge la căutare.
 - **Scut Vela** — blocare reclame/trackere per site, cu contor de cereri blocate și comutator instant (reîncarcă pagina când îl re-activezi).
 - **Favorite și istoric** — salvate local, vizibile în meniu; `Ctrl+D` comută favorita pentru pagina curentă.
-- **Meniu** — tab nou, fereastră nouă, favorite, istoric recent, politică de memorie, ștergere istoric, „Despre Vela” (cu statistici: reguli de blocare, cereri blocate, RAM).
+- **Meniu** — tab nou, fereastră nouă, setări, favorite, istoric recent, politică de memorie, ștergere istoric, „Despre Vela” (cu statistici: reguli de blocare, cereri blocate, RAM).
 - **Sesiune** — la pornire reface tab-urile deschise la ultima închidere.
 - **Ferestre multiple** — toate partajează același mediu WebView2 (un singur proces de browser, un singur profil pe disc).
 - **Descărcări, permisiuni, devtools** — descărcările merg în folderul `Downloads`; permisiunile (cameră, microfon, notificări) sunt întrebate o singură dată per site; `F12` deschide DevTools.
 - **Ecran complet** — `F11`, ieșire cu `Esc`.
+
+## Setări
+
+Se deschid din **Meniu → Setări** sau cu `Ctrl+,`. Fereastra are bară laterală și cinci pagini;
+orice modificare se vede imediat în browser ca previzualizare, iar **Salvează** o scrie în
+`settings.json`. **Anulează** (sau închiderea ferestrei) readuce tema și fundalul la starea de dinainte.
+
+| Pagină | Ce conține |
+| --- | --- |
+| **Aspect** | șase teme, accent personalizat |
+| **Tab nou** | fundal: temă, culoare simplă sau imagine |
+| **Memorie** | adormire, eliberare, plafon de tab-uri vii |
+| **Confidențialitate** | scutul de reclame, restaurarea sesiunii, folderul `Filters` |
+| **Navigare** | pagina de start și motorul de căutare |
+
+### Teme
+
+Tema schimbă tot browserul: bara de tab-uri, toolbar-ul, omnibox-ul, meniurile, popup-urile,
+bara de stare și pagina de tab nou. Sunt șase palete gata făcute:
+
+| Temă | Accent | Descriere |
+| --- | --- | --- |
+| **Vela** | `#FB542B` | portocaliul Brave pe grafit (implicit) |
+| **Ocean** | `#3B82F6` | albastru rece, liniștit |
+| **Pădure** | `#34D399` | verde profund, odihnitor |
+| **Ametist** | `#A78BFA` | violet discret, seara |
+| **Trandafir** | `#F472B6` | roz cald, fără zgomot |
+| **Grafit** | `#6B7280` | monocrom, fără distrageri |
+
+Peste temă poți pune un **accent personalizat** (`#RRGGBB`): un rând de nuanțe gata făcute plus
+câmp hex. Accentul se aplică pe butoane, focus, indicatorul de tab activ, scut și pe pagina de tab nou.
+„Folosește tema” șterge accentul personalizat.
+
+Tehnic: `ThemeCatalog` înlocuiește perechile de `SolidColorBrush` înghețate din `Application.Resources`,
+iar toate referințele din XAML sunt `DynamicResource`, deci schimbarea se face instant, fără repornire.
+Pagina de tab nou primește tema prin parametri în URL (primul cadru e deja corect) și prin
+`window.velaApplyTheme(...)` pentru actualizările live.
+
+### Fundalul paginii de tab nou
+
+Trei moduri:
+
+- **Tema** — fundalul paletei active (implicit).
+- **Culoare simplă** — orice nuanță, din cele opt presetate sau scrisă ca hex.
+- **Imagine** — JPG, PNG, WebP sau BMP. Fișierul este copiat în `%LOCALAPPDATA%\Vela\Backgrounds\`,
+  apoi servit local prin gazda virtuală `vela.bg` (fără cereri în rețea). Imaginea este afișată
+  `cover`, cu un strat întunecat ca textul să rămână lizibil.
+
+Fereastra de setări are o previzualizare a fundalului, iar „Elimină” șterge imaginea copiată.
 
 ## Politica de memorie (partea importantă)
 
@@ -58,7 +107,7 @@ Trei mecanisme lucrează împreună, verificate la fiecare 10 secunde:
 Chromium să poată renunța la cache-uri. Bara de stare arată în timp real RAM-ul întregului arbore de
 procese (`RAM 690 MB · 8 procese`) plus starea tab-urilor (`3 taburi · 2 în repaus · 1 eliberate din memorie`).
 
-Toate pragurile se schimbă din **Meniu → Economie de memorie** sau direct în
+Toate pragurile se schimbă din **Setări → Memorie** (sau din **Meniu → Economie de memorie**) sau direct în
 `%LOCALAPPDATA%\Vela\Data\settings.json` (`0` = dezactivat).
 
 ## Blocarea reclamelor
@@ -101,6 +150,7 @@ Totul stă în `%LOCALAPPDATA%\Vela\`:
 Profile\      profilul Chromium (cookies, cache, localStorage)
 Data\         settings.json, history.json, bookmarks.json, session.json
 Filters\      liste de blocare suplimentare + allowlist.txt
+Backgrounds\  imaginile folosite ca fundal pentru tab nou
 Logs\         vela.log (rotit la 1 MB)
 ```
 
@@ -115,6 +165,7 @@ Logs\         vela.log (rotit la 1 MB)
 | `Ctrl+Tab`, `Ctrl+PageDown` / `Ctrl+PageUp` | tab următor / anterior |
 | `Ctrl+1`…`Ctrl+8`, `Ctrl+9` | sari la tab-ul N / ultimul tab |
 | `Ctrl+N` | fereastră nouă |
+| `Ctrl+,` | setări |
 | `Ctrl+L`, `Alt+D` | focus pe omnibox |
 | `Ctrl+D` | adaugă/scoate favorita |
 | `Ctrl+R`, `F5` | reîncarcă |
@@ -133,11 +184,13 @@ Vela.slnx
 src\Vela\
   App.xaml(.cs)            pornire, handler global de erori
   MainWindow.xaml(.cs)     toată logica de browser: tab-uri, politică de memorie, scurtături, popup-uri
+  SettingsWindow.xaml(.cs) fereastra de setări (teme, accent, fundal tab nou, memorie, navigare)
   Theme\Theme.xaml         culori + stiluri (temă întunecată, accent Brave)
   Models\                  BrowserTab (starea unui tab), ObservableObject
   Services\
     AdBlocker.cs           parsare reguli + blocare la nivel de rețea + injectarea filtrelor
-    Settings.cs            settings.json (praguri de memorie, căutare, scut)
+    ThemeCatalog.cs        paletele de teme, aplicarea culorilor, fundalul de tab nou
+    Settings.cs            settings.json (praguri de memorie, căutare, scut, temă)
     HistoryStore.cs        istoric local (ultimele 8000 de intrări)
     BookmarksStore.cs      favorite
     SessionStore.cs        tab-urile + fereastra de la închidere
@@ -146,7 +199,8 @@ src\Vela\
     AppPaths.cs            %LOCALAPPDATA%\Vela\*
     Log.cs                 log rotativ
   Assets\
-    newtab.html            pagina de tab nou (dark, căutare, tile-uri, statistici live)
+    vela.ico               iconița aplicației și a tab-urilor
+    newtab.html            pagina de tab nou (temă din URL, căutare, tile-uri, statistici live)
     blocklist.txt          lista de blocare inclusă (curată, comentată)
     blocklist-big.txt      lista extinsă de domenii (StevenBlack unified hosts)
     adblock.js             filtre cosmetice + eliminarea reclamelor YouTube din player

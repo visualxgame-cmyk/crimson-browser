@@ -5,6 +5,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tab nou</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NCA2NCc+PHJlY3Qgd2lkdGg9JzY0JyBoZWlnaHQ9JzY0JyByeD0nMTQnIGZpbGw9JyNmYjU0MmInLz48cGF0aCBkPSdNMTggMTlMMzIgNDZMNDYgMTknIGZpbGw9J25vbmUnIHN0cm9rZT0nI2ZmZicgc3Ryb2tlLXdpZHRoPSc5JyBzdHJva2UtbGluZWNhcD0ncm91bmQnIHN0cm9rZS1saW5lam9pbj0ncm91bmQnLz48L3N2Zz4=">
+<script>
+  // Theme comes from the browser through query parameters (first paint) and through
+  // window.velaApplyTheme (live updates while the settings window is open).
+  (function () {
+    function rgba(hex, alpha) {
+      const match = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+      if (!match) return 'rgba(251, 84, 43, ' + alpha + ')';
+      const n = parseInt(match[1], 16);
+      return 'rgba(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ', ' + alpha + ')';
+    }
+
+    window.velaApplyTheme = function (next) {
+      if (!next) return;
+      const root = document.documentElement;
+      const set = (name, value) => { if (value) root.style.setProperty(name, value); };
+
+      set('--accent', next.accent);
+      set('--surface', next.surface);
+      set('--surface-2', next.surface2);
+      set('--border', next.border);
+      set('--text', next.text);
+      set('--muted', next.muted);
+      set('--dim', next.dim);
+      set('--bg', next.bg);
+
+      if (next.accent) {
+        set('--accent-soft', rgba(next.accent, 0.55));
+        set('--accent-faint', rgba(next.accent, 0.10));
+        set('--accent-glow', rgba(next.accent, 0.16));
+      }
+
+      set('--bg-image', next.img
+        ? 'linear-gradient(rgba(8, 9, 11, 0.55), rgba(8, 9, 11, 0.82)), url("' + next.img + '")'
+        : 'radial-gradient(900px 380px at 50% -160px, var(--accent-glow, rgba(251, 84, 43, 0.16)), transparent 70%)');
+    };
+
+    const params = new URLSearchParams(location.search);
+    const cfg = {};
+    for (const key of ['accent', 'surface', 'surface2', 'border', 'text', 'muted', 'dim', 'bg', 'img']) {
+      const value = params.get(key);
+      if (value) cfg[key] = value;
+    }
+
+    if (Object.keys(cfg).length) window.velaApplyTheme(cfg);
+  })();
+</script>
 <style>
   :root {
     --bg: #101114;
@@ -15,6 +61,10 @@
     --muted: #9aa0ad;
     --dim: #6e7280;
     --accent: #fb542b;
+    --accent-soft: rgba(251, 84, 43, 0.55);
+    --accent-faint: rgba(251, 84, 43, 0.10);
+    --accent-glow: rgba(251, 84, 43, 0.16);
+    --bg-image: radial-gradient(900px 380px at 50% -160px, var(--accent-glow), transparent 70%);
   }
 
   * { box-sizing: border-box; }
@@ -25,9 +75,11 @@
   }
 
   body {
-    background: var(--bg);
-    background-image:
-      radial-gradient(900px 380px at 50% -160px, rgba(251, 84, 43, 0.16), transparent 70%);
+    background-color: var(--bg);
+    background-image: var(--bg-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     color: var(--text);
     font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     display: flex;
@@ -38,6 +90,7 @@
     padding: 40px 24px;
     user-select: none;
     overflow: hidden;
+    transition: background-color .18s ease;
   }
 
   .brand {
@@ -69,7 +122,7 @@
   .search {
     width: min(620px, 92vw);
     height: 52px;
-    background: var(--surface-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 14px;
     display: flex;
@@ -79,12 +132,12 @@
   }
 
   .search:focus-within {
-    border-color: rgba(251, 84, 43, 0.55);
-    background: #262931;
-    box-shadow: 0 0 0 3px rgba(251, 84, 43, 0.10);
+    border-color: var(--accent-soft);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 3px var(--accent-faint);
   }
 
-  .search svg { flex: none; opacity: .55; }
+  .search svg { flex: none; opacity: .55; color: var(--muted); }
 
   .search input {
     flex: 1;
@@ -223,7 +276,7 @@
   <div class="brand">vela<span class="dot"></span><small>tab nou</small></div>
 
   <label class="search">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa0ad" stroke-width="2"
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="7"></circle>
       <line x1="20" y1="20" x2="16.65" y2="16.65"></line>

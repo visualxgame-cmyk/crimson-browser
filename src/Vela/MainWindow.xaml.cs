@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,7 +32,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<BrowserTab> _tabs = new();
     private readonly List<(string Url, string Title, int Index)> _closedTabs = new();
 
-    private readonly Settings _settings;
+    private Settings _settings;
     private readonly AdBlocker _blocker = new();
     private readonly HistoryStore _history = new();
     private readonly BookmarksStore _bookmarks = new();
@@ -47,6 +48,8 @@ public partial class MainWindow : Window
     private MemorySnapshot _lastMemory;
     private bool _shuttingDown;
     private bool _isFullscreen;
+    private bool _appliedBlockAds;
+    private SettingsWindow? _settingsWindow;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
 
     public MainWindow() : this(null) { }
@@ -57,6 +60,7 @@ public partial class MainWindow : Window
 
         _env = sharedEnvironment;
         _settings = SettingsStore.Load();
+        _appliedBlockAds = _settings.BlockAds;
         _blocker.Enabled = _settings.BlockAds;
         _blocker.Load();
 
@@ -262,10 +266,16 @@ public partial class MainWindow : Window
         if (_env is null) return null;
         if (tab.View is not null) return tab.View;
 
+        var target = ResolveUrl(string.IsNullOrWhiteSpace(tab.PendingUrl) ? _settings.HomePage : tab.PendingUrl);
+        tab.PendingUrl = "";
+
         var view = new WebView2
         {
             Visibility = ReferenceEquals(tab, _active) ? Visibility.Visible : Visibility.Collapsed,
-            DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 0x10, 0x11, 0x14),
+            DefaultBackgroundColor = ToDrawingColor(
+                IsNewTabUrl(target)
+                    ? ThemeCatalog.ResolveNewTabBackground(ThemeCatalog.Resolve(_settings), _settings)
+                    : ThemeCatalog.Resolve(_settings).ContentBg),
         };
 
         tab.View = view;
@@ -290,9 +300,6 @@ public partial class MainWindow : Window
         var core = view.CoreWebView2;
         await ConfigureCoreAsync(tab, core);
 
-        var target = string.IsNullOrWhiteSpace(tab.PendingUrl) ? _settings.HomePage : tab.PendingUrl;
-        tab.PendingUrl = "";
-
         core.Navigate(target);
         return view;
     }
@@ -316,6 +323,10 @@ public partial class MainWindow : Window
         {
             core.SetVirtualHostNameToFolderMapping(
                 AppConstants.InternalHost, AppPaths.Assets, CoreWebView2HostResourceAccessKind.DenyCors);
+
+            // New tab background images picked in settings.
+            core.SetVirtualHostNameToFolderMapping(
+                AppConstants.BackgroundHost, AppPaths.Backgrounds, CoreWebView2HostResourceAccessKind.DenyCors);
         }
         catch (Exception ex)
         {
@@ -800,6 +811,8 @@ public partial class MainWindow : Window
 
     private async Task NavigateActiveAsync(string url)
     {
+        url = ResolveUrl(url);
+
         if (_active is null)
         {
             await AddTabAsync(url);
@@ -846,6 +859,12 @@ public partial class MainWindow : Window
     {
         var tab = _active;
         if (tab?.View?.CoreWebView2 is not { } core) return;
+
+        if (IsNewTabUrl(tab.Url))
+        {
+            _ = NavigateActiveAsync(BuildNewTabUrl());
+            return;
+        }
 
         if (tab.IsLoading) core.Stop();
         else core.Reload();
@@ -1120,6 +1139,9 @@ public partial class MainWindow : Window
                 case Key.D0 or Key.NumPad0:
                     ZoomActive(0, reset: true);
                     return true;
+                case Key.OemComma:
+                    OpenSettings();
+                    return true;
             }
         }
 
@@ -1367,6 +1389,160 @@ public partial class MainWindow : Window
 
         try { Process.Start(new ProcessStartInfo("explorer.exe", downloads) { UseShellExecute = true }); }
         catch (Exception ex) { Log.Write("Open downloads: " + ex.Message); }
+    }
+
+    // =====================================================================
+    //  Settings, themes and new tab background
+    // =====================================================================
+
+    private static bool IsNewTabUrl(string? url) =>
+        !string.IsNullOrEmpty(url) &&
+        url.StartsWith(AppConstants.NewTabUrl, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Turns the stored new tab address into the themed address actually loaded.</summary>
+    private string ResolveUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return BuildNewTabUrl();
+        return IsNewTabUrl(url) ? BuildNewTabUrl() : url;
+    }
+
+    /// <summary>
+    /// The new tab page is themed through query parameters so the first paint is already
+    /// correct. Live updates use <c>window.velaApplyTheme</c> instead of reloading the page.
+    /// </summary>
+    private string BuildNewTabUrl()
+    {
+        var theme = ThemeCatalog.Resolve(_settings);
+
+        var url = new StringBuilder(AppConstants.NewTabUrl);
+        url.Append("?accent=").Append(Uri.EscapeDataString(theme.Accent));
+        url.Append("&surface=").Append(Uri.EscapeDataString(theme.NewTabSurface));
+        url.Append("&surface2=").Append(Uri.EscapeDataString(theme.NewTabSurface2));
+        url.Append("&border=").Append(Uri.EscapeDataString(theme.BorderSoft));
+        url.Append("&text=").Append(Uri.EscapeDataString(theme.TextPrimary));
+        url.Append("&muted=").Append(Uri.EscapeDataString(theme.TextSecondary));
+        url.Append("&dim=").Append(Uri.EscapeDataString(theme.TextMuted));
+        url.Append("&bg=").Append(Uri.EscapeDataString(ThemeCatalog.ResolveNewTabBackground(theme, _settings)));
+
+        if (HasBackgroundImage(_settings))
+            url.Append("&img=").Append(Uri.EscapeDataString(BackgroundImageUrl(_settings)));
+
+        return url.ToString();
+    }
+
+    private static bool HasBackgroundImage(Settings settings) =>
+        settings.NewTabBackgroundMode == "image" &&
+        !string.IsNullOrWhiteSpace(settings.NewTabBackgroundImage);
+
+    private static string BackgroundImageUrl(Settings settings) =>
+        "https://" + AppConstants.BackgroundHost + "/" + settings.NewTabBackgroundImage;
+
+    private static string ThemeConfigJson(Settings settings)
+    {
+        var theme = ThemeCatalog.Resolve(settings);
+
+        return JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["accent"] = theme.Accent,
+            ["surface"] = theme.NewTabSurface,
+            ["surface2"] = theme.NewTabSurface2,
+            ["border"] = theme.BorderSoft,
+            ["text"] = theme.TextPrimary,
+            ["muted"] = theme.TextSecondary,
+            ["dim"] = theme.TextMuted,
+            ["bg"] = ThemeCatalog.ResolveNewTabBackground(theme, settings),
+            ["img"] = HasBackgroundImage(settings) ? BackgroundImageUrl(settings) : "",
+        });
+    }
+
+    private async Task ApplyNewTabThemeAsync(Settings settings)
+    {
+        var script = "window.velaApplyTheme && window.velaApplyTheme(" + ThemeConfigJson(settings) + ");";
+
+        foreach (var tab in _tabs.ToList())
+        {
+            var core = tab.View?.CoreWebView2;
+            if (core is null || !IsNewTabUrl(tab.Url)) continue;
+
+            try { await core.ExecuteScriptAsync(script); }
+            catch (Exception ex) { Log.Write("New tab theme: " + ex.Message); }
+        }
+    }
+
+    /// <summary>Called by the settings window on every change, before the user saves.</summary>
+    private void PreviewSettings(Settings draft)
+    {
+        ThemeCatalog.Apply(draft);
+        _ = ApplyNewTabThemeAsync(draft);
+    }
+
+    /// <summary>Called by the settings window when the user presses Salvează.</summary>
+    private void CommitSettings(Settings draft)
+    {
+        var adBlockChanged = _appliedBlockAds != draft.BlockAds;
+
+        _settings = draft;
+        SettingsStore.Save(_settings);
+
+        ThemeCatalog.Apply(_settings);
+        _ = ApplyNewTabThemeAsync(_settings);
+        _ = ApplyAdBlockSettingAsync(adBlockChanged);
+
+        PopulateMenu();
+        UpdateStatusBar();
+        Status("Setările au fost salvate.", 4);
+    }
+
+    private async Task ApplyAdBlockSettingAsync(bool reload)
+    {
+        _blocker.Enabled = _settings.BlockAds;
+        var previous = _appliedBlockAds;
+        _appliedBlockAds = _settings.BlockAds;
+
+        if (previous == _settings.BlockAds) return;
+
+        foreach (var tab in _tabs.ToList())
+        {
+            var core = tab.View?.CoreWebView2;
+            if (core is null) continue;
+
+            if (_settings.BlockAds && tab.ShieldEnabled) await AddInjectionAsync(tab, core);
+            else await RemoveInjectionAsync(tab, core);
+
+            if (!reload || IsNewTabUrl(tab.Url)) continue;
+
+            try { core.Reload(); } catch { /* tab may be closing */ }
+        }
+    }
+
+    private void OpenSettings()
+    {
+        if (_settingsWindow is { IsLoaded: true })
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
+        var window = new SettingsWindow(_settings, PreviewSettings, CommitSettings)
+        {
+            Owner = this,
+        };
+
+        _settingsWindow = window;
+        window.Closed += (_, _) => _settingsWindow = null;
+        window.ShowDialog();
+    }
+
+    private void MenuSettings_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        OpenSettings();
+    }
+
+    private static System.Drawing.Color ToDrawingColor(string hex)
+    {
+        var color = ThemeCatalog.Parse(hex);
+        return System.Drawing.Color.FromArgb(255, color.R, color.G, color.B);
     }
 
     // =====================================================================

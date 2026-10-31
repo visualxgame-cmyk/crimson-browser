@@ -7,8 +7,8 @@
         Height="860" Width="1380" MinHeight="520" MinWidth="760"
         WindowStyle="None" AllowsTransparency="False"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource WindowBg}"
-        Foreground="{StaticResource TextPrimary}"
+        Background="{DynamicResource WindowBg}"
+        Foreground="{DynamicResource TextPrimary}"
         FontFamily="{StaticResource UiFont}"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True"
@@ -31,7 +31,7 @@
         </Grid.RowDefinitions>
 
         <!-- ================= TAB STRIP ================= -->
-        <Grid Grid.Row="0" Background="{StaticResource WindowBg}"
+        <Grid Grid.Row="0" Background="{DynamicResource WindowBg}"
               MouseLeftButtonDown="TabStrip_MouseLeftButtonDown">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -62,10 +62,10 @@
                                             <Setter Property="Background" Value="Transparent" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="{StaticResource TabHoverBg}" />
+                                                    <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
                                                 </Trigger>
                                                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                    <Setter Property="Background" Value="{StaticResource TabActiveBg}" />
+                                                    <Setter Property="Background" Value="{DynamicResource TabActiveBg}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -81,7 +81,7 @@
                                         <!-- favicon / fallback glyph -->
                                         <Grid Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center">
                                             <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}"
-                                                       FontSize="11" Foreground="{StaticResource TextMuted}"
+                                                       FontSize="11" Foreground="{DynamicResource TextMuted}"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
@@ -146,7 +146,7 @@
         </Grid>
 
         <!-- ================= TOOLBAR ================= -->
-        <Border Grid.Row="1" Background="{StaticResource ToolbarBg}" Padding="8,2,8,6"
+        <Border Grid.Row="1" Background="{DynamicResource ToolbarBg}" Padding="8,2,8,6"
                 MouseLeftButtonDown="TabStrip_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -169,7 +169,7 @@
 
                 <!-- omnibox -->
                 <Border Grid.Column="1" x:Name="OmniboxBorder" Height="34" Margin="8,2"
-                        CornerRadius="9" Background="{StaticResource OmniboxBg}"
+                        CornerRadius="9" Background="{DynamicResource OmniboxBg}"
                         BorderBrush="Transparent" BorderThickness="1" VerticalAlignment="Center">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -181,12 +181,12 @@
 
                         <TextBlock x:Name="SecurityGlyph" Grid.Column="0" Text="&#xE72E;"
                                    FontFamily="{StaticResource IconFont}" FontSize="11"
-                                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center"
                                    Margin="10,0,2,0" ToolTip="Conexiune securizată" />
 
                         <Grid Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="OmniboxPlaceholder" Text="Caută sau introdu o adresă"
-                                       Foreground="{StaticResource TextMuted}" FontSize="13.5"
+                                       Foreground="{DynamicResource TextMuted}" FontSize="13.5"
                                        VerticalAlignment="Center" IsHitTestVisible="False" Margin="4,0,0,0" />
                             <TextBox x:Name="Omnibox" Style="{StaticResource OmniboxBox}"
                                      Margin="0" Padding="4,0,0,0"
@@ -217,14 +217,14 @@
         </Border>
 
         <!-- ================= CONTENT ================= -->
-        <Grid Grid.Row="2" x:Name="ContentHost" Background="{StaticResource ContentBg}" />
+        <Grid Grid.Row="2" x:Name="ContentHost" Background="{DynamicResource ContentBg}" />
 
         <!-- ================= STATUS BAR ================= -->
-        <Border Grid.Row="3" Background="{StaticResource WindowBg}" Padding="10,0">
+        <Border Grid.Row="3" Background="{DynamicResource WindowBg}" Padding="10,0">
             <Grid>
-                <TextBlock x:Name="StatusText" FontSize="11" Foreground="{StaticResource TextMuted}"
+                <TextBlock x:Name="StatusText" FontSize="11" Foreground="{DynamicResource TextMuted}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="MemoryText" FontSize="11" Foreground="{StaticResource TextMuted}"
+                <TextBlock x:Name="MemoryText" FontSize="11" Foreground="{DynamicResource TextMuted}"
                            HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -241,21 +241,29 @@
                         <Button Style="{StaticResource MenuRowButton}" Click="MenuNewTab_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="12"
-                                           Foreground="{StaticResource TextSecondary}" Width="22" />
+                                           Foreground="{DynamicResource TextSecondary}" Width="22" />
                                 <TextBlock Text="Tab nou" />
-                                <TextBlock Text="Ctrl+T" Foreground="{StaticResource TextMuted}" Margin="12,0,0,0" />
+                                <TextBlock Text="Ctrl+T" Foreground="{DynamicResource TextMuted}" Margin="12,0,0,0" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource MenuRowButton}" Click="MenuNewWindow_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE8A7;" FontFamily="{StaticResource IconFont}" FontSize="12"
-                                           Foreground="{StaticResource TextSecondary}" Width="22" />
+                                           Foreground="{DynamicResource TextSecondary}" Width="22" />
                                 <TextBlock Text="Fereastră nouă" />
-                                <TextBlock Text="Ctrl+N" Foreground="{StaticResource TextMuted}" Margin="12,0,0,0" />
+                                <TextBlock Text="Ctrl+N" Foreground="{DynamicResource TextMuted}" Margin="12,0,0,0" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuRowButton}" Click="MenuSettings_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" Width="22" />
+                                <TextBlock Text="Setări" />
+                                <TextBlock Text="Ctrl+," Foreground="{DynamicResource TextMuted}" Margin="12,0,0,0" />
                             </StackPanel>
                         </Button>
 
-                        <Separator Background="{StaticResource BorderSoft}" Margin="6,6" Height="1" />
+                        <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 
                         <TextBlock Text="FAVORITE" Style="{StaticResource MenuHeaderText}" />
                         <ItemsControl x:Name="BookmarksList">
@@ -264,7 +272,7 @@
                                     <Button Style="{StaticResource MenuRowButton}" Click="BookmarkItem_Click" Tag="{Binding Url}">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="&#xE734;" FontFamily="{StaticResource IconFont}" FontSize="10"
-                                                       Foreground="{StaticResource Accent}" Width="22" />
+                                                       Foreground="{DynamicResource Accent}" Width="22" />
                                             <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" MaxWidth="230" />
                                         </StackPanel>
                                     </Button>
@@ -272,10 +280,10 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <TextBlock x:Name="NoBookmarksText" Text="Nicio favorită încă — Ctrl+D pe o pagină."
-                                   FontSize="11" Foreground="{StaticResource TextMuted}" Margin="10,2,10,6"
+                                   FontSize="11" Foreground="{DynamicResource TextMuted}" Margin="10,2,10,6"
                                    TextWrapping="Wrap" Visibility="Collapsed" />
 
-                        <Separator Background="{StaticResource BorderSoft}" Margin="6,6" Height="1" />
+                        <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 
                         <TextBlock Text="ISTORIC RECENT" Style="{StaticResource MenuHeaderText}" />
                         <ItemsControl x:Name="HistoryList">
@@ -284,7 +292,7 @@
                                     <Button Style="{StaticResource MenuRowButton}" Click="HistoryItem_Click" Tag="{Binding Url}">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" MaxWidth="250" />
-                                            <TextBlock Text="{Binding Url}" FontSize="10" Foreground="{StaticResource TextMuted}"
+                                            <TextBlock Text="{Binding Url}" FontSize="10" Foreground="{DynamicResource TextMuted}"
                                                        TextTrimming="CharacterEllipsis" MaxWidth="250" />
                                         </StackPanel>
                                     </Button>
@@ -292,10 +300,10 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Separator Background="{StaticResource BorderSoft}" Margin="6,6" Height="1" />
+                        <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 
                         <TextBlock Text="ECONOMIE DE MEMORIE" Style="{StaticResource MenuHeaderText}" />
-                        <TextBlock x:Name="SleepPolicyText" FontSize="11" Foreground="{StaticResource TextSecondary}"
+                        <TextBlock x:Name="SleepPolicyText" FontSize="11" Foreground="{DynamicResource TextSecondary}"
                                    Margin="10,0,10,6" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Margin="8,0,0,4">
                             <Button Style="{StaticResource MenuRowButton}" Content="2 min" Tag="2" Click="SleepPolicy_Click" />
@@ -304,19 +312,19 @@
                             <Button Style="{StaticResource MenuRowButton}" Content="Oprit" Tag="0" Click="SleepPolicy_Click" />
                         </StackPanel>
 
-                        <Separator Background="{StaticResource BorderSoft}" Margin="6,6" Height="1" />
+                        <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 
                         <Button Style="{StaticResource MenuRowButton}" Click="MenuClearData_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE74D;" FontFamily="{StaticResource IconFont}" FontSize="12"
-                                           Foreground="{StaticResource TextSecondary}" Width="22" />
+                                           Foreground="{DynamicResource TextSecondary}" Width="22" />
                                 <TextBlock Text="Șterge istoricul" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource MenuRowButton}" Click="MenuAbout_Click">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="12"
-                                           Foreground="{StaticResource TextSecondary}" Width="22" />
+                                           Foreground="{DynamicResource TextSecondary}" Width="22" />
                                 <TextBlock Text="Despre Vela" />
                             </StackPanel>
                         </Button>
@@ -334,15 +342,15 @@
                 </Border.Effect>
                 <StackPanel>
                     <TextBlock Text="Scut Vela" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2" />
-                    <TextBlock x:Name="ShieldHostText" FontSize="11" Foreground="{StaticResource TextMuted}"
+                    <TextBlock x:Name="ShieldHostText" FontSize="11" Foreground="{DynamicResource TextMuted}"
                                TextTrimming="CharacterEllipsis" Margin="0,0,0,10" />
-                    <CheckBox x:Name="ShieldToggle" Foreground="{StaticResource TextPrimary}"
+                    <CheckBox x:Name="ShieldToggle" Foreground="{DynamicResource TextPrimary}"
                               Content="Blochează reclame și trackere"
                               Click="ShieldToggle_Click" Margin="0,0,0,10" />
-                    <Border Background="#1A1C22" CornerRadius="8" Padding="10">
+                    <Border Background="{DynamicResource InsetBg}" CornerRadius="8" Padding="10">
                         <StackPanel>
                             <TextBlock x:Name="ShieldBlockedText" Text="0 cereri blocate" FontSize="12" />
-                            <TextBlock x:Name="ShieldSavedText" FontSize="11" Foreground="{StaticResource TextMuted}"
+                            <TextBlock x:Name="ShieldSavedText" FontSize="11" Foreground="{DynamicResource TextMuted}"
                                        Margin="0,3,0,0" Text="Se aplică doar acestui site." TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

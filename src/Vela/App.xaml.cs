@@ -13,6 +13,10 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Log.Write("FATAL: " + args.ExceptionObject);
 
+        // Theme must be in place before MainWindow.xaml is parsed, otherwise the first paint
+        // would flash the default palette.
+        ThemeCatalog.Apply(SettingsStore.Load());
+
         base.OnStartup(e);
     }
 

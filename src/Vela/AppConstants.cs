@@ -10,5 +10,8 @@ public static class AppConstants
     public const string NewTabUrl = "https://vela.internal/newtab.html";
     public const string ErrorPageUrl = "https://vela.internal/error.html";
 
+    /// <summary>Virtual host that serves user images (new tab background) from %LOCALAPPDATA%\Vela\Backgrounds.</summary>
+    public const string BackgroundHost = "vela.bg";
+
     public const string DefaultSearchUrl = "https://duckduckgo.com/?q=";
 }

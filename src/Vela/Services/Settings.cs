@@ -25,8 +25,26 @@ public sealed class Settings
 
     public bool ShowDevTools { get; set; }
 
+    /// <summary>Id of the colour theme (see <see cref="ThemeCatalog"/>).</summary>
+    public string Theme { get; set; } = "vela";
+
+    /// <summary>Optional accent that overrides the theme (#RRGGBB). Null = the theme's own accent.</summary>
+    public string? CustomAccent { get; set; }
+
+    /// <summary>New tab background: "theme", "color" or "image".</summary>
+    public string NewTabBackgroundMode { get; set; } = "theme";
+
+    /// <summary>Custom new tab background colour (#RRGGBB), also used behind a background image.</summary>
+    public string NewTabBackgroundColor { get; set; } = "#101114";
+
+    /// <summary>File name (inside %LOCALAPPDATA%\Vela\Backgrounds) used as the new tab background.</summary>
+    public string? NewTabBackgroundImage { get; set; }
+
     [JsonIgnore]
     public bool SuspendEnabled => SuspendAfterMinutes > 0;
+
+    /// <summary>Snapshot used by the settings window so cancelling can restore the old values.</summary>
+    public Settings Clone() => (Settings)MemberwiseClone();
 }
 
 public static class SettingsStore

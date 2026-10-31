@@ -16,6 +16,9 @@ public static class AppPaths
     /// <summary>Extra blocklists dropped here by the user (hosts or simple ABP syntax).</summary>
     public static string Filters { get; } = Path.Combine(Root, "Filters");
 
+    /// <summary>Images picked in settings for the new tab background.</summary>
+    public static string Backgrounds { get; } = Path.Combine(Root, "Backgrounds");
+
     public static string Logs { get; } = Path.Combine(Root, "Logs");
 
     public static string Assets { get; } =
@@ -23,7 +26,7 @@ public static class AppPaths
 
     public static void EnsureCreated()
     {
-        foreach (var dir in new[] { Root, Profile, Data, Filters, Logs })
+        foreach (var dir in new[] { Root, Profile, Data, Filters, Backgrounds, Logs })
             Directory.CreateDirectory(dir);
     }
 }

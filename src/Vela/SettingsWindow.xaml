@@ -1,0 +1,355 @@
+<Window x:Class="Vela.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Setări — Vela"
+        Icon="Assets/vela.ico"
+        Width="1010" Height="730" MinWidth="900" MinHeight="620"
+        WindowStyle="None" AllowsTransparency="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBg}"
+        Foreground="{DynamicResource TextPrimary}"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="46" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- ================= TITLE BAR ================= -->
+            <Grid Grid.Row="0" Background="{DynamicResource WindowBg}"
+                  MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                    <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Accent}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Text="Setări" FontSize="13" FontWeight="SemiBold" Margin="10,0,0,0"
+                               VerticalAlignment="Center" />
+                    <TextBlock x:Name="HeaderSubtitle" Text="Vela" FontSize="11.5" Margin="10,0,0,0"
+                               Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Button x:Name="CloseButton" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;"
+                        ToolTip="Închide" Click="Close_Click" />
+            </Grid>
+
+            <!-- ================= BODY ================= -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="238" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- sidebar -->
+                <Border Grid.Column="0" Background="{DynamicResource ToolbarBg}"
+                        BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,1,0">
+                    <Grid Margin="12,16,12,14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Margin="10,0,0,18">
+                            <TextBlock Text="PREFERINȚE" FontSize="10.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextMuted}" />
+                            <TextBlock Text="Se aplică imediat." FontSize="11"
+                                       Foreground="{DynamicResource TextMuted}" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1">
+                            <RadioButton x:Name="AspectNav" Style="{StaticResource SettingsNav}"
+                                         GroupName="nav" Tag="aspect" IsChecked="True"
+                                         Checked="Nav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE790;" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Width="20" />
+                                    <TextBlock Text="Aspect" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SettingsNav}" GroupName="nav"
+                                         Tag="newtab" Checked="Nav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8B9;" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Width="20" />
+                                    <TextBlock Text="Tab nou" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SettingsNav}" GroupName="nav"
+                                         Tag="memory" Checked="Nav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE950;" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Width="20" />
+                                    <TextBlock Text="Memorie" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SettingsNav}" GroupName="nav"
+                                         Tag="privacy" Checked="Nav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xEA18;" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Width="20" />
+                                    <TextBlock Text="Confidențialitate" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource SettingsNav}" GroupName="nav"
+                                         Tag="navigation" Checked="Nav_Checked">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}"
+                                               FontSize="12" Width="20" />
+                                    <TextBlock Text="Navigare" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="2" Text="Vela 0.1 · WebView2" FontSize="10.5"
+                                   Foreground="{DynamicResource TextMuted}" Margin="10,12,0,0" />
+                    </Grid>
+                </Border>
+
+                <!-- pages -->
+                <Grid Grid.Column="1" Background="{DynamicResource WindowBg}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="32,26,30,10">
+                        <Grid MaxWidth="720" HorizontalAlignment="Left">
+
+                            <!-- ============ ASPECT ============ -->
+                            <StackPanel x:Name="AspectPage">
+                                <TextBlock Text="Aspect" Style="{StaticResource SettingsPageTitle}" />
+                                <TextBlock Text="Tema schimbă tot browserul: file, bara de adrese, meniuri și pagina de tab nou."
+                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,22" />
+
+                                <TextBlock Text="TEMĂ" FontSize="10.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMuted}" />
+                                <WrapPanel x:Name="ThemePanel" Margin="0,8,0,10" />
+
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Accent personalizat" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Înlocuiește culoarea de accent a temei alese."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,14" />
+                                        <WrapPanel x:Name="AccentPanel" Margin="0,0,0,10" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBox x:Name="AccentHexBox" Style="{StaticResource SettingsInput}"
+                                                     Width="130" KeyDown="AccentHex_KeyDown" />
+                                            <Button Content="Aplică" Style="{StaticResource SettingsButton}"
+                                                    Margin="8,0,0,0" Click="AccentApply_Click" />
+                                            <Button Content="Folosește tema" Style="{StaticResource SettingsButton}"
+                                                    Margin="8,0,0,0" Click="AccentAuto_Click" />
+                                        </StackPanel>
+                                        <TextBlock x:Name="AccentStatusText" Style="{StaticResource SettingsHint}"
+                                                   Margin="0,10,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- ============ TAB NOU ============ -->
+                            <StackPanel x:Name="NewTabPage" Visibility="Collapsed">
+                                <TextBlock Text="Tab nou" Style="{StaticResource SettingsPageTitle}" />
+                                <TextBlock Text="Alege ce se vede în spatele paginii de tab nou."
+                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,22" />
+
+                                <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel>
+                                        <TextBlock Text="Fundal" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Poți folosi culorile temei, o culoare simplă sau o imagine de pe disc."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,12" />
+
+                                        <WrapPanel>
+                                            <RadioButton x:Name="BgThemeChip" Style="{StaticResource ChoiceChip}"
+                                                         GroupName="bgmode" Tag="theme" Content="Tema"
+                                                         Checked="BgMode_Checked" />
+                                            <RadioButton x:Name="BgColorChip" Style="{StaticResource ChoiceChip}"
+                                                         GroupName="bgmode" Tag="color" Content="Culoare simplă"
+                                                         Checked="BgMode_Checked" />
+                                            <RadioButton x:Name="BgImageChip" Style="{StaticResource ChoiceChip}"
+                                                         GroupName="bgmode" Tag="image" Content="Imagine"
+                                                         Checked="BgMode_Checked" />
+                                        </WrapPanel>
+
+                                        <!-- colour -->
+                                        <Border Background="{DynamicResource InsetBg}" CornerRadius="10"
+                                                Padding="14" Margin="0,4,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="CULOARE" FontSize="10.5" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextMuted}" />
+                                                <WrapPanel x:Name="ColorPanel" Margin="0,8,0,4" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBox x:Name="ColorHexBox" Style="{StaticResource SettingsInput}"
+                                                             Width="130" KeyDown="ColorHex_KeyDown" />
+                                                    <Button Content="Aplică" Style="{StaticResource SettingsButton}"
+                                                            Margin="8,0,0,0" Click="ColorApply_Click" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- image -->
+                                        <Border Background="{DynamicResource InsetBg}" CornerRadius="10"
+                                                Padding="14">
+                                            <StackPanel>
+                                                <TextBlock Text="IMAGINE" FontSize="10.5" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextMuted}" />
+                                                <TextBlock Text="JPG, PNG, WebP sau BMP. Imaginea este copiată în folderul Vela."
+                                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,10" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="Alege imaginea…" Style="{StaticResource SettingsButton}"
+                                                            Click="PickImage_Click" />
+                                                    <Button x:Name="RemoveImageButton" Content="Elimină"
+                                                            Style="{StaticResource SettingsButton}"
+                                                            Margin="8,0,0,0" Click="RemoveImage_Click" />
+                                                </StackPanel>
+                                                <TextBlock x:Name="ImageNameText" Style="{StaticResource SettingsHint}"
+                                                           Margin="0,10,0,0" Text="Nicio imagine aleasă." />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Text="PREVIZUALIZARE" FontSize="10.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMuted}" Margin="0,18,0,8" />
+                                <Border BorderBrush="{DynamicResource BorderSoft}" BorderThickness="1"
+                                        CornerRadius="12" ClipToBounds="True" Height="172">
+                                    <Grid>
+                                        <Border x:Name="BgPreviewColor" Background="{DynamicResource ContentBg}" />
+                                        <Border x:Name="BgPreviewImage" Visibility="Collapsed">
+                                            <Border.Background>
+                                                <ImageBrush Stretch="UniformToFill" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Border Background="#66000000" />
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="vela" FontSize="26" FontWeight="SemiBold"
+                                                       HorizontalAlignment="Center" />
+                                            <Border Width="220" Height="30" CornerRadius="9" Margin="0,10,0,0"
+                                                    Background="#33FFFFFF" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- ============ MEMORIE ============ -->
+                            <StackPanel x:Name="MemoryPage" Visibility="Collapsed">
+                                <TextBlock Text="Memorie" Style="{StaticResource SettingsPageTitle}" />
+                                <TextBlock Text="Vela ține puține tab-uri active și le eliberează pe cele din fundal, ca să rămână ușor."
+                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,22" />
+
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <TextBlock Text="Adormire tab-uri din fundal" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="După acest interval, JavaScript-ul este oprit și memoria este eliberată. Tab-ul rămâne în bară."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,12" />
+                                        <WrapPanel x:Name="SuspendPanel" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <TextBlock Text="Eliberare completă" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Tab-ul doarme mai adânc: procesul este închis, iar pagina se reîncarcă la următoarea accesare."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,12" />
+                                        <WrapPanel x:Name="DiscardPanel" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel>
+                                        <TextBlock Text="Tab-uri active simultan" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Peste această limită, cel mai vechi tab din fundal este eliberat."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,12" />
+                                        <WrapPanel x:Name="MaxLivePanel" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- ============ CONFIDENȚIALITATE ============ -->
+                            <StackPanel x:Name="PrivacyPage" Visibility="Collapsed">
+                                <TextBlock Text="Confidențialitate" Style="{StaticResource SettingsPageTitle}" />
+                                <TextBlock Text="Scutul Vela blochează reclame și trackere fără extensii."
+                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,22" />
+
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <CheckBox x:Name="BlockAdsSwitch" Style="{StaticResource SettingsSwitch}"
+                                                  Content="Blochează reclame și trackere" Click="BlockAds_Click" />
+                                        <TextBlock Text="Listă de peste 76.000 de domenii, aplicată la nivel de rețea, plus filtre vizuale pentru reclamele din YouTube."
+                                                   Style="{StaticResource SettingsHint}" Margin="10,8,0,0" />
+                                        <Button Content="Deschide folderul Filters" Style="{StaticResource SettingsButton}"
+                                                HorizontalAlignment="Left" Margin="0,14,0,0" Click="OpenFilters_Click" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel>
+                                        <CheckBox x:Name="RestoreSwitch" Style="{StaticResource SettingsSwitch}"
+                                                  Content="Redeschide tab-urile de la ultima sesiune" Click="Restore_Click" />
+                                        <TextBlock Text="La pornire, Vela restaurează tab-urile pe care le aveai deschise."
+                                                   Style="{StaticResource SettingsHint}" Margin="10,8,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- ============ NAVIGARE ============ -->
+                            <StackPanel x:Name="NavPage" Visibility="Collapsed">
+                                <TextBlock Text="Navigare" Style="{StaticResource SettingsPageTitle}" />
+                                <TextBlock Text="Pagina de start și motorul de căutare folosite de bara de adrese."
+                                           Style="{StaticResource SettingsHint}" Margin="0,6,0,22" />
+
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <TextBlock Text="Pagina de start" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Se deschide la apăsarea butonului Home și în tab-urile noi."
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,10" />
+                                        <TextBox x:Name="HomePageBox" Style="{StaticResource SettingsInput}" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel>
+                                        <TextBlock Text="Motor de căutare" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Adresa către care se trimite textul căutat, fără termenul de căutare. Exemplu: https://duckduckgo.com/?q="
+                                                   Style="{StaticResource SettingsHint}" Margin="0,4,0,10" />
+                                        <TextBox x:Name="SearchUrlBox" Style="{StaticResource SettingsInput}" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <!-- footer -->
+                    <Border Grid.Row="1" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,0"
+                            Padding="32,14,30,16">
+                        <Grid>
+                            <TextBlock x:Name="FooterStatusText" VerticalAlignment="Center" FontSize="11.5"
+                                       Foreground="{DynamicResource TextMuted}" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="Anulează" Style="{StaticResource SettingsButton}"
+                                        Click="Cancel_Click" />
+                                <Button Content="Salvează" Style="{StaticResource SettingsPrimaryButton}"
+                                        Margin="10,0,0,0" Click="Save_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
