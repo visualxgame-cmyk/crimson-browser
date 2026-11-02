@@ -54,6 +54,7 @@ public partial class MainWindow : Window
     private bool _shuttingDown;
     private bool _isFullscreen;
     private bool _browserFullscreen;
+    private bool _needsTopmostFallback;
     private bool _appliedBlockAds;
     private SettingsWindow? _settingsWindow;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
@@ -83,15 +84,15 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         StateChanged += OnStateChanged;
-
-        // Topmost is only our fallback for covering the taskbar. Dropping it while another
-        // window is active keeps Alt+Tab and normal window stacking working.
-        Activated += (_, _) => { if (_isFullscreen) Topmost = true; };
-        Deactivated += (_, _) => { if (_isFullscreen) Topmost = false; };
-
         _sleepTimer.Tick += OnSleepTick;
         _memoryTimer.Tick += OnMemoryTick;
         _statusTimer.Tick += OnStatusTick;
+
+        // Fallback only: when the shell refuses to mark the window as fullscreen, topmost keeps
+        // the taskbar covered while Vela is active and is dropped on deactivation so Alt+Tab
+        // and normal window stacking keep working.
+        Activated += (_, _) => { if (_isFullscreen && _needsTopmostFallback) Topmost = true; };
+        Deactivated += (_, _) => { if (_needsTopmostFallback) Topmost = false; };
 
         PreviewKeyDown += OnWindowPreviewKeyDown;
 
@@ -1565,16 +1566,17 @@ public partial class MainWindow : Window
             RootGrid.RowDefinitions[4].Height = new GridLength(0);
 
             WindowSizing.CoverMonitor(this);
-            WindowSizing.MarkFullscreen(this, true);
 
-            // Shells that ignore MarkFullscreenWindow (Explorer restarts, remote sessions)
-            // would still paint the taskbar over the page; topmost guarantees full coverage.
-            Topmost = true;
+            // The shell moves the taskbar out of the way for a marked fullscreen window.
+            // If that call is unavailable, topmost is the only way left to cover it.
+            _needsTopmostFallback = !WindowSizing.MarkFullscreen(this, true);
+            if (_needsTopmostFallback) Topmost = true;
         }
         else
         {
-            Topmost = false;
             WindowSizing.MarkFullscreen(this, false);
+            _needsTopmostFallback = false;
+            Topmost = false;
 
             WindowState = WindowState.Normal;
             WindowSizing.RestorePlacement(this, _placementBeforeFullscreen);

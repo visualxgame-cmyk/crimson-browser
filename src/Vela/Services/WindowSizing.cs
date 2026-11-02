@@ -48,6 +48,9 @@ internal static class WindowSizing
     private static readonly HashSet<Window> FullscreenWindows = new();
     private static ITaskbarList2? _taskbar;
 
+    /// <summary>Whether the shell accepted the last fullscreen mark (taskbar yields).</summary>
+    internal static bool MarkFullscreenAccepted { get; private set; }
+
     internal readonly record struct Placement(int Left, int Top, int Width, int Height);
 
     internal static void Install(Window window)
@@ -121,8 +124,8 @@ internal static class WindowSizing
     }
 
     /// <summary>
-    /// Stretches the window over the whole monitor instead of the work area, which is what
-    /// maximising does, so the taskbar area is covered too.
+    /// Stretches the window over the whole monitor instead of the work area (which is what
+    /// maximising uses) and puts it in front of the taskbar so the screen is fully covered.
     /// </summary>
     internal static void CoverMonitor(Window window)
     {
@@ -151,15 +154,28 @@ internal static class WindowSizing
 
     /// <summary>
     /// Tells the shell this window owns the screen so the taskbar is pushed to the bottom of
-    /// the z-order while the window is active.
+    /// the z-order while the window is active. Returns false when the shell call is unavailable.
     /// </summary>
-    internal static void MarkFullscreen(Window window, bool fullscreen)
+    internal static bool MarkFullscreen(Window window, bool fullscreen)
     {
+        MarkFullscreenAccepted = false;
         var handle = new WindowInteropHelper(window).Handle;
-        if (handle == IntPtr.Zero) return;
+        if (handle == IntPtr.Zero) return false;
 
-        try { Taskbar?.MarkFullscreenWindow(handle, fullscreen); }
-        catch (Exception) { /* shell not available: Topmost still covers the taskbar */ }
+        var taskbar = Taskbar;
+        if (taskbar is null) return false;
+
+        try
+        {
+            taskbar.MarkFullscreenWindow(handle, fullscreen);
+            MarkFullscreenAccepted = fullscreen;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Write("MarkFullscreenWindow: " + ex.Message);
+            return false;
+        }
     }
 
     private static ITaskbarList2? Taskbar
@@ -173,7 +189,7 @@ internal static class WindowSizing
                 list.HrInit();
                 _taskbar = list;
             }
-            catch (Exception) { _taskbar = null; }
+            catch (Exception ex) { Log.Write("ITaskbarList2: " + ex.Message); _taskbar = null; }
             return _taskbar;
         }
     }

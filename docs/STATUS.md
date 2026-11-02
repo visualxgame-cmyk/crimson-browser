@@ -7,7 +7,7 @@ Prioritatea rămâne consumul redus: șase controale live implicit, trei în mod
 | Solicitări de permisiuni | Bară WPF nemodală pe tab, fără focus furat; Permite/Blochează persistente, Nu acum temporar; cadrele și navigarea eliberează deferral-urile; alegeri private doar în fereastră |
 | Compatibilitatea conectării Google | Formularele de autentificare nu primesc veto-ul injectat de navigare; documentele și cadrele interactive sunt protejate de eliberare; fluxuri sintetice verificate, confirmarea reală pe telefon rămâne de verificat |
 | Măsurători la 1/10/30 de taburi | Site-uri reale în mod normal și economic, fără erori de navigare; excepțiile native de închidere sunt numărate; vezi PERFORMANCE.md |
-| Verificări de compatibilitate și regresie | 273 verificări trecute în profil izolat; permisiuni nemodale, autentificare sintetică, PDF, fișiere, WebRTC în fundal/la minimizare, popupuri, formulare, navigări suprapuse, migrarea setărilor și crash recovery |
+| Verificări de compatibilitate și regresie | 274 verificări trecute în profil izolat; permisiuni nemodale, autentificare sintetică, PDF, fișiere, WebRTC în fundal/la minimizare, popupuri, formulare, navigări suprapuse, migrarea setărilor și crash recovery |
 | Mod economic | Limite 3 / 1 minut / 5 minute; păstrează preferințele personalizate și protecțiile existente |
 | Activitate media fără sunet | Urmărire prin evenimente pentru WebRTC, redare media și captură; include cadrele și eliberarea protecției după oprire; fără polling de JavaScript |
 | Transfer de fișiere încărcate | POST real prin loopback de 1 MB, SHA-256 identic; fișier sintetic, fără date personale |
@@ -39,7 +39,7 @@ Prioritatea rămâne consumul redus: șase controale live implicit, trei în mod
 | Motoare de căutare | DuckDuckGo, Google, Bing, Brave și adresă personalizată |
 | Acțiuni în bara de adrese | Editare standard, lipire și accesare/căutare, copiere URL complet |
 | Poziția ferestrei | Plasare nativă, maximimizare și verificarea monitorului disponibil |
-| Ecran complet | `F11` și cererile paginilor acoperă întreaga suprafață a monitorului, inclusiv zona barei de activități; la ieșire se restaurează poziția, dimensiunea și starea anterioară |
+| Ecran complet | `F11` și cererile paginilor acoperă întreaga suprafață a monitorului, inclusiv zona barei de activități; fereastra este marcată nativ ca fullscreen (`ITaskbarList2`), cu revenire `Topmost` dacă shell-ul refuză marcajul; la ieșire se restaurează poziția, dimensiunea și starea anterioară |
 | Parole și completare automată | Controale native de salvare/ștergere; API-ul nu permite listarea parolelor individuale |
 | Conexiune și certificat | HTTPS validat de motor, certificat la cerere, fără ocolirea erorilor TLS |
 | Explicații de confidențialitate | SmartScreen, modul privat, traducerea externă și datele excluse din sincronizare |
