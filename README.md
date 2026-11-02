@@ -5,9 +5,9 @@ Un browser Windows mic și econom de memorie, construit ca un shell propriu pest
 rotunjit, temă întunecată și accent portocaliu `#FB542B` — dar consumul de RAM este ținut sub
 control printr-o politică agresivă de adormire/eliberare a tab-urilor.
 
-- Fără fork de Chromium, fără Electron, fără extensii: un singur executabil WPF (~1 MB) + runtime-ul WebView2 deja prezent pe Windows 11.
+- Fără fork de Chromium și fără Electron: interfață WPF peste WebView2. Extensiile sunt opționale și dezactivate implicit. Pachetul self-contained include .NET; motorul WebView2 este partajat cu Windows.
 - Blocare de reclame și trackere pe trei niveluri (rețea + cosmetic + playerul YouTube), cu listă inclusă de peste 76.000 de domenii și suport pentru liste proprii.
-- Tab-uri din fundal înghețate și, la nevoie, aruncate complet din memorie.
+- Tab-uri din fundal adormite după 1 minut, eliberate complet după 15 minute, cu maximum 6 tab-uri încărcate simultan; cele care redau audio sunt protejate.
 
 ---
 
@@ -26,7 +26,7 @@ control printr-o politică agresivă de adormire/eliberare a tab-urilor.
 dotnet build src\Vela\Vela.csproj
 .\src\Vela\bin\Debug\net10.0-windows\Vela.exe
 
-# release, self-contained în publish\
+# release pentru sistemul cu .NET Desktop Runtime instalat
 dotnet publish src\Vela\Vela.csproj -c Release -r win-x64 --self-contained false -o publish
 .\publish\Vela.exe
 ```
@@ -41,9 +41,33 @@ Sau, fără publish: `dotnet run --project src\Vela\Vela.csproj`.
 - **Favorite și istoric** — salvate local, vizibile în meniu; `Ctrl+D` comută favorita pentru pagina curentă.
 - **Meniu** — tab nou, fereastră nouă, setări, favorite, istoric recent, politică de memorie, ștergere istoric, „Despre Vela” (cu statistici: reguli de blocare, cereri blocate, RAM).
 - **Sesiune** — la pornire reface tab-urile deschise la ultima închidere.
-- **Ferestre multiple** — toate partajează același mediu WebView2 (un singur proces de browser, un singur profil pe disc).
-- **Descărcări, permisiuni, devtools** — descărcările merg în folderul `Downloads`; permisiunile (cameră, microfon, notificări) sunt întrebate o singură dată per site; `F12` deschide DevTools.
+- **Ferestre multiple** — ferestrele aceluiași profil partajează mediul WebView2. Profilurile distincte au procese și directoare de date separate.
+- **Descărcări, permisiuni, devtools** — descărcările merg în folderul `Downloads`; permisiunile (cameră, microfon, notificări) apar într-o bară nemodală. „Permite” și „Blochează” se salvează pe site; „Nu acum” refuză temporar. În privat, alegerea rămâne doar în fereastra respectivă. `F12` deschide DevTools.
+- **Ecran complet** — YouTube și alte pagini care cer fullscreen extind conținutul pe tot monitorul, inclusiv peste bara de activități; `Esc` iese din fullscreen-ul videoclipului, iar `F11` controlează fullscreen-ul browserului.
+- **Popupuri și extensii** — Vela limitează exploziile de popupuri automate, păstrând ferestrele normale de autentificare. Înainte de instalarea unei extensii, afișează permisiunile și site-urile declarate în manifest.
 - **Ecran complet** — `F11`, ieșire cu `Esc`.
+
+## Navigare și recuperare locală
+
+- **Ctrl+F** deschide căutarea nativă în pagină, cu număr de rezultate și navigare între ele.
+- **Bara de adrese** propune cel mult opt rezultate din favorite și istoric, fără servicii de sugestii sau cereri de rețea. Folosește săgețile și Enter pentru selectare; Esc anulează.
+- **Ctrl+J** sau butonul Descărcări deschide panoul nativ WebView2: progres, pauză/reluare, anulare și acces la fișiere. Descărcările în curs sau reluabile protejează tabul de eliberarea automată; închiderea lui cere confirmare.
+- **Meniu → Economie de memorie → Nu adormi acest site** salvează o excepție pentru gazda exactă. Excepția se aplică adormirii și eliberării automate, inclusiv la minimizare. Site-urile protejate apar dedesubt și pot fi eliminate individual.
+- **New Tab → Adaugă site / Personalizează** permite până la 24 de scurtături: adăugare, editare, ștergere și reordonare cu săgeți. Logo-urile implicite sunt incluse local; pentru alte site-uri faviconul este salvat după prima vizită și reutilizat fără rețea.
+- **Sesiunea** se salvează la schimbarea taburilor, adreselor și titlurilor, cu o întârziere de grupare de 500 ms, înlocuire atomică și copie `.bak`. După o oprire neașteptată se refac adresele și titlurile; taburile din fundal rămân neîncărcate. Datele nesalvate din formulare nu sunt incluse. Ferestrele deschise contribuie la aceeași sesiune și taburile recuperate sunt grupate într-o singură fereastră.
+
+Scurtăturile și excepțiile sunt salvate în `Data/shortcuts.json` și `Data/protected-sites.json`.
+Logo-urile personalizate sunt PNG-uri de 32 px în `ShortcutIcons/`. Salvarea sesiunii și căutarea
+sugestiilor folosesc temporizatoare pornite doar de schimbări; nu adaugă polling permanent.
+
+Verificările de integrare rulează într-un profil temporar, separat de datele utilizatorului:
+
+```powershell
+dotnet run --project tests\Vela.SmokeTests\Vela.SmokeTests.csproj -c Release
+```
+
+Acestea verifică inclusiv WebView2 real, logo-uri, editorul New Tab, sugestii, căutare,
+descărcări locale, excepții, ferestre multiple și restaurare după oprirea forțată a procesului.
 
 ## Setări
 
@@ -99,13 +123,19 @@ Fereastra de setări are o previzualizare a fundalului, iar „Elimină” șter
 Vela pornește de la ideea că un tab uitat în fundal nu trebuie să țină un proces Chromium treaz.
 Trei mecanisme lucrează împreună, verificate la fiecare 10 secunde:
 
-1. **Adormire (suspend)** — după `SuspendAfterMinutes` minute de inactivitate (implicit **2**), un tab din fundal este înghețat cu `CoreWebView2.TrySuspendAsync()`. JavaScript-ul se oprește, procesul renderează eliberează memorie, dar pagina rămâne încărcată și revine instant la click.
-2. **Eliberare (discard)** — după `DiscardAfterMinutes` minute (implicit **30**), view-ul WebView2 este distrus complet. Tab-ul rămâne în bară cu titlu și favicon; la activare, view-ul este recreat și pagina reîncărcată din URL.
-3. **Plafon de tab-uri vii** — `MaxLiveTabs` (implicit **10**, minim efectiv 3) limitează câte tab-uri încărcate pot exista simultan în afara celui activ; cele mai vechi sunt eliberate primele.
+1. **Adormire (suspend)** — după `SuspendAfterMinutes` minute de inactivitate (implicit **1**), un tab din fundal este înghețat cu `CoreWebView2.TrySuspendAsync()`. JavaScript-ul se oprește, procesul renderează eliberează memorie, dar pagina rămâne încărcată și revine instant la click.
+2. **Eliberare (discard)** — după `DiscardAfterMinutes` minute (implicit **15**), view-ul WebView2 este distrus complet. Tab-ul rămâne în bară cu titlu și favicon; la activare, view-ul este recreat și pagina reîncărcată din URL.
+3. **Plafon de tab-uri încărcate** — `MaxLiveTabs` (implicit **6**, minim efectiv 3) limitează câte tab-uri încărcate pot exista simultan în afara celui activ; cele mai vechi sunt eliberate primele. Limita este aplicată imediat la schimbarea tab-ului, nu doar la următorul tick.
 
-În plus, când fereastra este minimizată, toate tab-urile primesc `MemoryUsageTargetLevel.Low`, ca
-Chromium să poată renunța la cache-uri. Bara de stare arată în timp real RAM-ul întregului arbore de
-procese (`RAM 690 MB · 8 procese`) plus starea tab-urilor (`3 taburi · 2 în repaus · 1 eliberate din memorie`).
+În plus:
+
+- La fiecare schimbare de tab, view-urile ascunse primesc imediat `MemoryUsageTargetLevel.Low`, iar cel activ revine la `Normal`.
+- Când fereastra este minimizată, toate tab-urile din fundal care nu redau audio sunt suspendate pe loc, iar cel activ primește `Low`.
+- Tab-urile care redau audio (muzică, apeluri, upload-uri) nu sunt niciodată suspendate sau eliberate.
+- Pragurile vechi (2/30/10) sunt migrate automat o singură dată la noile valori implicite; valorile schimbate manual de utilizator sunt păstrate.
+
+Bara de stare arată în timp real RAM-ul întregului arbore de procese (`RAM 690 MB · 8 procese`)
+plus starea tab-urilor (`3 taburi · 2 în repaus · 1 eliberate din memorie`).
 
 Toate pragurile se schimbă din **Setări → Memorie** (sau din **Meniu → Economie de memorie**) sau direct în
 `%LOCALAPPDATA%\Vela\Data\settings.json` (`0` = dezactivat).
@@ -194,7 +224,7 @@ src\Vela\
     HistoryStore.cs        istoric local (ultimele 8000 de intrări)
     BookmarksStore.cs      favorite
     SessionStore.cs        tab-urile + fereastra de la închidere
-    MemoryProbe.cs         RAM pe arborele de procese (NtQueryInformationProcess)
+    PerformanceProbe.cs    RAM/CPU pentru procesele raportate de WebView2
     UrlHelper.cs           „este URL sau căutare?”
     AppPaths.cs            %LOCALAPPDATA%\Vela\*
     Log.cs                 log rotativ
@@ -208,7 +238,30 @@ src\Vela\
 
 ## Limitări cunoscute
 
-- Un tab = un proces Chromium de render, ca în orice browser pe Chromium; câștigul de memorie vine din adormire/eliberare, nu din alt motor.
-- Nu există încă sincronizare, profile multiple, gesturi de mouse sau suport pentru extensii Chrome.
-- Descărcările pornesc automat în `Downloads` (fără dialog „Salvează ca”).
+- Procesele și izolarea site-urilor sunt gestionate de Chromium/WebView2; câștigul de memorie vine din adormirea și eliberarea paginilor.
+- Sincronizarea este manuală, printr-un folder ales de utilizator. Include favorite, lista de lectură și setări comune; nu transferă cookie-uri, parole sau istoric. Nu există server Vela sau cont Vela.
+- Extensiile neîmpachetate folosesc API-ul WebView2, cu suport activat explicit și repornire; compatibilitatea nu este identică cu Chrome Web Store. Modul privat folosește un profil InPrivate separat în cadrul profilului ales.
+- API-ul WebView2 nu expune o listă de parole individuale. Vela oferă controlul salvării, al completării automate și ștergerea datelor native, fără extragerea secretelor din profil.
+- Pachetele sunt nesemnate până la configurarea unui certificat real. Versiunile sunt distribuite prin [GitHub Releases](https://github.com/visualxstudio/vela-browser/releases/latest); verificarea este manuală, fără instalare automată.
 - Parsarea listelor ABP este intenționat simplă: regulile pe domenii și fragmentele de cale sunt aplicate, regex-urile complexe sunt sărite.
+
+## Funcțiile noi și distribuția
+
+- Mod economic în Setări → Memorie: maximum trei pagini live pe fereastră, repaus după un minut și eliberare după cinci minute. Formularele nesalvate, audio, descărcările și site-urile protejate pot depăși limita; dezactivarea modului păstrează valorile personalizate.
+- Butonul profilului deschide gestionarea a maximum 16 profiluri, inclusiv cel principal. Profilurile închise nu pornesc procese. Datele profilului principal rămân în locul existent.
+- Import de favorite din Chrome, Edge și Brave sau fișiere JSON/HTML, inclusiv exporturi Firefox. Sursa rămâne intactă; parolele și cookie-urile nu sunt importate.
+- Grupuri de taburi cu restrângere/extindere și păstrare în sesiune. Lista „Citește mai târziu” are stare citit/necitit și este inclusă în backup și sincronizare.
+- Consumul pe procese este măsurat numai la cerere. Asocierea paginilor folosește identificatorii nativi de cadre, iar procesele partajate sunt marcate explicit; paginile neîncărcate nu sunt trezite.
+- Ferestrele principale și utilitare își limitează dimensiunea la zona de lucru a monitorului, inclusiv după schimbarea DPI.
+- Apelurile WebRTC și media activă fără sunet sunt protejate prin evenimente. Oprirea activității și retragerea protecției `beforeunload` permit din nou eliberarea memoriei. Editorul de favorite se adaptează la ferestre înguste, iar paginile lungi rămân accesibile prin derulare.
+- Ferestre private (`Ctrl+Shift+N`), taburi fixate, reordonare prin tragere, duplicare și mutare între ferestre cu păstrarea controlului live. Căutarea taburilor (`Ctrl+Shift+A`) nu încarcă paginile adormite.
+- Ctrl+click și clicul cu rotița deschid taburi neîncărcate în fundal. Indicatorul audio și comanda de mute folosesc starea motorului. Popupurile păstrează `window.opener` pentru callbackuri de autentificare.
+- Biblioteca include istoricul (`Ctrl+H`), favoritele cu foldere (`Ctrl+Shift+O`), backup/sincronizare, diagnostic, extensii și ștergerea datelor pe interval.
+- Backup criptat cu restaurare și copie de revenire: favorite, setări, scurtături New Tab, imagine de fundal și preferințe zoom/scut. Sincronizarea păstrează înregistrări de ștergere pentru a preveni reapariția favoritelor eliminate.
+- Zoom pe site, pornire în New Tab/pagina de start/sesiune, motoare de căutare predefinite și meniu contextual pentru bara de adrese.
+- Imprimare (`Ctrl+P`), export PDF (`Ctrl+Shift+S`), mod de citire local și traducere externă Google numai după confirmare. Traducerea trimite adresa completă serviciului respectiv.
+- Folder de descărcare configurabil, dialog opțional de salvare și progres în bara de instrumente. Informații despre HTTPS/certificat, controale native pentru autofill și explicații SmartScreen.
+- Lista StevenBlack/hosts poate fi actualizată manual și restaurată la versiunea precedentă. Excepțiile scutului sunt persistente în profilul normal și temporare în modul privat.
+- Diagnostic exportabil cu câmpuri permise explicit, fără URL-uri, titluri sau căi personale. Măsurarea resurselor se oprește la minimizare. Fără servicii permanente pentru sincronizare, actualizări sau traducere.
+
+Instrucțiuni și limite pentru instalator, semnare, găzduire și teste: [docs/RELEASE.md](docs/RELEASE.md).

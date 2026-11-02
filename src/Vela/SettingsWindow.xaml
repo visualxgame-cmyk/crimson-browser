@@ -15,6 +15,10 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
 
+    <Window.Resources>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource SlimScrollBar}" />
+    </Window.Resources>
+
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
                             ResizeBorderThickness="6"
@@ -56,7 +60,7 @@
                 <Border Grid.Column="0" Background="{DynamicResource ToolbarBg}"
                         BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,1,0">
                     <Grid Margin="12,18,12,14">
-                        <StackPanel VerticalAlignment="Top">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel VerticalAlignment="Top">
                             <RadioButton x:Name="AspectNav" Style="{StaticResource SettingsNav}"
                                          GroupName="nav" Tag="aspect" IsChecked="True"
                                          Checked="Nav_Checked">
@@ -98,7 +102,7 @@
                                     <TextBlock Text="Navigare" />
                                 </StackPanel>
                             </RadioButton>
-                        </StackPanel>
+                        </StackPanel></ScrollViewer>
                     </Grid>
                 </Border>
 
@@ -219,6 +223,10 @@
                             <!-- ============ MEMORIE ============ -->
                             <StackPanel x:Name="MemoryPage" Visibility="Collapsed">
                                 <TextBlock Text="Memorie" Style="{StaticResource SettingsPageTitle}" Margin="0,0,0,20" />
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12"><StackPanel>
+                                    <CheckBox x:Name="EconomyToggle" Content="Mod Economie" Style="{StaticResource SettingsSwitch}" />
+                                    <TextBlock Text="Țintă: 3 pagini încărcate, adormire după 1 minut și eliberare după 5 minute. Editările, apelurile, media, descărcările și protecțiile de închidere pot depăși limita. Dezactivarea restabilește valorile tale de mai jos." Style="{StaticResource SettingsHint}" Margin="0,10,0,0" />
+                                </StackPanel></Border>
 
                                 <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
                                     <StackPanel>
@@ -236,7 +244,7 @@
 
                                 <Border Style="{StaticResource SettingsCard}">
                                     <StackPanel>
-                                        <TextBlock Text="Tab-uri active simultan" Style="{StaticResource SettingsTitle}" Margin="0,0,0,12" />
+                                        <TextBlock Text="Tab-uri încărcate simultan" Style="{StaticResource SettingsTitle}" Margin="0,0,0,12" />
                                         <WrapPanel x:Name="MaxLivePanel" />
                                     </StackPanel>
                                 </Border>
@@ -261,11 +269,23 @@
                                                   Content="Redeschide tab-urile de la ultima sesiune" Click="Restore_Click" />
                                     </StackPanel>
                                 </Border>
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,12,0,0"><StackPanel>
+                                    <TextBlock Text="Parole și completare automată" Style="{StaticResource SettingsTitle}" Margin="0,0,0,12" />
+                                    <CheckBox x:Name="SavePasswordsToggle" Content="Oferă salvarea parolelor noi" Style="{StaticResource SettingsSwitch}" Margin="0,0,0,12" />
+                                    <CheckBox x:Name="AutofillToggle" Content="Completează automat datele generale" Style="{StaticResource SettingsSwitch}" Margin="0,0,0,12" />
+                                    <TextBlock Text="Datele sunt administrate de motorul WebView2. Dezactivarea salvării parolelor noi nu șterge parolele existente. Listarea individuală a parolelor nu este disponibilă prin API-ul motorului." Style="{StaticResource SettingsHint}" Margin="0,0,0,12" />
+                                    <WrapPanel><Button Content="Șterge parolele salvate…" Tag="clear-passwords" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,0,8,8" /><Button Content="Șterge completarea automată…" Tag="clear-autofill" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,0,0,8" /></WrapPanel>
+                                </StackPanel></Border>
+                                <Button Content="Deschide biblioteca de date și protecție" Tag="library" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,14,0,0" HorizontalAlignment="Left" />
                             </StackPanel>
 
                             <!-- ============ NAVIGARE ============ -->
                             <StackPanel x:Name="NavPage" Visibility="Collapsed">
                                 <TextBlock Text="Navigare" Style="{StaticResource SettingsPageTitle}" Margin="0,0,0,20" />
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12"><StackPanel>
+                                    <TextBlock Text="La pornire" Style="{StaticResource SettingsTitle}" Margin="0,0,0,12" />
+                                    <WrapPanel><RadioButton x:Name="StartupRestore" Content="Ultima sesiune" GroupName="startup" Tag="restore" Style="{StaticResource ChoiceChip}" Checked="Startup_Checked" /><RadioButton x:Name="StartupHome" Content="Pagina principală" GroupName="startup" Tag="home" Style="{StaticResource ChoiceChip}" Checked="Startup_Checked" /><RadioButton x:Name="StartupNewTab" Content="Tab nou" GroupName="startup" Tag="newtab" Style="{StaticResource ChoiceChip}" Checked="Startup_Checked" /></WrapPanel>
+                                </StackPanel></Border>
 
                                 <Border Style="{StaticResource SettingsCard}" Margin="0,0,0,12">
                                     <StackPanel>
@@ -277,7 +297,47 @@
                                 <Border Style="{StaticResource SettingsCard}">
                                     <StackPanel>
                                         <TextBlock Text="Motor de căutare" Style="{StaticResource SettingsTitle}" Margin="0,0,0,10" />
+                                        <ComboBox x:Name="SearchEnginePreset" SelectionChanged="SearchEngine_Changed" Margin="0,0,0,10" AutomationProperties.Name="Motor de căutare">
+                                            <ComboBoxItem Content="DuckDuckGo" Tag="https://duckduckgo.com/?q=" /><ComboBoxItem Content="Google" Tag="https://www.google.com/search?q=" /><ComboBoxItem Content="Bing" Tag="https://www.bing.com/search?q=" /><ComboBoxItem Content="Brave Search" Tag="https://search.brave.com/search?q=" /><ComboBoxItem Content="Personalizat" />
+                                        </ComboBox>
                                         <TextBox x:Name="SearchUrlBox" Style="{StaticResource SettingsInput}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,12,0,0"><StackPanel>
+                                    <TextBlock Text="Descărcări" Style="{StaticResource SettingsTitle}" Margin="0,0,0,12" />
+                                    <TextBox x:Name="DownloadFolderBox" Style="{StaticResource SettingsInput}" AutomationProperties.Name="Folderul descărcărilor" />
+                                    <Button Content="Alege folderul…" Style="{StaticResource SettingsButton}" Click="DownloadFolder_Click" HorizontalAlignment="Left" Margin="0,10,0,12" />
+                                    <CheckBox x:Name="AskDownloadToggle" Content="Întreabă unde se salvează fiecare fișier" Style="{StaticResource SettingsSwitch}" />
+                                </StackPanel></Border>
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,12,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Favorite și site-uri" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Importul păstrează favoritele existente. Aceste acțiuni se aplică imediat." Style="{StaticResource SettingsHint}" Margin="0,8,0,12" />
+                                        <WrapPanel>
+                                            <Button Content="Importă HTML…" Tag="import" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,0,8,8" />
+                                            <Button Content="Exportă HTML…" Tag="export" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,0,8,8" />
+                                            <Button Content="Permisiuni și date pe site" Tag="permissions" Style="{StaticResource SettingsButton}" Click="Tool_Click" Margin="0,0,0,8" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,12,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Browser implicit" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="Înregistrează Vela pentru linkuri HTTP/HTTPS și fișiere HTML, apoi deschide alegerea aplicației implicite din Windows." Style="{StaticResource SettingsHint}" Margin="0,8,0,12" />
+                                        <Button Content="Alege Vela în Windows…" Style="{StaticResource SettingsButton}" Click="DefaultBrowser_Click" HorizontalAlignment="Left" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource SettingsCard}" Margin="0,12,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Actualizări" Style="{StaticResource SettingsTitle}" />
+                                        <TextBlock Text="GitHub Releases găzduiește gratuit versiunile publice. Verificarea pornește doar la apăsarea butonului; nu există serviciu de actualizare în fundal." Style="{StaticResource SettingsHint}" Margin="0,8,0,12" />
+                                        <TextBlock Text="Repository public GitHub (utilizator/repository)" Style="{StaticResource SettingsHint}" Margin="0,0,0,6" />
+                                        <TextBox x:Name="UpdateRepositoryBox" Style="{StaticResource SettingsInput}" AutomationProperties.Name="Repository GitHub pentru actualizări" />
+                                        <WrapPanel Margin="0,12,0,0">
+                                            <Button x:Name="CheckUpdatesButton" Content="Verifică acum" Style="{StaticResource SettingsButton}" Click="CheckUpdates_Click" Margin="0,0,8,8" />
+                                            <Button x:Name="OpenReleaseButton" Content="Deschide pagina versiunii" Style="{StaticResource SettingsButton}" Click="OpenRelease_Click" Visibility="Collapsed" Margin="0,0,0,8" />
+                                        </WrapPanel>
+                                        <TextBlock x:Name="UpdateStatusText" Style="{StaticResource SettingsHint}" Text="Verificarea GitHub pornește numai la cerere." />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -288,9 +348,10 @@
                     <Border Grid.Row="1" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,0"
                             Padding="32,14,30,16">
                         <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock x:Name="FooterStatusText" VerticalAlignment="Center" FontSize="11.5"
-                                       Foreground="{DynamicResource TextMuted}" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                       Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap" Margin="0,0,16,0" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Content="Anulează" Style="{StaticResource SettingsButton}"
                                         Click="Cancel_Click" />
                                 <Button Content="Salvează" Style="{StaticResource SettingsPrimaryButton}"

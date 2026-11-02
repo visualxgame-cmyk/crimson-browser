@@ -37,6 +37,7 @@
 
     <!-- ============ Icon button (toolbar / window controls) ============ -->
     <Style x:Key="IconButton" TargetType="Button">
+        <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
@@ -49,10 +50,11 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="8">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBg}" />
                         </Trigger>
@@ -151,7 +153,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
-                    <Track x:Name="PART_Track" IsDirectionReversed="True">
+                    <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
                         <Track.Thumb>
                             <Thumb Style="{StaticResource SlimScrollThumb}" />
                         </Track.Thumb>
@@ -482,4 +484,36 @@
         <Setter Property="Cursor" Value="Hand" />
     </Style>
 
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" /><Setter Property="Padding" Value="10,8" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+            <Border x:Name="Item" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="4"><ContentPresenter /></Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource HoverBg}" /></Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter TargetName="Item" Property="Background" Value="{DynamicResource TabActiveBg}" /></Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" /><Setter Property="Background" Value="{DynamicResource OmniboxBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSoft}" /><Setter Property="MinHeight" Value="36" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+            <Grid>
+                <ToggleButton x:Name="Toggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" ClickMode="Press">
+                    <ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Surface" Background="{DynamicResource OmniboxBg}" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="1" CornerRadius="6"><TextBlock Text="⌄" Margin="0,0,12,0" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" /></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource HoverBg}" /></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" IsHitTestVisible="False" Margin="10,7,34,7" VerticalAlignment="Center" />
+                <Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" IsHitTestVisible="False" />
+                <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
+                    <Border Background="{DynamicResource PopupBg}" BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1" CornerRadius="6" Padding="4" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="320">
+                        <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" /></ScrollViewer>
+                    </Border>
+                </Popup>
+            </Grid>
+            <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ContextMenu"><Setter Property="Background" Value="{DynamicResource PopupBg}" /><Setter Property="Foreground" Value="{DynamicResource TextPrimary}" /><Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}" /><Setter Property="FontFamily" Value="{StaticResource UiFont}" /></Style>
+    <Style TargetType="MenuItem"><Setter Property="Background" Value="{DynamicResource PopupBg}" /><Setter Property="Foreground" Value="{DynamicResource TextPrimary}" /><Setter Property="Padding" Value="8,6" /></Style>
 </ResourceDictionary>

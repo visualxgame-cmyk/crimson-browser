@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mod de citire — Vela</title>
+<style>
+:root{--bg:#101114;--text:#ecedf1;--muted:#a0a3ae;--surface:#1b1d23;--accent:#fb542b;--reading-size:18px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif}header{display:flex;align-items:center;gap:10px;padding:18px 24px;background:var(--surface);position:sticky;top:0}header span{margin-right:auto;color:var(--muted);font-size:13px}button{background:transparent;color:var(--text);border:1px solid var(--muted);border-radius:7px;padding:6px 10px;cursor:pointer}button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}main{max-width:760px;margin:48px auto;padding:0 24px 64px;font-size:var(--reading-size);line-height:1.8}h1{font-size:2em;line-height:1.25;letter-spacing:-.025em}h2,h3,h4{line-height:1.35}p,blockquote,pre{margin:1.25em 0}blockquote{border-left:3px solid var(--accent);padding-left:20px;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85em;background:var(--surface);padding:16px;border-radius:8px}a{color:var(--accent);overflow-wrap:anywhere}#source{font-size:13px;color:var(--muted)}li{margin:.6em 0}@media print{header{display:none}body{background:white;color:black}main{max-width:none;margin:0}}
+</style></head><body><header><span>Vela · Mod de citire</span><button id="smaller" aria-label="Micșorează textul">A−</button><button id="larger" aria-label="Mărește textul">A+</button><button id="original">Pagina originală</button></header><main><h1 id="title">Se încarcă articolul…</h1><div id="source"></div><article id="article"></article></main>
+<script>
+let sourceUrl='',size=18;
+window.velaApplyTheme=theme=>{for(const [key,name] of [['bg','--bg'],['text','--text'],['muted','--muted'],['surface','--surface'],['accent','--accent']])if(theme[key])document.documentElement.style.setProperty(name,theme[key]);};
+for(const [id,delta] of [['smaller',-1],['larger',1]])document.getElementById(id).addEventListener('click',()=>{size=Math.max(15,Math.min(28,size+delta));document.documentElement.style.setProperty('--reading-size',size+'px');});
+document.getElementById('original').addEventListener('click',()=>{if(sourceUrl)chrome.webview.postMessage({type:'navigate',url:sourceUrl});});
+if(window.chrome?.webview){
+  chrome.webview.addEventListener('message',event=>{
+    const data=event.data;
+    if(data?.type!=='reader')return;
+    const article=data.article;
+    sourceUrl=article.sourceUrl;
+    document.title=article.title+' — Vela';
+    document.getElementById('title').textContent=article.title;
+    document.getElementById('source').textContent=sourceUrl;
+    document.documentElement.lang=article.language||'ro';
+    const body=document.getElementById('article');
+    body.replaceChildren();
+    let list=null;
+    for(const paragraph of article.paragraphs){
+      const tag=['h1','h2','h3','h4','p','li','blockquote','pre'].includes(paragraph.kind)?paragraph.kind:'p';
+      const node=document.createElement(tag);
+      node.textContent=paragraph.text;
+      if(tag==='li'){
+        if(!list){list=document.createElement('ul');body.append(list);}
+        list.append(node);
+      }else{list=null;body.append(node);}
+    }
+    if(data.theme)window.velaApplyTheme(data.theme);
+  });
+  chrome.webview.postMessage({type:'reader-ready'});
+}
+</script></body></html>

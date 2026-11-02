@@ -10,6 +10,11 @@
 (() => {
     'use strict';
 
+    // Authentication/consent documents must retain their own DOM and native APIs.
+    // Network blocking remains enabled; these pages have no player to filter.
+    const host = location.hostname;
+    if (velaSignInHosts.includes(host)) return;
+
     // ---------------------------------------------------------------
     // 1. Ascunde containerele de reclame (toate site-urile)
     // ---------------------------------------------------------------
@@ -107,7 +112,6 @@ tp-yt-paper-dialog:has(ytd-enforcement-message-view-model) { display: none !impo
     // ---------------------------------------------------------------
     // 2. YouTube: scoate anunturile din datele playerului
     // ---------------------------------------------------------------
-    const host = location.hostname;
     if (!/(^|\.)youtube(-nocookie)?\.com$/.test(host) && host !== 'youtu.be') return;
 
     const AD_KEYS = new Set([

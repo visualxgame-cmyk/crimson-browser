@@ -26,6 +26,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="38" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="24" />
         </Grid.RowDefinitions>
@@ -52,15 +53,18 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border x:Name="TabBorder" Width="196" Height="32" Margin="0,4,2,0"
+                                <Border x:Name="TabBorder" Width="{Binding DisplayWidth}" Height="32" Margin="0,4,2,0"
                                         CornerRadius="9,9,4,4" Background="Transparent"
                                         MouseLeftButtonDown="Tab_MouseLeftButtonDown"
                                         MouseDown="Tab_MouseDown"
+                                        PreviewMouseLeftButtonDown="Tab_DragMouseDown" MouseMove="Tab_MouseMove" ContextMenuOpening="Tab_ContextMenuOpening"
                                         ToolTip="{Binding Title}">
+                                    <Border.ContextMenu><ContextMenu /></Border.ContextMenu>
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Background" Value="Transparent" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HeaderVisible}" Value="False"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
                                                 </Trigger>
@@ -109,9 +113,29 @@
                                             </Image>
                                         </Grid>
 
-                                        <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8,0,6,0"
-                                                   VerticalAlignment="Center" FontSize="12"
-                                                   TextTrimming="CharacterEllipsis" />
+                                        <Button Grid.Column="0" Content="&#xE767;" Width="18" Height="20" FontSize="12" Click="Audio_Click" ToolTip="Activează / oprește sunetul tabului">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAudible}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsMuted}" Value="True"><Setter Property="Visibility" Value="Visible" /><Setter Property="Content" Value="&#xE74F;" /></DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <DockPanel x:Name="TabTitlePanel" Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                                            <Ellipse DockPanel.Dock="Right" Width="5" Height="5" Fill="{DynamicResource Accent}" Margin="5,0,0,0"
+                                                     ToolTip="Modificări nesalvate — tab protejat de eliberarea automată">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers><DataTrigger Binding="{Binding HasUnsavedChanges}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+                                            <TextBlock FontSize="12" TextTrimming="CharacterEllipsis"><Run Text="{Binding GroupPrefix}" Foreground="{DynamicResource Accent}" /><Run Text="{Binding Title}" /></TextBlock>
+                                        </DockPanel>
 
                                         <Button x:Name="TabClose" Grid.Column="2" Content="&#xE8BB;"
                                                 Style="{StaticResource IconButton}" Width="20" Height="20"
@@ -120,6 +144,7 @@
                                     </Grid>
                                 </Border>
                                 <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsPinned}" Value="True"><Setter TargetName="TabTitlePanel" Property="Visibility" Value="Collapsed" /></DataTrigger>
                                     <DataTrigger Binding="{Binding IsMouseOver, ElementName=TabBorder}" Value="True">
                                         <Setter TargetName="TabClose" Property="Opacity" Value="1" />
                                     </DataTrigger>
@@ -139,6 +164,8 @@
             </ScrollViewer>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <TextBlock x:Name="PrivateBadge" Text="PRIVAT" Visibility="Collapsed" FontSize="10" Foreground="{DynamicResource Accent}" Margin="6,12,6,0" ToolTip="Istoricul și sesiunea acestei ferestre nu sunt salvate. Descărcările și favoritele salvate rămân pe disc." />
+                <Button x:Name="ProfileButton" Style="{StaticResource MenuRowButton}" Content="Principal" Tag="profiles" Click="Workspace_Click" MaxWidth="120" Height="32" Margin="4,0,4,0" ToolTip="Profilul activ — deschide profilurile" />
                 <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" ToolTip="Minimizare" Click="Minimize_Click" />
                 <Button x:Name="MaxButton" Style="{StaticResource CaptionButton}" Content="&#xE922;" ToolTip="Maximizare" Click="Maximize_Click" />
                 <Button Style="{StaticResource CloseCaptionButton}" Content="&#xE8BB;" ToolTip="Închidere" Click="Close_Click" />
@@ -179,10 +206,10 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="SecurityGlyph" Grid.Column="0" Text="&#xE72E;"
+                        <Button Grid.Column="0" Style="{StaticResource IconButton}" Width="26" Height="26" Margin="4,0,0,0" Click="ConnectionInfo_Click" ToolTip="Informații despre conexiune" AutomationProperties.Name="Informații despre conexiune"><TextBlock x:Name="SecurityGlyph" Text="&#xE72E;"
                                    FontFamily="{StaticResource IconFont}" FontSize="11"
                                    Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center"
-                                   Margin="10,0,2,0" ToolTip="Conexiune securizată" />
+                                   ToolTip="Conexiune securizată" /></Button>
 
                         <Grid Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="OmniboxPlaceholder" Text="Caută sau introdu o adresă"
@@ -190,10 +217,10 @@
                                        VerticalAlignment="Center" IsHitTestVisible="False" Margin="4,0,0,0" />
                             <TextBox x:Name="Omnibox" Style="{StaticResource OmniboxBox}"
                                      Margin="0" Padding="4,0,0,0"
-                                     KeyDown="Omnibox_KeyDown"
+                                     PreviewKeyDown="Omnibox_KeyDown"
                                      GotKeyboardFocus="Omnibox_GotFocus"
                                      LostKeyboardFocus="Omnibox_LostFocus"
-                                     TextChanged="Omnibox_TextChanged" />
+                                     TextChanged="Omnibox_TextChanged" ContextMenuOpening="Omnibox_ContextMenuOpening"><TextBox.ContextMenu><ContextMenu /></TextBox.ContextMenu></TextBox>
                         </Grid>
 
                         <Button x:Name="BookmarkButton" Grid.Column="2" Style="{StaticResource IconButton}"
@@ -209,7 +236,8 @@
                 <!-- right cluster -->
                 <StackPanel Orientation="Horizontal" Grid.Column="2" VerticalAlignment="Center">
                     <Button x:Name="DownloadsButton" Style="{StaticResource IconButton}" Content="&#xE896;"
-                            FontSize="13" ToolTip="Descărcări" Click="Downloads_Click" />
+                            FontSize="13" ToolTip="Descărcări (Ctrl+J)" Click="Downloads_Click" />
+                    <TextBlock x:Name="DownloadProgressText" Visibility="Collapsed" Foreground="{DynamicResource Accent}" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <Button x:Name="MenuButton" Style="{StaticResource IconButton}" Content="&#xE712;"
                             FontSize="14" ToolTip="Meniu" Click="Menu_Click" />
                 </StackPanel>
@@ -217,10 +245,24 @@
         </Border>
 
         <!-- ================= CONTENT ================= -->
-        <Grid Grid.Row="2" x:Name="ContentHost" Background="{DynamicResource ContentBg}" />
+        <Border x:Name="PermissionBar" Grid.Row="2" Visibility="Collapsed" Background="{DynamicResource ToolbarBg}" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,1" Padding="14,10" PreviewKeyDown="PermissionBar_KeyDown" AutomationProperties.Name="Permisiune solicitată de site">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,16,0">
+                    <TextBlock x:Name="PermissionOrigin" Foreground="{DynamicResource Accent}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="PermissionDescription" Foreground="{DynamicResource TextPrimary}" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,0" />
+                    <TextBlock x:Name="PermissionHint" Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+                <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                    <Button x:Name="PermissionDeny" Content="Blochează" Tag="deny" Click="PermissionChoice_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,0" />
+                    <Button x:Name="PermissionAllow" Content="Permite" Tag="allow" Click="PermissionChoice_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,0" />
+                    <Button x:Name="PermissionDismiss" Content="Nu acum" Tag="dismiss" Click="PermissionChoice_Click" Style="{StaticResource SettingsButton}" />
+                </WrapPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Row="3" x:Name="ContentHost" Background="{DynamicResource ContentBg}" />
 
         <!-- ================= STATUS BAR ================= -->
-        <Border Grid.Row="3" Background="{DynamicResource WindowBg}" Padding="10,0">
+        <Border Grid.Row="4" Background="{DynamicResource WindowBg}" Padding="10,0">
             <Grid>
                 <TextBlock x:Name="StatusText" FontSize="11" Foreground="{DynamicResource TextMuted}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
@@ -228,6 +270,57 @@
                            HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
         </Border>
+
+        <Popup x:Name="SuggestionsPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PlacementTarget="{Binding ElementName=OmniboxBorder}" VerticalOffset="4">
+            <Border Style="{StaticResource PopupSurface}" Padding="5"
+                    Width="{Binding ActualWidth, ElementName=OmniboxBorder}">
+                <ListBox x:Name="SuggestionsList" Background="Transparent" BorderThickness="0"
+                         Foreground="{DynamicResource TextPrimary}" Focusable="False"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" MaxHeight="420">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Row" CornerRadius="6" Padding="10,7" Background="Transparent">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBg}" />
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBg}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Background="Transparent" PreviewMouseLeftButtonDown="Suggestion_MouseDown" Cursor="Hand">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Url}" FontSize="11" Foreground="{DynamicResource TextMuted}"
+                                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding Source}" FontSize="10"
+                                           Foreground="{DynamicResource TextMuted}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
 
         <!-- ================= MENU POPUP ================= -->
         <Popup x:Name="MenuPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
@@ -262,6 +355,28 @@
                                 <TextBlock Text="Ctrl+," Foreground="{DynamicResource TextMuted}" Margin="12,0,0,0" />
                             </StackPanel>
                         </Button>
+                        <Button Style="{StaticResource MenuRowButton}" Click="PrivateWindow_Click"><DockPanel Width="300"><TextBlock DockPanel.Dock="Right" Text="Ctrl+Shift+N" Foreground="{DynamicResource TextMuted}" /><TextBlock Text="Fereastră privată" /></DockPanel></Button>
+                        <Button Style="{StaticResource MenuRowButton}" Click="Find_Click">
+                            <DockPanel Width="260">
+                                <TextBlock DockPanel.Dock="Right" Text="Ctrl+F" Foreground="{DynamicResource TextMuted}" />
+                                <TextBlock Text="Caută în pagină" />
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuRowButton}" Click="Downloads_Click">
+                            <DockPanel Width="260">
+                                <TextBlock DockPanel.Dock="Right" Text="Ctrl+J" Foreground="{DynamicResource TextMuted}" />
+                                <TextBlock Text="Descărcări" />
+                            </DockPanel>
+                        </Button>
+                        <Button Style="{StaticResource MenuRowButton}" Content="Permisiuni și date pe site" Click="SiteSettings_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Bibliotecă — istoric, favorite, taburi" Tag="bookmarks" Click="Library_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Profiluri, import și grupuri…" Tag="profiles" Click="Workspace_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Consum pe procese…" Tag="resources" Click="Workspace_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Citește mai târziu" Tag="reading" Click="Library_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Click="Print_Click"><DockPanel Width="300"><TextBlock DockPanel.Dock="Right" Text="Ctrl+P" Foreground="{DynamicResource TextMuted}" /><TextBlock Text="Imprimă…" /></DockPanel></Button>
+                        <Button Style="{StaticResource MenuRowButton}" Click="SavePdf_Click"><DockPanel Width="300"><TextBlock DockPanel.Dock="Right" Text="Ctrl+Shift+S" Foreground="{DynamicResource TextMuted}" /><TextBlock Text="Salvează PDF…" /></DockPanel></Button>
+                        <Button Style="{StaticResource MenuRowButton}" Content="Mod de citire" Click="Reader_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Tradu pagina cu Google Translate…" Click="Translate_Click" />
 
                         <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 
@@ -306,11 +421,28 @@
                         <TextBlock x:Name="SleepPolicyText" FontSize="11" Foreground="{DynamicResource TextSecondary}"
                                    Margin="10,0,10,6" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Margin="8,0,0,4">
-                            <Button Style="{StaticResource MenuRowButton}" Content="2 min" Tag="2" Click="SleepPolicy_Click" />
-                            <Button Style="{StaticResource MenuRowButton}" Content="10 min" Tag="10" Click="SleepPolicy_Click" />
-                            <Button Style="{StaticResource MenuRowButton}" Content="30 min" Tag="30" Click="SleepPolicy_Click" />
+                            <Button Style="{StaticResource MenuRowButton}" Content="1 min" Tag="1" Click="SleepPolicy_Click" />
+                            <Button Style="{StaticResource MenuRowButton}" Content="5 min" Tag="5" Click="SleepPolicy_Click" />
+                            <Button Style="{StaticResource MenuRowButton}" Content="15 min" Tag="15" Click="SleepPolicy_Click" />
                             <Button Style="{StaticResource MenuRowButton}" Content="Oprit" Tag="0" Click="SleepPolicy_Click" />
                         </StackPanel>
+                        <CheckBox x:Name="ProtectSiteToggle" Style="{StaticResource SettingsSwitch}"
+                                  Margin="10,6,10,8" Click="ProtectSite_Click">
+                            <TextBlock x:Name="ProtectSiteLabel" Text="Nu adormi acest site" MaxWidth="205" TextTrimming="CharacterEllipsis" />
+                        </CheckBox>
+                        <ItemsControl x:Name="ProtectedSitesList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource MenuRowButton}" Tag="{Binding}" Click="UnprotectSite_Click"
+                                            ToolTip="Elimină excepția de adormire">
+                                        <Grid Width="250">
+                                            <TextBlock Text="{Binding}" Margin="0,0,24,0" TextTrimming="CharacterEllipsis" FontSize="11" />
+                                            <TextBlock Text="×" HorizontalAlignment="Right" Foreground="{DynamicResource TextMuted}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
 

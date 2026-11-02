@@ -85,11 +85,11 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: safe center;
     gap: 34px;
     padding: 40px 24px;
     user-select: none;
-    overflow: hidden;
+    overflow: auto;
     transition: background-color .18s ease;
   }
 
@@ -161,6 +161,37 @@
     gap: 14px;
   }
 
+  .shortcuts { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .shortcut-actions { display: flex; gap: 8px; }
+  button, dialog input { font: inherit; }
+  button { cursor: pointer; }
+  .quiet-button, .tile-tools button, dialog button {
+    color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 7px; padding: 6px 10px; font-size: 12px;
+  }
+  button:hover { color: var(--text); background: var(--surface-2); }
+  button:disabled { opacity: .4; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .tile-tools { display: none; grid-template-columns: repeat(2, 1fr); gap: 3px; margin-top: 5px; }
+  .editing .tile-tools { display: grid; }
+  .tile-tools button { padding: 4px 0; font-size: 11px; }
+  dialog {
+    width: min(400px, 90vw); color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 14px; padding: 24px;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .65); }
+  dialog h2 { font-size: 19px; margin: 0 0 18px; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin-top: 12px; }
+  dialog input {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px; margin-top: 6px; user-select: text;
+  }
+  dialog p { font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  dialog .primary { background: var(--accent); color: white; border-color: var(--accent); }
+  #shortcut-error { color: var(--text); min-height: 18px; font-size: 12px; max-width: 590px; text-align: center; }
+  #dialog-error { color: #f39489; }
+
   @media (max-width: 700px) {
     .tiles { grid-template-columns: repeat(3, 88px); }
   }
@@ -199,6 +230,15 @@
     font-weight: 600;
     font-size: 15px;
     color: #fff;
+  }
+
+  .avatar.has-icon { background: #f4f5f7; overflow: hidden; }
+
+  .avatar img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    display: block;
   }
 
   .tile span {
@@ -244,8 +284,7 @@
   }
 
   .footer {
-    position: absolute;
-    bottom: 16px;
+    flex-shrink: 0;
     font-size: 11px;
     color: var(--dim);
     display: flex;
@@ -278,7 +317,28 @@
     <span class="hint">Enter</span>
   </label>
 
-  <div class="tiles" id="tiles"></div>
+  <section class="shortcuts" aria-label="Scurtături">
+    <div class="tiles" id="tiles"></div>
+    <div class="shortcut-actions">
+      <button class="quiet-button" id="add-shortcut" type="button">+ Adaugă site</button>
+      <button class="quiet-button" id="edit-shortcuts" type="button" aria-pressed="false">Personalizează</button>
+    </div>
+    <div id="shortcut-error" role="status"></div>
+  </section>
+
+  <dialog id="shortcut-dialog" aria-labelledby="shortcut-title">
+    <form id="shortcut-form">
+      <h2 id="shortcut-title">Adaugă site</h2>
+      <label>Nume<input id="shortcut-name" maxlength="40" required autocomplete="off"></label>
+      <label>Adresă<input id="shortcut-url" maxlength="2048" required autocomplete="off" placeholder="https://exemplu.ro"></label>
+      <p>Logo-ul se salvează local după prima vizită pe site.</p>
+      <p id="dialog-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="cancel-shortcut">Anulează</button>
+        <button type="submit" id="save-shortcut" class="primary">Salvează</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="stats">
     <div class="stat"><span class="led"></span>RAM <b id="ram">–</b></div>
@@ -295,37 +355,142 @@
   </div>
 
 <script>
-  const sites = [
-    { name: 'YouTube',  url: 'https://www.youtube.com',        color: '#e5372b' },
-    { name: 'GitHub',   url: 'https://github.com',             color: '#5b6472' },
-    { name: 'Wikipedia',url: 'https://ro.wikipedia.org',       color: '#339966' },
-    { name: 'Reddit',   url: 'https://www.reddit.com',         color: '#ff5a1f' },
-    { name: 'Gmail',    url: 'https://mail.google.com',        color: '#c5453a' },
-    { name: 'Meteo',    url: 'https://www.meteoblue.com',      color: '#3a7bd5' }
+  let sites = [
+    { name: 'YouTube',  url: 'https://www.youtube.com',        icon: 'youtube.ico',   color: '#e5372b' },
+    { name: 'GitHub',   url: 'https://github.com',             icon: 'github.ico',    color: '#5b6472' },
+    { name: 'Wikipedia',url: 'https://ro.wikipedia.org',       icon: 'wikipedia.ico', color: '#339966' },
+    { name: 'Reddit',   url: 'https://www.reddit.com',         icon: 'reddit.png',    color: '#ff5a1f' },
+    { name: 'Gmail',    url: 'https://mail.google.com',        icon: 'gmail.ico',     color: '#c5453a' },
+    { name: 'Meteo',    url: 'https://www.meteoblue.com',      icon: 'meteoblue.ico', color: '#3a7bd5' }
   ];
 
   const tiles = document.getElementById('tiles');
-  for (const site of sites) {
-    const a = document.createElement('a');
-    a.className = 'tile';
-    a.href = site.url;
-    a.title = site.url;
-    a.addEventListener('click', (event) => {
-      event.preventDefault();
-      post({ type: 'navigate', url: site.url });
+  sites = sites.map((site, index) => ({ ...site, id: String(index), icon: 'site-icons/' + site.icon }));
+  const dialog = document.getElementById('shortcut-dialog');
+  const editButton = document.getElementById('edit-shortcuts');
+  const saveButton = document.getElementById('save-shortcut');
+  const errorText = document.getElementById('shortcut-error');
+  let editingId = null;
+  let editing = false;
+  let saving = false;
+
+  function renderTiles() {
+    const focused = document.activeElement;
+    const focusedId = focused?.dataset.shortcutId;
+    const focusedAction = focused?.dataset.action;
+    tiles.replaceChildren();
+    sites.forEach((site, index) => {
+      const wrapper = document.createElement('div');
+      const a = document.createElement('a');
+      a.className = 'tile';
+      a.href = site.url;
+      a.title = site.url;
+      a.addEventListener('click', (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        post({ type: 'navigate', url: site.url });
+      });
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.style.backgroundColor = site.color || 'var(--surface-2)';
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = site.name[0];
+
+      const icon = document.createElement('img');
+      icon.alt = '';
+      icon.width = 32;
+      icon.height = 32;
+      icon.addEventListener('load', () => {
+        avatar.replaceChildren(icon);
+        avatar.style.removeProperty('background-color');
+        avatar.classList.add('has-icon');
+      }, { once: true });
+      // Keep the initial visible if the bundled image is missing or cannot decode.
+      if (site.icon) icon.src = site.icon;
+
+      const label = document.createElement('span');
+      label.textContent = site.name;
+
+      a.append(avatar, label);
+      const tools = document.createElement('div');
+      tools.className = 'tile-tools';
+      const actions = [
+        ['edit', 'Editează', () => openShortcut(site)],
+        ['remove', 'Șterge', () => {
+          if (confirm('Ștergi scurtătura „' + site.name + '”?')) requestShortcut({ type: 'shortcut-remove', id: site.id });
+        }],
+        ['left', '←', () => requestShortcut({ type: 'shortcut-move', id: site.id, direction: -1 })],
+        ['right', '→', () => requestShortcut({ type: 'shortcut-move', id: site.id, direction: 1 })]
+      ];
+      for (const [action, text, callback] of actions) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.dataset.shortcutId = site.id;
+        button.dataset.action = action;
+        button.setAttribute('aria-label', (action === 'left' ? 'Mută la stânga' : action === 'right' ? 'Mută la dreapta' : text) + ': ' + site.name);
+        button.disabled = (action === 'left' && index === 0) || (action === 'right' && index === sites.length - 1);
+        button.addEventListener('click', callback);
+        tools.append(button);
+      }
+      wrapper.append(a, tools);
+      tiles.append(wrapper);
     });
-
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    avatar.style.background = site.color;
-    avatar.textContent = site.name[0];
-
-    const label = document.createElement('span');
-    label.textContent = site.name;
-
-    a.append(avatar, label);
-    tiles.append(a);
+    document.getElementById('add-shortcut').disabled = sites.length >= 24;
+    if (focusedId && focusedAction) {
+      const nextFocus = Array.from(tiles.querySelectorAll('button')).find(button =>
+        button.dataset.shortcutId === focusedId && button.dataset.action === focusedAction);
+      if (nextFocus && !nextFocus.disabled) nextFocus.focus();
+    }
   }
+
+  function openShortcut(site) {
+    editingId = site?.id || null;
+    document.getElementById('shortcut-title').textContent = site ? 'Editează site' : 'Adaugă site';
+    document.getElementById('shortcut-name').value = site?.name || '';
+    document.getElementById('shortcut-url').value = site?.url || '';
+    document.getElementById('dialog-error').textContent = '';
+    dialog.showModal();
+    document.getElementById('shortcut-name').focus();
+  }
+
+  function requestShortcut(message) {
+    errorText.textContent = '';
+    if (!(window.chrome && chrome.webview)) {
+      document.getElementById('dialog-error').textContent = errorText.textContent = 'Editarea este disponibilă în Vela.';
+      return;
+    }
+    post(message);
+  }
+
+  document.getElementById('add-shortcut').addEventListener('click', () => openShortcut(null));
+  editButton.addEventListener('click', () => {
+    editing = !editing;
+    tiles.classList.toggle('editing', editing);
+    editButton.setAttribute('aria-pressed', String(editing));
+    editButton.textContent = editing ? 'Gata' : 'Personalizează';
+  });
+  document.getElementById('cancel-shortcut').addEventListener('click', () => { if (!saving) dialog.close(); });
+  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  document.getElementById('shortcut-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (saving) return;
+    const name = document.getElementById('shortcut-name').value.trim();
+    let url = document.getElementById('shortcut-url').value.trim();
+    if (!url.includes('://')) url = 'https://' + url;
+    try {
+      const parsed = new URL(url);
+      if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password || !name) throw new Error();
+      url = parsed.href;
+    } catch {
+      document.getElementById('dialog-error').textContent = 'Introdu un nume și o adresă HTTP sau HTTPS validă, fără parolă.';
+      return;
+    }
+    if (window.chrome && chrome.webview) saving = saveButton.disabled = true;
+    requestShortcut({ type: 'shortcut-save', id: editingId, name, url });
+  });
+  renderTiles();
 
   function post(message) {
     if (window.chrome && chrome.webview) chrome.webview.postMessage(message);
@@ -342,6 +507,21 @@
   if (window.chrome && chrome.webview) {
     chrome.webview.addEventListener('message', (event) => {
       const data = event.data;
+      if (data?.type === 'shortcuts' && Array.isArray(data.items)) {
+        sites = data.items;
+        renderTiles();
+        return;
+      }
+      if (data?.type === 'shortcut-saved') {
+        saving = saveButton.disabled = false;
+        if (dialog.open) dialog.close();
+        return;
+      }
+      if (data?.type === 'shortcut-error') {
+        saving = saveButton.disabled = false;
+        document.getElementById('dialog-error').textContent = errorText.textContent = data.message;
+        return;
+      }
       if (!data || data.type !== 'stats') return;
 
       document.getElementById('ram').textContent = data.ramMB + ' MB';
@@ -350,6 +530,7 @@
       document.getElementById('sleeping').textContent = data.sleeping;
       document.getElementById('blocked').textContent = data.blocked;
     });
+    post({ type: 'shortcuts-ready' });
   }
 
   input.focus();

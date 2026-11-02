@@ -1,0 +1,24 @@
+<Window x:Class="Vela.WorkspaceWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Spațiu de lucru — Vela" Width="940" Height="680" MinWidth="700" MinHeight="500" Icon="Assets/vela.ico" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextPrimary}" FontFamily="{StaticResource UiFont}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <WrapPanel Margin="0,0,0,18">
+            <Button Content="Profiluri" Tag="profiles" Click="Mode_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,8" />
+            <Button Content="Import favorite" Tag="import" Click="Mode_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,8" />
+            <Button Content="Consum pe procese" Tag="resources" Click="Mode_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,8" />
+            <Button Content="Grupuri de taburi" Tag="groups" Click="Mode_Click" Style="{StaticResource SettingsButton}" Margin="0,0,0,8" />
+        </WrapPanel>
+        <StackPanel Grid.Row="1" Margin="0,0,0,16"><TextBlock x:Name="Heading" Style="{StaticResource SettingsPageTitle}" /><TextBlock x:Name="Hint" Style="{StaticResource SettingsHint}" Margin="0,10,0,0" /></StackPanel>
+        <ListBox Grid.Row="2" x:Name="Rows" Background="{DynamicResource InsetBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderSoft}" SelectionChanged="Selection_Changed" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="10" /><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="AutomationProperties.Name" Value="{Binding Title}" /></Style></ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate><DataTemplate><StackPanel><TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" FontSize="14" /><TextBlock Text="{Binding Detail}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="3" Margin="0,16,0,0">
+            <TextBlock x:Name="NameLabel" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,8" />
+            <TextBox x:Name="NameInput" Style="{StaticResource SettingsInput}" MaxLength="40" AutomationProperties.Name="Nume profil sau grup" />
+            <WrapPanel Margin="0,12,0,0"><Button x:Name="Primary" Click="Primary_Click" Style="{StaticResource SettingsPrimaryButton}" Margin="0,0,8,8" /><Button x:Name="Secondary" Click="Secondary_Click" Style="{StaticResource SettingsButton}" Margin="0,0,8,8" /><Button x:Name="Third" Click="Third_Click" Style="{StaticResource SettingsButton}" Margin="0,0,0,8" /></WrapPanel>
+        </StackPanel>
+        <DockPanel Grid.Row="4" Margin="0,12,0,0"><Button DockPanel.Dock="Right" Content="Închide" Click="Close_Click" Style="{StaticResource SettingsButton}" Margin="16,0,0,0" /><TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" /></DockPanel>
+    </Grid>
+</Window>

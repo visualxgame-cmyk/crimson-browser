@@ -32,10 +32,13 @@ public partial class SettingsWindow : Window
         "#1A0F14", "#1C1C1E", "#262A33", "#3A2B25",
     ];
 
-    private readonly Settings _original;
-    private readonly Settings _draft;
+    private Settings _original;
+    private Settings _draft;
     private readonly Action<Settings> _preview;
     private readonly Action<Settings> _commit;
+    private readonly Action<string>? _tools;
+    private readonly CancellationTokenSource _lifetime = new();
+    private string? _releaseUrl;
 
     private readonly Dictionary<string, Border> _themeCards = new();
     private readonly List<(Border Ring, string? Value)> _accentSwatches = new();
@@ -44,14 +47,17 @@ public partial class SettingsWindow : Window
     private bool _syncing;
     private bool _committed;
 
-    public SettingsWindow(Settings settings, Action<Settings> preview, Action<Settings> commit)
+    public SettingsWindow(Settings settings, Action<Settings> preview, Action<Settings> commit, Action<string>? tools = null)
     {
         _original = settings.Clone();
         _draft = settings.Clone();
         _preview = preview;
         _commit = commit;
+        _tools = tools;
+        Closed += (_, _) => _lifetime.Cancel();
 
         InitializeComponent();
+        WindowSizing.Install(this);
 
         _syncing = true;
         try
@@ -75,6 +81,7 @@ public partial class SettingsWindow : Window
 
     private void LoadFromSettings()
     {
+        EconomyToggle.IsChecked = _draft.EconomyMode;
         SelectTheme(_draft.Theme);
         SetAccent(_draft.CustomAccent, updateBox: true);
 
@@ -87,6 +94,15 @@ public partial class SettingsWindow : Window
         RestoreSwitch.IsChecked = _draft.RestoreSession;
         HomePageBox.Text = _draft.HomePage;
         SearchUrlBox.Text = _draft.SearchUrl;
+        UpdateRepositoryBox.Text = _draft.UpdateRepository;
+        SavePasswordsToggle.IsChecked = _draft.SavePasswords;
+        AutofillToggle.IsChecked = _draft.AutofillEnabled;
+        DownloadFolderBox.Text = DownloadPaths.Resolve(_draft.DownloadDirectory);
+        AskDownloadToggle.IsChecked = _draft.AskDownloadLocation;
+        StartupRestore.IsChecked = _draft.EffectiveStartupMode == "restore";
+        StartupHome.IsChecked = _draft.EffectiveStartupMode == "home";
+        StartupNewTab.IsChecked = _draft.EffectiveStartupMode == "newtab";
+        SearchEnginePreset.SelectedItem = SearchEnginePreset.Items.OfType<ComboBoxItem>().FirstOrDefault(i => i.Tag as string == _draft.SearchUrl) ?? SearchEnginePreset.Items[^1];
 
         UpdateImageText();
         UpdateBackgroundPreview();
@@ -304,6 +320,7 @@ public partial class SettingsWindow : Window
         MaxLivePanel.Children.Clear();
 
         AddMemoryChip(SuspendPanel, "Oprit", 0, "suspend", _draft.SuspendAfterMinutes == 0);
+        AddMemoryChip(SuspendPanel, "1 min", 1, "suspend", _draft.SuspendAfterMinutes == 1);
         AddMemoryChip(SuspendPanel, "2 min", 2, "suspend", _draft.SuspendAfterMinutes == 2);
         AddMemoryChip(SuspendPanel, "5 min", 5, "suspend", _draft.SuspendAfterMinutes == 5);
         AddMemoryChip(SuspendPanel, "10 min", 10, "suspend", _draft.SuspendAfterMinutes == 10);
@@ -311,10 +328,12 @@ public partial class SettingsWindow : Window
 
         AddMemoryChip(DiscardPanel, "Oprit", 0, "discard", _draft.DiscardAfterMinutes == 0);
         AddMemoryChip(DiscardPanel, "10 min", 10, "discard", _draft.DiscardAfterMinutes == 10);
+        AddMemoryChip(DiscardPanel, "15 min", 15, "discard", _draft.DiscardAfterMinutes == 15);
         AddMemoryChip(DiscardPanel, "30 min", 30, "discard", _draft.DiscardAfterMinutes == 30);
         AddMemoryChip(DiscardPanel, "60 min", 60, "discard", _draft.DiscardAfterMinutes == 60);
 
         AddMemoryChip(MaxLivePanel, "4 tab-uri", 4, "maxlive", _draft.MaxLiveTabs == 4);
+        AddMemoryChip(MaxLivePanel, "6 tab-uri", 6, "maxlive", _draft.MaxLiveTabs == 6);
         AddMemoryChip(MaxLivePanel, "8 tab-uri", 8, "maxlive", _draft.MaxLiveTabs == 8);
         AddMemoryChip(MaxLivePanel, "10 tab-uri", 10, "maxlive", _draft.MaxLiveTabs == 10);
         AddMemoryChip(MaxLivePanel, "16 tab-uri", 16, "maxlive", _draft.MaxLiveTabs == 16);
@@ -644,8 +663,33 @@ public partial class SettingsWindow : Window
     private void BlockAds_Click(object sender, RoutedEventArgs e) =>
         _draft.BlockAds = BlockAdsSwitch.IsChecked == true;
 
-    private void Restore_Click(object sender, RoutedEventArgs e) =>
+    private void Restore_Click(object sender, RoutedEventArgs e)
+    {
         _draft.RestoreSession = RestoreSwitch.IsChecked == true;
+        _draft.StartupMode = _draft.RestoreSession ? "restore" : "newtab";
+        _syncing = true; StartupRestore.IsChecked = _draft.RestoreSession; StartupNewTab.IsChecked = !_draft.RestoreSession; _syncing = false;
+    }
+
+    private void Startup_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_syncing || sender is not RadioButton { Tag: string mode }) return;
+        _draft.StartupMode = mode; _draft.RestoreSession = mode == "restore";
+        if (RestoreSwitch is not null) RestoreSwitch.IsChecked = _draft.RestoreSession;
+    }
+    private void SearchEngine_Changed(object sender, SelectionChangedEventArgs e)
+    { if (!_syncing && SearchUrlBox is not null && SearchEnginePreset.SelectedItem is ComboBoxItem { Tag: string url }) SearchUrlBox.Text = url; }
+    private void DownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "Alege folderul descărcărilor" };
+        if (dialog.ShowDialog(this) == true) DownloadFolderBox.Text = dialog.FolderName;
+    }
+    internal void AdoptCommittedSettings(Settings settings)
+    {
+        _original = settings.Clone(); _draft = settings.Clone();
+        _syncing = true;
+        try { LoadFromSettings(); }
+        finally { _syncing = false; }
+    }
 
     private void OpenFilters_Click(object sender, RoutedEventArgs e)
     {
@@ -663,6 +707,18 @@ public partial class SettingsWindow : Window
 
     private bool ApplyTextSettings()
     {
+        _draft.EconomyMode = EconomyToggle.IsChecked == true;
+        var downloadFolder = DownloadFolderBox.Text.Trim();
+        if (downloadFolder.Length > 0 && !Path.IsPathFullyQualified(downloadFolder)) { FooterStatusText.Text = "Alege un folder de descărcări cu o cale completă."; return false; }
+        _draft.DownloadDirectory = string.Equals(downloadFolder, DownloadPaths.DefaultDirectory, StringComparison.OrdinalIgnoreCase) ? "" : downloadFolder;
+        _draft.AskDownloadLocation = AskDownloadToggle.IsChecked == true;
+        _draft.SavePasswords = SavePasswordsToggle.IsChecked == true;
+        _draft.AutofillEnabled = AutofillToggle.IsChecked == true;
+        try
+        {
+            _draft.UpdateRepository = string.IsNullOrWhiteSpace(UpdateRepositoryBox.Text) ? "" : UpdateService.NormalizeRepository(UpdateRepositoryBox.Text);
+        }
+        catch (ArgumentException ex) { FooterStatusText.Text = ex.Message; return false; }
         var home = HomePageBox.Text.Trim();
         if (home.Length == 0) home = AppConstants.NewTabUrl;
         if (!home.Contains("://", StringComparison.Ordinal)) home = "https://" + home;
@@ -681,6 +737,43 @@ public partial class SettingsWindow : Window
 
         _draft.SearchUrl = search;
         return true;
+    }
+
+    private void Tool_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string action }) _tools?.Invoke(action);
+    }
+
+    private void DefaultBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        try { WindowsIntegration.OpenDefaultApps(); FooterStatusText.Text = "Alege Vela în setările Windows deschise."; }
+        catch (Exception ex) { Log.Write("Register default browser: " + ex); FooterStatusText.Text = "Integrarea Windows a eșuat: " + ex.Message; }
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        if (!CheckUpdatesButton.IsEnabled) return;
+        CheckUpdatesButton.IsEnabled = false;
+        OpenReleaseButton.Visibility = Visibility.Collapsed;
+        _releaseUrl = null;
+        UpdateStatusText.Text = "Se verifică versiunea publicată pe GitHub…";
+        try
+        {
+            var result = await UpdateService.CheckAsync(UpdateRepositoryBox.Text, cancellation: _lifetime.Token);
+            _releaseUrl = result.ReleaseUrl;
+            OpenReleaseButton.Visibility = Visibility.Visible;
+            UpdateStatusText.Text = result.IsNewer
+                ? $"Este disponibilă versiunea {result.LatestVersion}. Versiunea instalată: {AppConstants.Version}."
+                : $"Nu există o versiune mai nouă. Versiunea instalată: {AppConstants.Version}.";
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        catch (Exception ex) { UpdateStatusText.Text = "Verificarea nu a reușit: " + ex.Message; }
+        finally { CheckUpdatesButton.IsEnabled = true; }
+    }
+
+    private void OpenRelease_Click(object sender, RoutedEventArgs e)
+    {
+        if (_releaseUrl is not null) { _tools?.Invoke("release:" + _releaseUrl); UpdateStatusText.Text = "Pagina versiunii a fost deschisă într-un tab nou."; }
     }
 
     // =====================================================================

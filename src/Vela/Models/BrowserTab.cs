@@ -1,5 +1,6 @@
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Wpf;
+using Vela.Services;
 
 namespace Vela.Models;
 
@@ -22,6 +23,34 @@ public sealed class BrowserTab : ObservableObject
     private bool _canGoForward;
     private bool _shieldEnabled = true;
     private int _blockedCount;
+    private bool _hasUnsavedChanges;
+    private bool _hasActiveMedia;
+    public bool HasActiveMedia { get => _hasActiveMedia; set => Set(ref _hasActiveMedia, value); }
+    internal bool HasActiveSignIn { get; set; }
+    private bool _isPinned;
+    private bool _isSecureConnection;
+    private string? _connectionError;
+    private string _groupName = "";
+    private bool _headerVisible = true;
+    private string _groupPrefix = "";
+    public string GroupName { get => _groupName; set => Set(ref _groupName, value); }
+    public bool HeaderVisible { get => _headerVisible; set => Set(ref _headerVisible, value); }
+    public string GroupPrefix { get => _groupPrefix; set => Set(ref _groupPrefix, value); }
+    internal ReaderArticle? Reader { get; set; }
+    internal Guid? OpenerTabId { get; set; }
+    public bool IsSecureConnection { get => _isSecureConnection; set => Set(ref _isSecureConnection, value); }
+    public string? ConnectionError { get => _connectionError; set => Set(ref _connectionError, value); }
+    internal MainWindow? Owner { get; set; }
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set { if (Set(ref _isPinned, value)) OnPropertyChanged(nameof(DisplayWidth)); }
+    }
+    public double DisplayWidth => IsPinned ? 54 : 196;
+
+    internal FormStateTracker? FormTracker { get; set; }
+    internal bool HasUnloadHandler { get; set; }
+    public bool HasUnsavedChanges { get => _hasUnsavedChanges; set => Set(ref _hasUnsavedChanges, value); }
 
     public Guid Id { get; } = Guid.NewGuid();
 
@@ -56,6 +85,6 @@ public sealed class BrowserTab : ObservableObject
     /// <summary>True when the tab has no live view and must be rebuilt on activation.</summary>
     public bool IsDiscarded => View is null;
 
-    public bool IsInternalPage => Url.StartsWith(AppConstants.NewTabUrl, StringComparison.OrdinalIgnoreCase)
+    public bool IsInternalPage => Url.StartsWith("https://" + AppConstants.InternalHost + "/", StringComparison.OrdinalIgnoreCase)
                                   || string.IsNullOrEmpty(Url);
 }

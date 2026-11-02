@@ -13,7 +13,7 @@
     <ApplicationIcon>Assets\vela.ico</ApplicationIcon>
     <Authors>Vela</Authors>
     <Product>Vela Browser</Product>
-    <Version>0.1.0</Version>
+    <Version>0.1.5</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

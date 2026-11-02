@@ -21,6 +21,7 @@ namespace Vela;
 
 public partial class MainWindow : Window
 {
+    static MainWindow() { } // Profile selection must complete before profile-scoped static stores are initialized.
     private const string IconGlobe = "\uE774";
     private const string IconStarOutline = "\uE734";
     private const string IconStarFilled = "\uE735";
@@ -29,13 +30,17 @@ public partial class MainWindow : Window
     private const string IconLock = "\uE72E";
     private const string IconUnlock = "\uE785";
 
+    /// <summary>ERROR_BUSY: the profile was still held by a controller that is shutting down.</summary>
+    private const int ErrorBusy = unchecked((int)0x800700AA);
+
     private readonly ObservableCollection<BrowserTab> _tabs = new();
+    private readonly SemaphoreSlim _viewGate = new(1, 1);
     private readonly List<(string Url, string Title, int Index)> _closedTabs = new();
 
     private Settings _settings;
-    private readonly AdBlocker _blocker = new();
-    private readonly HistoryStore _history = new();
-    private readonly BookmarksStore _bookmarks = new();
+    private static readonly AdBlocker _blocker = CreateSharedBlocker();
+    private static readonly HistoryStore _history = new();
+    private static readonly BookmarksStore _bookmarks = new();
 
     private readonly DispatcherTimer _sleepTimer = new() { Interval = TimeSpan.FromSeconds(10) };
     private readonly DispatcherTimer _memoryTimer = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -48,30 +53,41 @@ public partial class MainWindow : Window
     private MemorySnapshot _lastMemory;
     private bool _shuttingDown;
     private bool _isFullscreen;
+    private bool _browserFullscreen;
     private bool _appliedBlockAds;
     private SettingsWindow? _settingsWindow;
     private WindowState _stateBeforeFullscreen = WindowState.Normal;
+    private WindowSizing.Placement _placementBeforeFullscreen;
 
     public MainWindow() : this(null) { }
 
-    public MainWindow(CoreWebView2Environment? sharedEnvironment)
+    public MainWindow(CoreWebView2Environment? sharedEnvironment, bool isPrivate = false, bool suppressStartupTab = false)
     {
         AppPaths.EnsureCreated();
 
         _env = sharedEnvironment;
+        IsPrivate = isPrivate;
+        _suppressStartupTab = suppressStartupTab;
         _settings = SettingsStore.Load();
         _appliedBlockAds = _settings.BlockAds;
         _blocker.Enabled = _settings.BlockAds;
-        _blocker.Load();
 
         InitializeComponent();
+        WindowSizing.Install(this);
+        InitializeBrowsingFeatures();
+        InitializeWorkspaceFeatures();
 
         TabItems.ItemsSource = _tabs;
-        _tabs.CollectionChanged += (_, _) => UpdateStatusBar();
+        _tabs.CollectionChanged += (_, _) => { UpdateGroupHeaders(); UpdateStatusBar(); ScheduleSessionSave(); };
 
         Loaded += OnLoaded;
         Closing += OnClosing;
         StateChanged += OnStateChanged;
+
+        // Topmost is only our fallback for covering the taskbar. Dropping it while another
+        // window is active keeps Alt+Tab and normal window stacking working.
+        Activated += (_, _) => { if (_isFullscreen) Topmost = true; };
+        Deactivated += (_, _) => { if (_isFullscreen) Topmost = false; };
 
         _sleepTimer.Tick += OnSleepTick;
         _memoryTimer.Tick += OnMemoryTick;
@@ -101,11 +117,13 @@ public partial class MainWindow : Window
             {
                 var options = new CoreWebView2EnvironmentOptions
                 {
+                    AreBrowserExtensionsEnabled = _settings.ExtensionsEnabled,
                     AdditionalBrowserArguments = "--autoplay-policy=user-gesture-required --no-default-browser-check",
                     Language = "ro-RO",
                 };
 
                 _env = await CoreWebView2Environment.CreateAsync(null, AppPaths.Profile, options);
+                _environmentExtensionsEnabled = _settings.ExtensionsEnabled;
             }
             catch (Exception ex)
             {
@@ -119,7 +137,10 @@ public partial class MainWindow : Window
             }
         }
 
-        RestoreSession();
+        if (!_suppressStartupTab) RestoreSession();
+        _sessionReady = true;
+        _ = OpenQueuedExternalUrlsAsync();
+        ScheduleSessionSave();
 
         _sleepTimer.Start();
         _memoryTimer.Start();
@@ -131,7 +152,8 @@ public partial class MainWindow : Window
 
     private void RestoreSession()
     {
-        var state = _settings.RestoreSession ? SessionStore.Load() : null;
+        var restoreHere = !IsPrivate && SessionStore.ClaimRestoration();
+        var state = _settings.EffectiveStartupMode == "restore" && restoreHere ? SessionStore.Load() : null;
 
         if (state is { Tabs.Count: > 0 })
         {
@@ -140,37 +162,65 @@ public partial class MainWindow : Window
                 if (string.IsNullOrWhiteSpace(saved.Url)) continue;
 
                 var tab = CreateTabModel(saved.Url);
+                tab.IsPinned = saved.IsPinned;
+                tab.IsMuted = saved.IsMuted;
+                tab.GroupName = saved.GroupName is { Length: <= 40 } ? saved.GroupName : "";
+                if (saved.GroupCollapsed && tab.GroupName.Length > 0) _collapsedGroups.Add(tab.GroupName);
                 if (!string.IsNullOrWhiteSpace(saved.Title) && saved.Title != saved.Url)
                     tab.Title = saved.Title;
             }
 
             if (_tabs.Count > 0)
             {
+                UpdateGroupHeaders();
                 var index = Math.Clamp(state.ActiveIndex, 0, _tabs.Count - 1);
                 _ = ActivateTabAsync(_tabs[index]);
                 return;
             }
         }
 
-        _ = AddTabAsync(AppConstants.NewTabUrl);
+        _ = AddTabAsync(!IsPrivate && _settings.EffectiveStartupMode == "home" ? _settings.HomePage : AppConstants.NewTabUrl);
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        // The pinned WPF SDK calls its parent Window.Close before raising our
+        // WindowCloseRequested handler (WebView2Feedback #5737). Only Vela owns
+        // the host window lifetime; SDK close requests must go through the tab handler.
+        if (!_windowCloseApproved && new StackTrace().GetFrames().Any(frame =>
+            frame.GetMethod()?.DeclaringType?.Assembly == typeof(WebView2).Assembly))
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (!_windowCloseApproved)
+        {
+            e.Cancel = true;
+            // Window.Close cannot be called again until this canceled Closing event has returned.
+            Dispatcher.BeginInvoke(() => _ = RequestWindowCloseAsync());
+            return;
+        }
         _shuttingDown = true;
+        _sessionTimer.Stop();
+        CloseSuggestions();
         _sleepTimer.Stop();
         _memoryTimer.Stop();
         _statusTimer.Stop();
 
         SaveSession();
+        SitePreferencesStore.Flush();
+        if (!IsPrivate) WindowPlacementStore.Save(this);
 
-        SettingsStore.Save(_settings);
+        if (!IsPrivate) SettingsStore.Save(_settings);
         _history.Flush();
         _bookmarks.Flush();
+        ReadingList.Flush();
 
         foreach (var tab in _tabs.ToList())
         {
+            CancelPermissions(tab);
             tab.PropertyChanged -= OnTabPropertyChanged;
+            tab.FormTracker?.Dispose();
             try { tab.View?.Dispose(); }
             catch (Exception ex) { Log.Write("Dispose tab: " + ex.Message); }
         }
@@ -180,6 +230,7 @@ public partial class MainWindow : Window
 
     private void SaveSession()
     {
+        if (IsPrivate) return;
         if (!_settings.RestoreSession)
         {
             SessionStore.Clear();
@@ -192,10 +243,10 @@ public partial class MainWindow : Window
         {
             var url = !string.IsNullOrWhiteSpace(tab.Url) ? tab.Url : tab.PendingUrl;
             if (string.IsNullOrWhiteSpace(url)) continue;
-            state.Tabs.Add(new SessionTab(url, tab.Title));
+            state.Tabs.Add(new SessionTab(tab.Reader?.SourceUrl ?? url, tab.Title) { IsPinned = tab.IsPinned, IsMuted = tab.IsMuted, GroupName = tab.GroupName, GroupCollapsed = _collapsedGroups.Contains(tab.GroupName) });
         }
 
-        if (state.Tabs.Count > 0) SessionStore.Save(state);
+        if (state.Tabs.Count > 0) SessionStore.UpdateWindow(_sessionWindowId, state);
     }
 
     // =====================================================================
@@ -204,7 +255,8 @@ public partial class MainWindow : Window
 
     private BrowserTab CreateTabModel(string url)
     {
-        var tab = new BrowserTab { Url = url, PendingUrl = url };
+        var tab = new BrowserTab { Url = url, PendingUrl = url, Owner = this };
+        ApplyShieldPreference(tab);
         tab.PropertyChanged += OnTabPropertyChanged;
         _tabs.Add(tab);
         return tab;
@@ -230,17 +282,34 @@ public partial class MainWindow : Window
             _active.IsSelected = false;
 
         _active = tab;
+        RefreshPermissionBar();
+        CloseSuggestions();
+        ScheduleSessionSave();
         tab.IsSelected = true;
         tab.LastActiveUtc = DateTime.UtcNow;
 
         var view = tab.View;
         if (view is null) view = await EnsureViewAsync(tab);
+
+        // The user may have switched to another tab while the view was starting up.
+        if (!ReferenceEquals(_active, tab)) return;
         if (view is null) return;
 
         foreach (var other in _tabs)
         {
             if (other.View is null) continue;
-            other.View.Visibility = ReferenceEquals(other, tab) ? Visibility.Visible : Visibility.Collapsed;
+
+            if (ReferenceEquals(other, tab))
+            {
+                other.View.Visibility = Visibility.Visible;
+                continue;
+            }
+
+            other.View.Visibility = Visibility.Collapsed;
+
+            // Hidden pages can hand caches back to the OS right away instead of waiting
+            // for the sleep timer. TrySuspend/Resume manage this level themselves.
+            LowerBackgroundMemory(other);
         }
 
         var core = view.CoreWebView2;
@@ -255,56 +324,94 @@ public partial class MainWindow : Window
             core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
         }
 
+        UpdateFullscreenForActiveTab();
+
         SetOmnibox(tab.Url);
         UpdateChrome();
+
+        // Free pages over the live-tab limit immediately instead of on the next sleep tick.
+        EnforceLiveTabLimit();
 
         try { view.Focus(); } catch { }
     }
 
-    private async Task<WebView2?> EnsureViewAsync(BrowserTab tab)
+    private Task<WebView2?> EnsureViewAsync(BrowserTab tab) => CreateViewAsync(tab, navigate: true);
+    private async Task<WebView2?> CreateViewAsync(BrowserTab tab, bool navigate)
     {
         if (_env is null) return null;
-        if (tab.View is not null) return tab.View;
 
-        var target = ResolveUrl(string.IsNullOrWhiteSpace(tab.PendingUrl) ? _settings.HomePage : tab.PendingUrl);
-        tab.PendingUrl = "";
-
-        var view = new WebView2
-        {
-            Visibility = ReferenceEquals(tab, _active) ? Visibility.Visible : Visibility.Collapsed,
-            DefaultBackgroundColor = ToDrawingColor(
-                IsNewTabUrl(target)
-                    ? ThemeCatalog.ResolveNewTabBackground(ThemeCatalog.Resolve(_settings), _settings)
-                    : ThemeCatalog.Resolve(_settings).ContentBg),
-        };
-
-        tab.View = view;
-        ContentHost.Children.Add(view);
-
-        // Let WPF create the child HWND before WebView2 tries to attach to it.
-        await Dispatcher.Yield(DispatcherPriority.Loaded);
-
+        // Creating two CoreWebView2 controllers at once intermittently fails with ERROR_BUSY,
+        // so quick tab switches wait for each other instead of racing.
+        await _viewGate.WaitAsync();
         try
         {
-            await view.EnsureCoreWebView2Async(_env);
+            if (_shuttingDown || _windowClosePending || _closingTabs.Contains(tab.Id) || !_tabs.Contains(tab)) return null;
+            if (tab.View is not null) return tab.View;
+
+            var target = ResolveUrl(string.IsNullOrWhiteSpace(tab.PendingUrl) ? _settings.HomePage : tab.PendingUrl);
+            tab.PendingUrl = "";
+
+            var view = new WebView2
+            {
+                Visibility = ReferenceEquals(tab, _active) ? Visibility.Visible : Visibility.Collapsed,
+                DefaultBackgroundColor = ToDrawingColor(
+                    IsNewTabUrl(target)
+                        ? ThemeCatalog.ResolveNewTabBackground(ThemeCatalog.Resolve(_settings), _settings)
+                        : ThemeCatalog.Resolve(_settings).ContentBg),
+            };
+
+            tab.View = view;
+            ContentHost.Children.Add(view);
+
+            // Let WPF create the child HWND before WebView2 tries to attach to it.
+            await Dispatcher.Yield(DispatcherPriority.Loaded);
+
+            try
+            {
+                await EnsureCoreInitializedAsync(view);
+            }
+            catch (Exception ex)
+            {
+                Log.Write("EnsureCoreWebView2Async: " + ex);
+                Status("Pagina nu a putut fi deschisă: " + ex.Message);
+                ContentHost.Children.Remove(view);
+                tab.View = null;
+                return null;
+            }
+
+            var core = view.CoreWebView2;
+            await ConfigureCoreAsync(tab, core, attachNetworking: navigate);
+
+            if (!ReferenceEquals(tab, _active))
+                LowerBackgroundMemory(tab);
+
+            if (navigate) core.Navigate(target);
+            return view;
         }
-        catch (Exception ex)
+        finally
         {
-            Log.Write("EnsureCoreWebView2Async: " + ex);
-            Status("Pagina nu a putut fi deschisă: " + ex.Message);
-            ContentHost.Children.Remove(view);
-            tab.View = null;
-            return null;
+            _viewGate.Release();
         }
-
-        var core = view.CoreWebView2;
-        await ConfigureCoreAsync(tab, core);
-
-        core.Navigate(target);
-        return view;
     }
 
-    private async Task ConfigureCoreAsync(BrowserTab tab, CoreWebView2 core)
+    /// <summary>
+    /// Starts the engine for a new control. The very first attempt can fail when a controller
+    /// that was just disposed is still releasing the profile, so retry once after a short pause.
+    /// </summary>
+    private async Task EnsureCoreInitializedAsync(WebView2 view)
+    {
+        try
+        {
+            await view.EnsureCoreWebView2Async(_env, ControllerOptions());
+        }
+        catch (Exception ex) when (ex.HResult == ErrorBusy)
+        {
+            await Task.Delay(500);
+            await view.EnsureCoreWebView2Async(_env, ControllerOptions());
+        }
+    }
+
+    private async Task ConfigureCoreAsync(BrowserTab tab, CoreWebView2 core, bool attachNetworking)
     {
         var settings = core.Settings;
         settings.AreDefaultContextMenusEnabled = true;
@@ -312,8 +419,8 @@ public partial class MainWindow : Window
         settings.IsStatusBarEnabled = false;
         settings.AreBrowserAcceleratorKeysEnabled = false; // shortcuts are handled by Vela itself
         settings.IsSwipeNavigationEnabled = true;
-        settings.IsPasswordAutosaveEnabled = true;
-        settings.IsGeneralAutofillEnabled = true;
+        settings.IsPasswordAutosaveEnabled = !IsPrivate && _settings.SavePasswords;
+        settings.IsGeneralAutofillEnabled = _settings.AutofillEnabled;
         settings.IsZoomControlEnabled = true;
         settings.IsWebMessageEnabled = true;
         settings.AreHostObjectsAllowed = false;
@@ -327,25 +434,58 @@ public partial class MainWindow : Window
             // New tab background images picked in settings.
             core.SetVirtualHostNameToFolderMapping(
                 AppConstants.BackgroundHost, AppPaths.Backgrounds, CoreWebView2HostResourceAccessKind.DenyCors);
+            core.SetVirtualHostNameToFolderMapping(
+                ShortcutStore.IconHost, ShortcutStore.IconDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
         }
         catch (Exception ex)
         {
             Log.Write("Virtual host mapping: " + ex.Message);
         }
 
+        ulong activeNavigationId = 0;
         core.NavigationStarting += (_, e) =>
         {
+            tab.Owner?.CancelPermissions(tab);
+            activeNavigationId = e.NavigationId;
+            tab.IsSecureConnection = false;
+            tab.ConnectionError = null;
             tab.IsLoading = true;
             if (!string.IsNullOrEmpty(e.Uri)) tab.Url = e.Uri;
-            if (ReferenceEquals(tab, _active) && !Omnibox.IsKeyboardFocusWithin)
-                SetOmnibox(tab.Url);
+            tab.Owner?.ApplyShieldPreference(tab);
+            tab.Owner?.SyncTabAddress(tab);
         };
+
+        var configuredView = tab.View!;
+        configuredView.ZoomFactorChanged += (_, _) =>
+        { if (ReferenceEquals(tab.View, configuredView)) tab.Owner?.RememberZoom(tab, configuredView.ZoomFactor); };
+
+        core.ContentLoading += (_, _) => tab.HasUnloadHandler = false;
+        core.ContentLoading += (_, _) => { if (!tab.Url.StartsWith(AppConstants.ReaderUrl, StringComparison.OrdinalIgnoreCase)) tab.Reader = null; };
+        core.ContentLoading += (_, _) => tab.Owner?.ApplySitePreferences(tab);
+        void ResumeProtectedDocument()
+        {
+            if (!tab.IsSuspended) return;
+            try { core.Resume(); tab.IsSuspended = false; }
+            catch (Exception ex) { Log.Write("Resume protected document: " + ex.Message); }
+        }
+        tab.FormTracker = new FormStateTracker(core, changed => tab.HasUnsavedChanges = changed, active =>
+        {
+            tab.HasActiveMedia = active;
+            if (active) ResumeProtectedDocument();
+            if (!active) tab.Owner?.EnforceLiveTabLimit();
+        }, authentication =>
+        {
+            tab.HasActiveSignIn = authentication;
+            if (authentication) ResumeProtectedDocument();
+            else tab.Owner?.EnforceLiveTabLimit();
+        });
+        await InstallLinkGesturesAsync(tab, core);
+        await tab.FormTracker.InstallAsync();
 
         core.SourceChanged += (_, _) =>
         {
             if (!string.IsNullOrEmpty(core.Source)) tab.Url = core.Source;
-            if (ReferenceEquals(tab, _active) && !Omnibox.IsKeyboardFocusWithin)
-                SetOmnibox(tab.Url);
+            tab.Owner?.SyncTabAddress(tab);
         };
 
         core.DocumentTitleChanged += (_, _) =>
@@ -356,16 +496,32 @@ public partial class MainWindow : Window
 
         core.FaviconChanged += async (_, _) => await UpdateFaviconAsync(tab, core);
 
+        // Audible tabs are never frozen or thrown away (music, calls, uploads).
+        core.IsDocumentPlayingAudioChanged += (_, _) => tab.IsAudible = core.IsDocumentPlayingAudio;
+        core.IsMutedChanged += (_, _) => tab.IsMuted = core.IsMuted;
+        core.ContainsFullScreenElementChanged += (_, _) =>
+        {
+            if (ReferenceEquals(tab.Owner?._active, tab))
+                tab.Owner.Dispatcher.BeginInvoke(tab.Owner.UpdateFullscreenForActiveTab);
+        };
+
         core.NavigationCompleted += (_, e) =>
         {
+            // A site can replace its own navigation before the previous request ends.
+            // That canceled request must not overwrite the new page's loading/security state.
+            if (e.NavigationId != activeNavigationId) return;
             tab.IsLoading = false;
+            // A canceled beforeunload must keep the real document URL in the tab and recovery file.
+            if (!string.IsNullOrEmpty(core.Source)) tab.Url = core.Source;
+            tab.IsSecureConnection = e.IsSuccess && tab.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && tab.ConnectionError is null;
             tab.CanGoBack = core.CanGoBack;
             tab.CanGoForward = core.CanGoForward;
 
-            if (ReferenceEquals(tab, _active)) UpdateChrome();
+            if (ReferenceEquals(tab.Owner?._active, tab)) tab.Owner.UpdateChrome();
 
-            if (e.IsSuccess && !tab.IsInternalPage)
+            if (e.IsSuccess && !tab.IsInternalPage && tab.Owner?.IsPrivate == false)
                 _history.Add(core.Source ?? tab.Url, tab.Title);
+            tab.Owner?.EnforceLiveTabLimit();
         };
 
         core.HistoryChanged += (_, _) =>
@@ -374,30 +530,39 @@ public partial class MainWindow : Window
             tab.CanGoForward = core.CanGoForward;
         };
 
-        core.NewWindowRequested += (_, e) =>
+        core.NewWindowRequested += (_, e) => tab.Owner?.OnNewWindowRequested(tab, e);
+        core.WindowCloseRequested += (_, _) => tab.Owner?.Dispatcher.InvokeAsync(() => tab.Owner?.CloseTab(tab));
+
+        core.WebMessageReceived += (_, e) => tab.Owner?.OnWebMessage(tab, e);
+        core.DownloadStarting += (_, e) => tab.Owner?.OnDownloadStarting(tab, e);
+        core.PermissionRequested += (_, e) => tab.Owner?.OnPermissionRequested(tab, e);
+        core.FrameCreated += (_, e) => tab.Owner?.AttachPermissionFrame(tab, e.Frame);
+        core.ProcessFailed += (_, e) => tab.Owner?.OnProcessFailed(tab, e);
+        core.ServerCertificateErrorDetected += (_, e) =>
         {
-            e.Handled = true;
-            var target = string.IsNullOrWhiteSpace(e.Uri) ? AppConstants.NewTabUrl : e.Uri;
-            Dispatcher.InvokeAsync(() => _ = AddTabAsync(target));
+            tab.ConnectionError = "Motorul a raportat o eroare de certificat: " + e.ErrorStatus;
+            tab.IsSecureConnection = false;
+            e.Action = CoreWebView2ServerCertificateErrorAction.Default;
         };
+        core.IsMuted = tab.IsMuted;
 
-        core.WebMessageReceived += (_, e) => OnWebMessage(tab, e);
-        core.DownloadStarting += OnDownloadStarting;
-        core.PermissionRequested += OnPermissionRequested;
-        core.ProcessFailed += (_, e) => OnProcessFailed(tab, e);
+        if (attachNetworking) AttachBlocker(tab, core);
+        if (_settings.BlockAds) await AddInjectionAsync(tab, core);
+    }
 
+    private void AttachBlocker(BrowserTab tab, CoreWebView2 core)
+    {
         _blocker.Attach(
             core,
-            () => tab.ShieldEnabled && _settings.BlockAds,
+            () => tab.ShieldEnabled && tab.Owner?._settings.BlockAds == true,
             () => tab.Url,
             () =>
             {
                 tab.BlockedCount++;
-                if (ReferenceEquals(tab, _active) && ShieldPopup.IsOpen) UpdateShieldPopup(tab);
+                var owner = tab.Owner;
+                if (owner is not null && ReferenceEquals(tab, owner._active) && owner.ShieldPopup.IsOpen) owner.UpdateShieldPopup(tab);
             });
 
-        if (tab.ShieldEnabled && _settings.BlockAds)
-            await AddInjectionAsync(tab, core);
     }
 
     private async Task AddInjectionAsync(BrowserTab tab, CoreWebView2 core)
@@ -406,7 +571,7 @@ public partial class MainWindow : Window
 
         try
         {
-            tab.InjectionScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(_blocker.InjectionScript);
+            tab.InjectionScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(ShieldInjectionScript());
         }
         catch (Exception ex)
         {
@@ -448,11 +613,13 @@ public partial class MainWindow : Window
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.DecodePixelWidth = 32;
             bitmap.StreamSource = buffer;
             bitmap.EndInit();
             bitmap.Freeze();
 
             tab.Favicon = bitmap;
+            if (tab.Owner?.IsPrivate == false) ShortcutStore.CacheIcon(tab.Url, bitmap);
         }
         catch (Exception ex)
         {
@@ -463,6 +630,8 @@ public partial class MainWindow : Window
     private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (sender is not BrowserTab tab) return;
+        if (e.PropertyName is nameof(BrowserTab.GroupName) or nameof(BrowserTab.IsSelected)) { UpdateGroupHeaders(); ScheduleSessionSave(); }
+        if (e.PropertyName is nameof(BrowserTab.Url) or nameof(BrowserTab.Title) or nameof(BrowserTab.IsPinned) or nameof(BrowserTab.IsMuted)) ScheduleSessionSave();
 
         if (ReferenceEquals(tab, _active))
         {
@@ -473,6 +642,8 @@ public partial class MainWindow : Window
                 case nameof(BrowserTab.IsLoading):
                 case nameof(BrowserTab.BlockedCount):
                 case nameof(BrowserTab.ShieldEnabled):
+                case nameof(BrowserTab.IsSecureConnection):
+                case nameof(BrowserTab.ConnectionError):
                     UpdateChrome();
                     break;
 
@@ -489,10 +660,20 @@ public partial class MainWindow : Window
 
     private void CloseTab(BrowserTab tab)
     {
+        _ = RequestCloseTabAsync(tab);
+    }
+
+    private void CloseTabConfirmed(BrowserTab tab)
+    {
         if (!_tabs.Contains(tab)) return;
+        _popupGuards.Remove(tab.Id);
+        CancelPermissions(tab);
+        ForgetDownloads(tab);
+        tab.FormTracker?.Dispose();
+        tab.FormTracker = null;
 
         var index = _tabs.IndexOf(tab);
-        var url = !string.IsNullOrWhiteSpace(tab.Url) ? tab.Url : tab.PendingUrl;
+        var url = tab.Reader?.SourceUrl ?? (!string.IsNullOrWhiteSpace(tab.Url) ? tab.Url : tab.PendingUrl);
         if (!string.IsNullOrWhiteSpace(url)) _closedTabs.Add((url, tab.Title, index));
         if (_closedTabs.Count > 25) _closedTabs.RemoveAt(0);
 
@@ -523,7 +704,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var next = _tabs[Math.Clamp(index, 0, _tabs.Count - 1)];
+        var next = _tabs.FirstOrDefault(t => t.Id == tab.OpenerTabId) ?? _tabs[Math.Clamp(index, 0, _tabs.Count - 1)];
         _ = ActivateTabAsync(next);
     }
 
@@ -549,9 +730,15 @@ public partial class MainWindow : Window
     private void DiscardTab(BrowserTab tab, bool force = false)
     {
         if (!force && ReferenceEquals(tab, _active)) return;
+        if (!force && IsMemoryProtected(tab)) return;
 
         var view = tab.View;
         if (view is null) return;
+        _popupGuards.Remove(tab.Id);
+        CancelPermissions(tab);
+        if (force) ForgetDownloads(tab);
+        tab.FormTracker?.Dispose();
+        tab.FormTracker = null;
 
         var url = !string.IsNullOrWhiteSpace(tab.Url) ? tab.Url : tab.PendingUrl;
 
@@ -562,6 +749,10 @@ public partial class MainWindow : Window
         catch (Exception ex) { Log.Write("Discard tab: " + ex.Message); }
 
         tab.IsSuspended = false;
+        tab.HasUnsavedChanges = false;
+        tab.HasUnloadHandler = false;
+        tab.HasActiveMedia = false;
+        tab.HasActiveSignIn = false;
         tab.PendingUrl = url;
         UpdateStatusBar();
     }
@@ -572,68 +763,123 @@ public partial class MainWindow : Window
 
     private async void OnSleepTick(object? sender, EventArgs e)
     {
-        if (_shuttingDown) return;
-
-        var suspendAfter = _settings.SuspendAfterMinutes;
-        var discardAfter = _settings.DiscardAfterMinutes;
-        var now = DateTime.UtcNow;
-
-        foreach (var tab in _tabs.ToArray())
-        {
-            if (ReferenceEquals(tab, _active)) continue;
-
-            var core = tab.View?.CoreWebView2;
-            if (core is null) continue;
-
-            var idleMinutes = (now - tab.LastActiveUtc).TotalMinutes;
-
-            if (discardAfter > 0 && idleMinutes >= discardAfter)
-            {
-                DiscardTab(tab);
-                continue;
-            }
-
-            if (suspendAfter > 0 && idleMinutes >= suspendAfter && !tab.IsSuspended)
-            {
-                try
-                {
-                    if (await core.TrySuspendAsync()) tab.IsSuspended = true;
-                }
-                catch (Exception ex)
-                {
-                    Log.Write("Suspend: " + ex.Message);
-                }
-            }
-        }
-
-        EnforceLiveTabLimit();
-        UpdateStatusBar();
+        try { await ApplyMemoryPolicyAsync(); }
+        catch (Exception ex) { Log.Write("Memory policy: " + ex); }
     }
 
-    private void EnforceLiveTabLimit()
+    private bool _applyingMemoryPolicy;
+    private async Task ApplyMemoryPolicyAsync()
     {
-        var limit = Math.Max(3, _settings.MaxLiveTabs);
-
-        var live = _tabs
-            .Where(t => t.View is not null && !ReferenceEquals(t, _active))
-            .OrderBy(t => t.LastActiveUtc)
-            .ToList();
-
-        while (live.Count >= limit)
+        if (_shuttingDown || _applyingMemoryPolicy) return;
+        _applyingMemoryPolicy = true;
+        try
         {
-            var victim = live[0];
-            live.RemoveAt(0);
-            DiscardTab(victim);
+
+            var suspendAfter = _settings.EffectiveSuspendMinutes;
+            var discardAfter = _settings.EffectiveDiscardMinutes;
+            var now = DateTime.UtcNow;
+
+            foreach (var tab in _tabs.ToArray())
+            {
+                if (ReferenceEquals(tab, _active)) continue;
+
+                var core = tab.View?.CoreWebView2;
+                if (core is null) continue;
+
+                var idleMinutes = (now - tab.LastActiveUtc).TotalMinutes;
+
+                // A page that plays audio is still useful: never freeze or throw it away.
+                if (IsPlayingAudio(tab) || IsHardMemoryProtected(tab)) continue;
+
+                if (discardAfter > 0 && idleMinutes >= discardAfter)
+                {
+                    if (!tab.IsLoading) await TryDiscardTabAsync(tab);
+                    continue;
+                }
+
+                if (tab.HasUnloadHandler) continue;
+                if (suspendAfter > 0 && idleMinutes >= suspendAfter && !tab.IsSuspended)
+                {
+                    try
+                    {
+                        if (await core.TrySuspendAsync())
+                        {
+                            if (ReferenceEquals(tab, _active) || IsMemoryProtected(tab)) core.Resume();
+                            else tab.IsSuspended = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Write("Suspend: " + tab.Url + " -> " + ex.Message);
+                    }
+                }
+            }
+
+            await EnforceLiveTabLimitAsync();
+            UpdateStatusBar();
         }
+        finally { _applyingMemoryPolicy = false; }
+    }
+
+    /// <summary>Best-effort "drop your caches" hint for a hidden page.</summary>
+    private static void LowerBackgroundMemory(BrowserTab tab)
+    {
+        // TrySuspendAsync already puts the view in Low and Resume puts it back to Normal;
+        // do not fight those APIs on a sleeping tab.
+        if (tab.IsSuspended) return;
+        if (tab.View?.CoreWebView2 is not { } core) return;
+
+        try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; }
+        catch (Exception ex) { Log.Write("Memory target (low): " + ex.Message); }
+    }
+
+    private static bool IsPlayingAudio(BrowserTab tab)
+    {
+        if (tab.IsAudible) return true;
+
+        try { return tab.View?.CoreWebView2?.IsDocumentPlayingAudio == true; }
+        catch { return false; }
+    }
+
+    private void EnforceLiveTabLimit() => _ = EnforceLiveTabLimitAsync();
+
+    private async Task EnforceLiveTabLimitAsync()
+    {
+        await _liveLimitGate.WaitAsync();
+        try
+        {
+            if (_shuttingDown) return;
+            var limit = Math.Max(3, _settings.EffectiveMaxLiveTabs);
+
+            var background = _tabs
+                .Where(t => t.View is not null && !ReferenceEquals(t, _active))
+                .OrderBy(t => t.LastActiveUtc)
+                .ToList();
+
+            // The active tab is one of the live ones, so at most limit - 1 stay in the background.
+            var excess = background.Count - (limit - 1);
+            if (excess <= 0) return;
+
+            foreach (var tab in background)
+            {
+                if (excess <= 0) break;
+                if (IsPlayingAudio(tab) || IsHardMemoryProtected(tab) || tab.IsLoading) continue;
+
+                if (await TryDiscardTabAsync(tab)) excess--;
+            }
+        }
+        finally { _liveLimitGate.Release(); }
     }
 
     private async void OnMemoryTick(object? sender, EventArgs e)
     {
-        if (_shuttingDown) return;
+        if (_shuttingDown || WindowState == WindowState.Minimized || _memoryProbeRunning || _env is null) return;
+        _memoryProbeRunning = true;
 
         try
         {
-            _lastMemory = await Task.Run(() => MemoryProbe.Measure(Environment.ProcessId));
+            var processIds = BrowserProcessIds();
+            _lastMemory = (await Task.Run(() => PerformanceProbe.Capture(processIds))).Memory;
             RenderMemory();
             BroadcastStats();
         }
@@ -641,26 +887,86 @@ public partial class MainWindow : Window
         {
             Log.Write("Memory probe: " + ex.Message);
         }
+        finally { _memoryProbeRunning = false; }
     }
 
     private void OnStateChanged(object? sender, EventArgs e)
     {
         MaxButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
 
-        // While minimised nobody sees the pages: let Chromium shed memory.
         if (_env is null) return;
 
-        if (WindowState == WindowState.Minimized)
+        if (WindowState == WindowState.Minimized) { _memoryTimer.Stop(); EnterBackgroundMode(); }
+        else { ExitBackgroundMode(); _memoryTimer.Start(); OnMemoryTick(this, EventArgs.Empty); }
+    }
+
+    /// <summary>
+    /// While minimised nobody sees the pages: hidden tabs go to sleep at once and the active
+    /// one drops its caches. Audio keeps playing because those tabs are left alone.
+    /// </summary>
+    private void EnterBackgroundMode()
+    {
+        foreach (var tab in _tabs.ToArray())
         {
-            foreach (var tab in _tabs)
+            if (ReferenceEquals(tab, _active))
             {
-                if (tab.View?.CoreWebView2 is { } core)
-                    core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+                // A minimised WebView2 may still report itself as visible, so TrySuspend
+                // would throw; a low memory target is always safe.
+                if (tab.View?.CoreWebView2 is not { } activeCore) continue;
+
+                try { activeCore.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; }
+                catch (Exception ex) { Log.Write("Memory target (minimised): " + ex.Message); }
+                continue;
+            }
+
+            if (tab.IsSuspended || IsPlayingAudio(tab) || IsMemoryProtected(tab))
+            {
+                LowerBackgroundMemory(tab);
+                continue;
+            }
+
+            if (tab.View?.CoreWebView2 is not { } core) continue;
+            _ = SuspendForBackgroundAsync(tab, core);
+        }
+    }
+
+    private async Task SuspendForBackgroundAsync(BrowserTab tab, CoreWebView2 core)
+    {
+        try
+        {
+            if (await core.TrySuspendAsync())
+            {
+                if (ReferenceEquals(tab, _active) || IsMemoryProtected(tab)) core.Resume();
+                else tab.IsSuspended = true;
             }
         }
-        else if (_active?.View?.CoreWebView2 is { } activeCore)
+        catch (Exception ex)
         {
-            activeCore.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+            // IsVisible can still be true while the new layout has not been applied yet.
+            Log.Write("Suspend (minimised): " + ex.Message);
+        }
+    }
+
+    private void ExitBackgroundMode()
+    {
+        foreach (var tab in _tabs)
+        {
+            if (!ReferenceEquals(tab, _active))
+            {
+                LowerBackgroundMemory(tab);
+                continue;
+            }
+
+            if (tab.View?.CoreWebView2 is not { } core) continue;
+
+            if (tab.IsSuspended)
+            {
+                try { core.Resume(); } catch { /* already resumed */ }
+                tab.IsSuspended = false;
+            }
+
+            try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal; }
+            catch (Exception ex) { Log.Write("Memory target (restored): " + ex.Message); }
         }
     }
 
@@ -686,7 +992,7 @@ public partial class MainWindow : Window
         ReloadButton.Content = tab.IsLoading ? IconStop : IconReload;
         ReloadButton.ToolTip = tab.IsLoading ? "Oprește încărcarea" : "Reîncarcă (F5)";
 
-        var isBookmarked = _bookmarks.Contains(tab.Url);
+        var isBookmarked = _bookmarks.Contains(tab.Reader?.SourceUrl ?? tab.Url);
         BookmarkButton.Content = isBookmarked ? IconStarFilled : IconStarOutline;
         BookmarkButton.Foreground = (Brush)FindResource(isBookmarked ? "Accent" : "TextPrimary");
 
@@ -700,7 +1006,7 @@ public partial class MainWindow : Window
             SecurityGlyph.Foreground = (Brush)FindResource("TextMuted");
             SecurityGlyph.ToolTip = "Pagină internă Vela";
         }
-        else if (tab.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        else if (tab.IsSecureConnection)
         {
             SecurityGlyph.Text = IconLock;
             SecurityGlyph.Foreground = (Brush)FindResource("TextMuted");
@@ -769,7 +1075,9 @@ public partial class MainWindow : Window
     {
         // A fresh tab looks empty, the way Brave does it: no vela.internal URL in the omnibox.
         var display = IsInternalUrl(url) ? "" : FormatForDisplay(url);
-        Omnibox.Text = display;
+        _settingOmnibox = true;
+        try { Omnibox.Text = display; }
+        finally { _settingOmnibox = false; }
         OmniboxPlaceholder.Visibility = display.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -800,6 +1108,10 @@ public partial class MainWindow : Window
         foreach (var tab in _tabs)
         {
             if (!tab.IsInternalPage) continue;
+
+            // Posting a message can wake a sleeping page, which would undo the memory savings.
+            if (tab.IsSuspended) continue;
+
             try { tab.View?.CoreWebView2?.PostWebMessageAsJson(json); }
             catch { /* page may be gone */ }
         }
@@ -821,12 +1133,17 @@ public partial class MainWindow : Window
 
         var tab = _active;
 
+        // The controller can already exist while startup scripts are still registering.
+        // Queue an address entered during that interval behind the initial navigation.
+        await WaitForViewInitializationAsync();
+        if (_shuttingDown || _windowClosePending || !_tabs.Contains(tab)) return;
+
         // A discarded tab has no view: let EnsureViewAsync load the new URL directly.
         if (tab.View is null)
         {
             tab.PendingUrl = url;
             var created = await EnsureViewAsync(tab);
-            if (created is not null) created.Visibility = Visibility.Visible;
+            if (created is not null && ReferenceEquals(tab, _active)) created.Visibility = Visibility.Visible;
             return;
         }
 
@@ -875,13 +1192,13 @@ public partial class MainWindow : Window
         var tab = _active;
         if (tab is null) return;
 
-        if (tab.IsInternalPage)
+        if (tab.IsInternalPage && tab.Reader is null)
         {
             Status("Paginile interne nu pot fi adăugate la favorite.");
             return;
         }
 
-        var added = _bookmarks.Toggle(tab.Url, tab.Title);
+        var added = _bookmarks.Toggle(tab.Reader?.SourceUrl ?? tab.Url, tab.Title);
         SetOmnibox(tab.Url);
         UpdateChrome();
         Status(added ? "Adăugat la favorite." : "Eliminat din favorite.");
@@ -932,6 +1249,16 @@ public partial class MainWindow : Window
 
             switch (type)
             {
+                case "reader-ready":
+                    if (tab.Reader is not null)
+                        tab.View?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "reader", article = tab.Reader, theme = JsonSerializer.Deserialize<object>(ThemeConfigJson(_settings)) }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+                    break;
+                case "shortcuts-ready":
+                case "shortcut-save":
+                case "shortcut-remove":
+                case "shortcut-move":
+                    HandleShortcutMessage(tab, type, root);
+                    break;
                 case "search":
                 {
                     var query = root.TryGetProperty("q", out var q) ? q.GetString() : null;
@@ -956,12 +1283,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    private async void OnDownloadStarting(BrowserTab tab, CoreWebView2DownloadStartingEventArgs e)
     {
+        using var deferral = e.GetDeferral();
         try
         {
-            var downloads = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            var downloads = DownloadPaths.Resolve(_settings.DownloadDirectory);
             Directory.CreateDirectory(downloads);
 
             var fileName = Path.GetFileName(e.ResultFilePath);
@@ -969,68 +1296,34 @@ public partial class MainWindow : Window
 
             var target = Path.Combine(downloads, fileName);
             var counter = 1;
-            while (File.Exists(target))
+            while (File.Exists(target) || _downloads.Keys.Any(d =>
+                string.Equals(d.ResultFilePath, target, StringComparison.OrdinalIgnoreCase)))
             {
                 var name = Path.GetFileNameWithoutExtension(fileName);
                 var ext = Path.GetExtension(fileName);
                 target = Path.Combine(downloads, $"{name} ({counter++}){ext}");
             }
 
+            if (_settings.AskDownloadLocation)
+            {
+                var selected = await ChooseDownloadPathAsync(fileName, downloads);
+                if (selected is null) { e.Cancel = true; return; }
+                target = selected;
+            }
+
             e.ResultFilePath = target;
-            e.Handled = true;
+            // Keep Chromium's on-demand download UI: progress, pause/resume, cancel and file actions.
+            e.Handled = false;
 
             Status($"Se descarcă: {Path.GetFileName(target)}");
 
-            var operation = e.DownloadOperation;
-            operation.StateChanged += (_, _) =>
-            {
-                switch (operation.State)
-                {
-                    case CoreWebView2DownloadState.Completed:
-                        Dispatcher.InvokeAsync(() => Status($"Descărcat: {Path.GetFileName(target)}", 8));
-                        break;
-                    case CoreWebView2DownloadState.Interrupted:
-                        Dispatcher.InvokeAsync(() => Status($"Descărcarea a eșuat: {Path.GetFileName(target)}", 8));
-                        break;
-                }
-            };
+            TrackDownload(tab, e.DownloadOperation);
         }
         catch (Exception ex)
         {
+            e.Cancel = true;
             Log.Write("Download: " + ex.Message);
-        }
-    }
-
-    private void OnPermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
-    {
-        try
-        {
-            // Notifications are noisy and cheap to refuse; everything else asks the user.
-            if (e.PermissionKind == CoreWebView2PermissionKind.Notifications)
-            {
-                e.State = CoreWebView2PermissionState.Deny;
-                return;
-            }
-
-            if (e.PermissionKind == CoreWebView2PermissionKind.ClipboardRead)
-            {
-                e.State = CoreWebView2PermissionState.Allow;
-                return;
-            }
-
-            var host = UrlHelper.HostOf(e.Uri);
-            var answer = MessageBox.Show(this,
-                $"{host} cere permisiunea: {Describe(e.PermissionKind)}.\n\nPermiți?",
-                "Vela", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-            e.State = answer == MessageBoxResult.Yes
-                ? CoreWebView2PermissionState.Allow
-                : CoreWebView2PermissionState.Deny;
-        }
-        catch (Exception ex)
-        {
-            Log.Write("Permission: " + ex.Message);
-            e.State = CoreWebView2PermissionState.Deny;
+            Status("Descărcarea nu a putut fi configurată: " + ex.Message);
         }
     }
 
@@ -1060,7 +1353,8 @@ public partial class MainWindow : Window
 
         Dispatcher.InvokeAsync(async () =>
         {
-            DiscardTab(tab, force: wasActive);
+            // A failed renderer must be recreated even when its site is protected from memory eviction.
+            DiscardTab(tab, force: true);
             if (wasActive)
             {
                 Status("Pagina a fost reîncărcată după o eroare.");
@@ -1101,7 +1395,10 @@ public partial class MainWindow : Window
                     _ = AddTabAsync(AppConstants.NewTabUrl);
                     return true;
                 case Key.W:
-                    CloseActiveTab();
+                    Dispatcher.BeginInvoke(CloseActiveTab);
+                    return true;
+                case Key.N when shift:
+                    PrivateWindow_Click(this, new RoutedEventArgs());
                     return true;
                 case Key.N:
                     OpenNewWindow();
@@ -1111,6 +1408,27 @@ public partial class MainWindow : Window
                     return true;
                 case Key.D:
                     ToggleBookmark();
+                    return true;
+                case Key.F:
+                    _ = ShowFindAsync();
+                    return true;
+                case Key.H:
+                    OpenLibrary("history");
+                    return true;
+                case Key.O when shift:
+                    OpenLibrary("bookmarks");
+                    return true;
+                case Key.A when shift:
+                    OpenLibrary("tabs");
+                    return true;
+                case Key.J:
+                    Downloads_Click(this, new RoutedEventArgs());
+                    return true;
+                case Key.P:
+                    Dispatcher.BeginInvoke(() => Print_Click(this, new RoutedEventArgs()));
+                    return true;
+                case Key.S when shift:
+                    Dispatcher.BeginInvoke(() => SavePdf_Click(this, new RoutedEventArgs()));
                     return true;
                 case Key.R:
                     ReloadActive();
@@ -1140,7 +1458,8 @@ public partial class MainWindow : Window
                     ZoomActive(0, reset: true);
                     return true;
                 case Key.OemComma:
-                    OpenSettings();
+                    // Modal work must start after the low-level keyboard hook returns.
+                    Dispatcher.BeginInvoke(OpenSettings);
                     return true;
             }
         }
@@ -1172,7 +1491,7 @@ public partial class MainWindow : Window
             case Key.F12:
                 ToggleDevTools();
                 return true;
-            case Key.Escape when _isFullscreen:
+            case Key.Escape when _browserFullscreen:
                 ToggleFullscreen();
                 return true;
         }
@@ -1202,6 +1521,7 @@ public partial class MainWindow : Window
 
         var zoom = reset ? 1.0 : Math.Clamp(view.ZoomFactor + delta, 0.25, 5.0);
         view.ZoomFactor = zoom;
+        if (_active is { } tab) RememberZoom(tab, zoom);
         Status($"Zoom: {zoom * 100:0}%", 3);
     }
 
@@ -1213,26 +1533,60 @@ public partial class MainWindow : Window
 
     private void ToggleFullscreen()
     {
-        _isFullscreen = !_isFullscreen;
+        _browserFullscreen = !_browserFullscreen;
+        UpdateFullscreenForActiveTab();
+        if (_browserFullscreen) Status("F11 pentru a ieși din ecran complet.", 4);
+    }
 
-        if (_isFullscreen)
+    private void UpdateFullscreenForActiveTab()
+    {
+        var pageFullscreen = _active?.View?.CoreWebView2?.ContainsFullScreenElement == true;
+        SetFullscreen(_browserFullscreen || pageFullscreen);
+    }
+
+    private void SetFullscreen(bool fullscreen)
+    {
+        if (_isFullscreen == fullscreen) return;
+        _isFullscreen = fullscreen;
+
+        if (fullscreen)
         {
             _stateBeforeFullscreen = WindowState;
+            _placementBeforeFullscreen = WindowSizing.CaptureRestorePlacement(this);
+
+            // Leaving Maximized first: a maximised window is clamped to the work area, so the
+            // taskbar would stay visible. The monitor rect is applied manually instead.
+            WindowSizing.SetFullscreen(this, true);
             WindowState = WindowState.Normal;
 
             RootGrid.RowDefinitions[0].Height = new GridLength(0);
             RootGrid.RowDefinitions[1].Height = new GridLength(0);
-            RootGrid.RowDefinitions[3].Height = new GridLength(0);
+            RootGrid.RowDefinitions[2].Height = new GridLength(0);
+            RootGrid.RowDefinitions[4].Height = new GridLength(0);
 
-            WindowState = WindowState.Maximized;
-            Status("F11 pentru a ieși din ecran complet.", 4);
+            WindowSizing.CoverMonitor(this);
+            WindowSizing.MarkFullscreen(this, true);
+
+            // Shells that ignore MarkFullscreenWindow (Explorer restarts, remote sessions)
+            // would still paint the taskbar over the page; topmost guarantees full coverage.
+            Topmost = true;
         }
         else
         {
+            Topmost = false;
+            WindowSizing.MarkFullscreen(this, false);
+
+            WindowState = WindowState.Normal;
+            WindowSizing.RestorePlacement(this, _placementBeforeFullscreen);
+
             RootGrid.RowDefinitions[0].Height = new GridLength(38);
             RootGrid.RowDefinitions[1].Height = GridLength.Auto;
-            RootGrid.RowDefinitions[3].Height = new GridLength(24);
+            RootGrid.RowDefinitions[2].Height = GridLength.Auto;
+            RootGrid.RowDefinitions[4].Height = new GridLength(24);
+
+            WindowSizing.SetFullscreen(this, false);
             WindowState = _stateBeforeFullscreen;
+            RefreshPermissionBar();
         }
     }
 
@@ -1317,10 +1671,12 @@ public partial class MainWindow : Window
 
     private void Omnibox_KeyDown(object sender, KeyEventArgs e)
     {
+        if (HandleSuggestionKey(e.Key)) { e.Handled = true; return; }
         switch (e.Key)
         {
             case Key.Enter:
                 e.Handled = true;
+                CloseSuggestions();
                 NavigateFromOmnibox();
                 break;
             case Key.Escape:
@@ -1340,6 +1696,7 @@ public partial class MainWindow : Window
 
     private void Omnibox_LostFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
+        CloseSuggestions();
         OmniboxBorder.BorderBrush = Brushes.Transparent;
         SetOmnibox(_active?.Url ?? Omnibox.Text);
     }
@@ -1347,6 +1704,7 @@ public partial class MainWindow : Window
     private void Omnibox_TextChanged(object sender, TextChangedEventArgs e)
     {
         OmniboxPlaceholder.Visibility = Omnibox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        QueueSuggestions();
     }
 
     private void Bookmark_Click(object sender, RoutedEventArgs e) => ToggleBookmark();
@@ -1364,14 +1722,18 @@ public partial class MainWindow : Window
 
         var enabled = ShieldToggle.IsChecked == true;
         _active.ShieldEnabled = enabled;
+        if (SiteDataService.Origin(_active.Url) is { } origin)
+        {
+            if (IsPrivate) _privateShields[origin] = enabled;
+            else SitePreferencesStore.SetShield(origin, enabled);
+        }
 
         var core = _active.View?.CoreWebView2;
         if (core is not null)
         {
             // Cosmetic filters live in a script registered per document, so they have to be
             // added/removed as well when the shield changes. Reload to apply immediately.
-            if (enabled) await AddInjectionAsync(_active, core);
-            else await RemoveInjectionAsync(_active, core);
+            await RefreshShieldInjectionsAsync();
 
             try { core.Reload(); } catch { }
         }
@@ -1384,10 +1746,9 @@ public partial class MainWindow : Window
 
     private void Downloads_Click(object sender, RoutedEventArgs e)
     {
-        var downloads = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-
-        try { Process.Start(new ProcessStartInfo("explorer.exe", downloads) { UseShellExecute = true }); }
+        MenuPopup.IsOpen = false;
+        CloseSuggestions();
+        try { _active?.View?.CoreWebView2?.OpenDefaultDownloadDialog(); }
         catch (Exception ex) { Log.Write("Open downloads: " + ex.Message); }
     }
 
@@ -1462,7 +1823,7 @@ public partial class MainWindow : Window
         foreach (var tab in _tabs.ToList())
         {
             var core = tab.View?.CoreWebView2;
-            if (core is null || !IsNewTabUrl(tab.Url)) continue;
+            if (core is null || (!IsNewTabUrl(tab.Url) && tab.Reader is null)) continue;
 
             try { await core.ExecuteScriptAsync(script); }
             catch (Exception ex) { Log.Write("New tab theme: " + ex.Message); }
@@ -1479,17 +1840,25 @@ public partial class MainWindow : Window
     /// <summary>Called by the settings window when the user presses Salvează.</summary>
     private void CommitSettings(Settings draft)
     {
-        var adBlockChanged = _appliedBlockAds != draft.BlockAds;
-
+        if (!_applyingTransferredPreferences) draft.PreferencesUpdatedAt = DateTimeOffset.UtcNow;
+        if (!SettingsStore.Save(draft)) throw new IOException("Setările nu au putut fi salvate pe disc.");
         _settings = draft;
-        SettingsStore.Save(_settings);
-
         ThemeCatalog.Apply(_settings);
-        _ = ApplyNewTabThemeAsync(_settings);
-        _ = ApplyAdBlockSettingAsync(adBlockChanged);
-
-        PopulateMenu();
-        UpdateStatusBar();
+        foreach (var window in Application.Current.Windows.OfType<MainWindow>())
+        {
+            window._settings = draft.Clone();
+            window._settingsWindow?.AdoptCommittedSettings(draft);
+            foreach (var tab in window._tabs)
+                if (tab.View?.CoreWebView2 is { } core)
+                {
+                    core.Settings.IsPasswordAutosaveEnabled = !window.IsPrivate && draft.SavePasswords;
+                    core.Settings.IsGeneralAutofillEnabled = draft.AutofillEnabled;
+                }
+            _ = window.ApplyNewTabThemeAsync(draft);
+            _ = window.ApplyAdBlockSettingAsync(window._appliedBlockAds != draft.BlockAds);
+            window.PopulateMenu(); window.UpdateStatusBar();
+            _ = window.EnforceLiveTabLimitAsync();
+        }
         Status("Setările au fost salvate.", 4);
     }
 
@@ -1506,7 +1875,7 @@ public partial class MainWindow : Window
             var core = tab.View?.CoreWebView2;
             if (core is null) continue;
 
-            if (_settings.BlockAds && tab.ShieldEnabled) await AddInjectionAsync(tab, core);
+            if (_settings.BlockAds) await AddInjectionAsync(tab, core);
             else await RemoveInjectionAsync(tab, core);
 
             if (!reload || IsNewTabUrl(tab.Url)) continue;
@@ -1523,7 +1892,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new SettingsWindow(_settings, PreviewSettings, CommitSettings)
+        var window = new SettingsWindow(_settings, PreviewSettings, CommitSettings, BrowserTool)
         {
             Owner = this,
         };
@@ -1557,13 +1926,14 @@ public partial class MainWindow : Window
 
     private void PopulateMenu()
     {
+        RefreshProtectionMenu();
         var marks = _bookmarks.All.Take(12).ToList();
         BookmarksList.ItemsSource = marks;
         NoBookmarksText.Visibility = marks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        HistoryList.ItemsSource = _history.Recent(8);
+        HistoryList.ItemsSource = IsPrivate ? Array.Empty<HistoryEntry>() : _history.Recent(8);
 
-        SleepPolicyText.Text = _settings.SuspendAfterMinutes <= 0
+        SleepPolicyText.Text = _settings.EconomyMode ? "Economie: 3 pagini active, adormire la 1 minut, eliberare la 5 minute; taburile protejate sunt exceptate." : _settings.SuspendAfterMinutes <= 0
             ? "Adormirea tab-urilor este oprită: Vela ține toate paginile încărcate."
             : $"Tab-urile din fundal se îngheață după {_settings.SuspendAfterMinutes} min și eliberează memoria după {_settings.DiscardAfterMinutes} min.";
     }
@@ -1583,7 +1953,7 @@ public partial class MainWindow : Window
     private void OpenNewWindow()
     {
         // Same CoreWebView2Environment: one browser process, no second profile on disk.
-        var window = new MainWindow(_env) { WindowStartupLocation = WindowStartupLocation.CenterScreen };
+        var window = new MainWindow(_env, IsPrivate) { WindowStartupLocation = WindowStartupLocation.CenterScreen };
         window.Show();
     }
 

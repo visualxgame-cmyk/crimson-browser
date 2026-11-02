@@ -32,12 +32,12 @@ public sealed class AdBlocker
         _pathFragments.Clear();
 
         TryLoadFile(Path.Combine(AppPaths.Assets, "blocklist.txt"));
-        TryLoadFile(Path.Combine(AppPaths.Assets, "blocklist-big.txt"));
+        TryLoadFile(File.Exists(BlocklistUpdates.FilePath) ? BlocklistUpdates.FilePath : Path.Combine(AppPaths.Assets, "blocklist-big.txt"));
 
         try
         {
             var scriptPath = Path.Combine(AppPaths.Assets, "adblock.js");
-            if (File.Exists(scriptPath)) InjectionScript = File.ReadAllText(scriptPath);
+            if (File.Exists(scriptPath)) InjectionScript = SignInProtection.WrapScript(File.ReadAllText(scriptPath));
         }
         catch
         {
@@ -50,6 +50,7 @@ public sealed class AdBlocker
             {
                 if (string.Equals(Path.GetFileName(file), "allowlist.txt", StringComparison.OrdinalIgnoreCase))
                     continue;
+                if (string.Equals(file, BlocklistUpdates.FilePath, StringComparison.OrdinalIgnoreCase)) continue;
                 TryLoadFile(file);
             }
         }

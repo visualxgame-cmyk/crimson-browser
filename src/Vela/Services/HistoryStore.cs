@@ -82,6 +82,7 @@ public sealed class HistoryStore
                 .Reverse()
                 .Where(e => e.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                             e.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .DistinctBy(e => e.Url, StringComparer.OrdinalIgnoreCase)
                 .Take(limit)
                 .ToList();
         }
@@ -91,6 +92,28 @@ public sealed class HistoryStore
     {
         lock (_gate) _items.Clear();
         Flush();
+    }
+
+    public IReadOnlyList<HistoryEntry> Query(string query, DateTimeOffset? since = null, int limit = MaxEntries)
+    {
+        lock (_gate) return _items.AsEnumerable().Reverse()
+            .Where(e => (since is null || e.VisitedAt >= since) && (string.IsNullOrWhiteSpace(query) ||
+                e.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || e.Url.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            .Take(Math.Clamp(limit, 1, MaxEntries)).ToArray();
+    }
+
+    public void Remove(HistoryEntry entry)
+    {
+        lock (_gate) _items.Remove(entry);
+        Flush();
+    }
+
+    public int RemoveSince(DateTimeOffset since)
+    {
+        int removed;
+        lock (_gate) removed = _items.RemoveAll(e => e.VisitedAt >= since);
+        Flush();
+        return removed;
     }
 
     private void ScheduleSave()
@@ -106,10 +129,10 @@ public sealed class HistoryStore
 
     public void Flush()
     {
-        string json;
-        lock (_gate) json = JsonSerializer.Serialize(_items, JsonOptions);
-
-        try { File.WriteAllText(_path, json); }
-        catch { /* best effort */ }
+        lock (_gate)
+        {
+            try { AtomicFile.Write(_path, JsonSerializer.Serialize(_items, JsonOptions)); }
+            catch (Exception ex) { Log.Write("Save history: " + ex.Message); }
+        }
     }
 }

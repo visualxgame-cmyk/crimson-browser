@@ -1,0 +1,129 @@
+<Window x:Class="Vela.LibraryWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Biblioteca — Vela" Icon="Assets/vela.ico"
+        Width="1060" Height="740" MinWidth="850" MinHeight="600" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextPrimary}" FontFamily="{StaticResource UiFont}">
+    <Window.Resources>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource SlimScrollBar}" />
+        <Style x:Key="LibraryListItem" TargetType="ListBoxItem">
+            <Setter Property="AutomationProperties.Name" Value="{Binding Primary}" /><Setter Property="AutomationProperties.HelpText" Value="{Binding Secondary}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+                <Border x:Name="Row" Padding="12,10" Margin="0,1" CornerRadius="7" Background="Transparent"><ContentPresenter /></Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource TabActiveBg}" /></Trigger>
+                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource HoverBg}" /></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="20">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="170" /><ColumnDefinition Width="20" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+            <TextBlock Text="Bibliotecă" Style="{StaticResource SettingsTitle}" Margin="8,6,0,20" />
+            <Button Content="Istoric" Tag="history" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Favorite" Tag="bookmarks" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Taburi deschise" Tag="tabs" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Citește mai târziu" Tag="reading" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Consum și diagnostic" Tag="diagnostics" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Backup și sincronizare" Tag="backup" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Extensii" Tag="extensions" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+            <Button Content="Date și protecție" Tag="privacy" Style="{StaticResource MenuRowButton}" Click="Mode_Click" />
+        </StackPanel></ScrollViewer>
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <TextBlock x:Name="PageTitle" Style="{StaticResource SettingsPageTitle}" Margin="0,0,0,18" />
+            <Grid Grid.Row="1">
+                <Grid x:Name="ListPage">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBox x:Name="QueryBox" Style="{StaticResource SettingsInput}" TextChanged="Query_Changed" AutomationProperties.Name="Caută în bibliotecă" />
+                        <WrapPanel x:Name="ReadingActions" Visibility="Collapsed" Margin="0,10,0,0"><Button Content="Salvează pagina curentă" Style="{StaticResource SettingsButton}" Click="SaveReading_Click" Margin="0,0,8,0" /><Button Content="Marchează citit / necitit" Style="{StaticResource SettingsButton}" Click="ToggleReading_Click" /></WrapPanel>
+                        <WrapPanel Margin="0,8,0,10">
+                            <ComboBox x:Name="HistoryPeriod" SelectedIndex="0" MinWidth="160" SelectionChanged="Filter_Changed" Margin="0,0,10,0">
+                                <ComboBoxItem Content="Oricând" /><ComboBoxItem Content="Astăzi" /><ComboBoxItem Content="Ultimele 7 zile" /><ComboBoxItem Content="Ultimele 30 de zile" />
+                            </ComboBox>
+                            <ComboBox x:Name="FolderFilter" MinWidth="180" MaxWidth="240" SelectionChanged="Filter_Changed" Visibility="Collapsed" AutomationProperties.Name="Filtrează folderul">
+                                <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" MaxWidth="215" TextTrimming="CharacterEllipsis" ToolTip="{Binding}" /></DataTemplate></ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button x:Name="NewBookmarkButton" Content="Adaugă favorită" Style="{StaticResource SettingsButton}" Click="NewBookmark_Click" Margin="10,0,0,0" Visibility="Collapsed" />
+                        </WrapPanel>
+                    </StackPanel>
+                    <Grid x:Name="BookmarkLayout" Grid.Row="1" SizeChanged="BookmarkLayout_SizeChanged">
+                        <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <ListBox x:Name="ItemsList" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" ItemContainerStyle="{StaticResource LibraryListItem}"
+                                 SelectionChanged="Item_Selected" MouseDoubleClick="Open_Click" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                            <ListBox.ItemTemplate><DataTemplate><StackPanel>
+                                <TextBlock Text="{Binding Primary}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Secondary}" Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource TextSecondary}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel></DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                        <Border x:Name="BookmarkEditor" Grid.Column="1" Width="255" Margin="14,0,0,0" Style="{StaticResource SettingsCard}" Visibility="Collapsed">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+                                <TextBlock Text="Editează favorita" Style="{StaticResource SettingsTitle}" Margin="0,0,0,14" />
+                                <TextBlock Text="Nume" Style="{StaticResource SettingsHint}" /><TextBox x:Name="BookmarkTitle" AutomationProperties.Name="Numele favoritei" Style="{StaticResource SettingsInput}" Margin="0,5,0,12" MaxLength="500" />
+                                <TextBlock Text="Adresă" Style="{StaticResource SettingsHint}" /><TextBox x:Name="BookmarkUrl" AutomationProperties.Name="Adresa favoritei" Style="{StaticResource SettingsInput}" Margin="0,5,0,12" MaxLength="8192" />
+                                <TextBlock Text="Folder (ex.: Lucru/Documentație)" Style="{StaticResource SettingsHint}" /><TextBox x:Name="BookmarkFolder" AutomationProperties.Name="Folderul favoritei" Style="{StaticResource SettingsInput}" Margin="0,5,0,14" MaxLength="240" />
+                                <Button Content="Salvează favorita" Style="{StaticResource SettingsPrimaryButton}" Click="SaveBookmark_Click" />
+                            </StackPanel></ScrollViewer>
+                        </Border>
+                    </Grid>
+                    <WrapPanel Grid.Row="2" Margin="0,12,0,0">
+                        <Button Content="Deschide" Style="{StaticResource SettingsButton}" Click="Open_Click" Margin="0,0,8,8" />
+                        <Button x:Name="DeleteItemButton" Content="Șterge selecția…" Style="{StaticResource SettingsButton}" Click="Delete_Click" Margin="0,0,8,8" />
+                        <Button x:Name="MoveUpButton" Content="↑" Style="{StaticResource SettingsButton}" Tag="-1" Click="MoveBookmark_Click" Margin="0,0,4,8" Visibility="Collapsed" />
+                        <Button x:Name="MoveDownButton" Content="↓" Style="{StaticResource SettingsButton}" Tag="1" Click="MoveBookmark_Click" Margin="0,0,8,8" Visibility="Collapsed" />
+                        <Button Content="Actualizează lista" Style="{StaticResource SettingsButton}" Click="Refresh_Click" Margin="0,0,8,8" />
+                    </WrapPanel>
+                </Grid>
+                <ScrollViewer x:Name="DiagnosticsPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"><StackPanel>
+                    <TextBlock Text="Măsurare la cerere. Raportul exportat nu include adrese, titluri de pagini, căi personale, cookie-uri sau parole." Style="{StaticResource SettingsHint}" Margin="0,0,0,16" />
+                    <TextBlock x:Name="DiagnosticSummary" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,18" />
+                    <WrapPanel><Button Content="Măsoară acum" Style="{StaticResource SettingsButton}" Click="Measure_Click" Margin="0,0,8,8" /><Button Content="Exportă raportul…" Style="{StaticResource SettingsButton}" Click="ExportDiagnostic_Click" Margin="0,0,0,8" /></WrapPanel>
+                    <Button Content="Verifică un instalator…" Style="{StaticResource SettingsButton}" Click="VerifyInstaller_Click" HorizontalAlignment="Left" Margin="0,18,0,0" />
+                    <TextBlock Text="Verificare locală SHA-256 și semnătură Windows, fără rularea instalatorului. Un checksum singur nu confirmă autorul. Versiunile sunt disponibile pe GitHub; pachetele rămân nesemnate până la configurarea certificatului editorului." Style="{StaticResource SettingsHint}" Margin="0,12,0,0" />
+                </StackPanel></ScrollViewer>
+                <ScrollViewer x:Name="BackupPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="Arhivele sunt criptate cu parola ta. Parola nu este salvată. Folosește aceeași parolă pe celelalte dispozitive. Cookie-urile, parolele site-urilor și istoricul sunt excluse." Style="{StaticResource SettingsHint}" Margin="0,0,0,16" />
+                        <TextBlock Text="Parolă pentru arhivă / sincronizare (minimum 12 caractere)" Style="{StaticResource SettingsHint}" />
+                        <PasswordBox x:Name="TransferPassword" Margin="0,8,0,16" Padding="10" Background="{DynamicResource OmniboxBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderSoft}" />
+                        <WrapPanel><Button Content="Creează backup…" Style="{StaticResource SettingsButton}" Click="Backup_Click" Margin="0,0,8,8" /><Button Content="Restabilește backup…" Style="{StaticResource SettingsButton}" Click="Restore_Click" Margin="0,0,0,8" /></WrapPanel>
+                        <TextBlock Text="Folder de sincronizare" Style="{StaticResource SettingsTitle}" Margin="0,20,0,10" />
+                        <TextBlock Text="Sincronizează favoritele și lista Citește mai târziu printr-un folder local sau unul sincronizat de OneDrive/Dropbox. Vela citește și scrie doar la apăsarea butonului, fără serviciu permanent în fundal." Style="{StaticResource SettingsHint}" />
+                        <TextBlock x:Name="SyncFolderText" TextWrapping="Wrap" Margin="0,12,0,10" Foreground="{DynamicResource TextSecondary}" />
+                        <WrapPanel><Button Content="Alege folderul…" Style="{StaticResource SettingsButton}" Click="ChooseSync_Click" Margin="0,0,8,8" /><Button Content="Sincronizează acum" Style="{StaticResource SettingsPrimaryButton}" Click="Sync_Click" Margin="0,0,0,8" /></WrapPanel>
+                        <CheckBox x:Name="SyncSettingsToggle" Content="Sincronizează și setările comune" Style="{StaticResource SettingsSwitch}" IsChecked="True" Margin="0,12,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+                <ScrollViewer x:Name="ExtensionsPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"><StackPanel>
+                    <TextBlock Text="Extensii neîmpachetate acceptate de WebView2. Activează suportul și repornește Vela înainte de instalare. Extensiile pot crește consumul și pot accesa paginile conform permisiunilor lor." Style="{StaticResource SettingsHint}" Margin="0,0,0,16" />
+                    <CheckBox x:Name="ExtensionsToggle" Content="Permite extensii în profilul normal" Style="{StaticResource SettingsSwitch}" Click="ExtensionsToggle_Click" />
+                    <WrapPanel Margin="0,16,0,12"><Button Content="Instalează din folder…" Style="{StaticResource SettingsButton}" Click="InstallExtension_Click" Margin="0,0,8,8" /><Button Content="Actualizează lista" Style="{StaticResource SettingsButton}" Click="RefreshExtensions_Click" Margin="0,0,0,8" /></WrapPanel>
+                    <ListBox x:Name="ExtensionList" Background="{DynamicResource PopupBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderSoft}" MinHeight="140" MaxHeight="250"><ListBox.ItemTemplate><DataTemplate><StackPanel Margin="2"><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Detail}" Foreground="{DynamicResource TextMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0" /></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox>
+                    <WrapPanel Margin="0,12,0,0"><Button Content="Activează / dezactivează" Style="{StaticResource SettingsButton}" Click="ToggleExtension_Click" Margin="0,0,8,8" /><Button Content="Dezinstalează…" Style="{StaticResource SettingsButton}" Click="RemoveExtension_Click" Margin="0,0,0,8" /></WrapPanel>
+                </StackPanel></ScrollViewer>
+                <ScrollViewer x:Name="PrivacyPage" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"><StackPanel>
+                    <TextBlock Text="Protecția navigării" Style="{StaticResource SettingsTitle}" />
+                    <TextBlock Text="Vela folosește verificarea reputației Microsoft Defender SmartScreen din WebView2. Acest serviciu poate trimite informații către Microsoft. Erorile de certificat păstrează avertismentele motorului. Modul privat izolează cookie-urile și nu salvează istoricul sau sesiunea în Vela; descărcările și favoritele salvate rămân pe disc." Style="{StaticResource SettingsHint}" Margin="0,10,0,16" />
+                    <Button Content="Citește politica Microsoft SmartScreen" Style="{StaticResource SettingsButton}" Click="SmartScreenInfo_Click" HorizontalAlignment="Left" />
+                    <TextBlock Text="Liste de blocare" Style="{StaticResource SettingsTitle}" Margin="0,24,0,10" />
+                    <TextBlock Text="Actualizare manuală prin HTTPS din StevenBlack/hosts (GitHub). Lista este validată înainte de înlocuire. Excepțiile scutului se păstrează pe site în profilul normal; în modul privat rămân temporare." Style="{StaticResource SettingsHint}" Margin="0,0,0,12" />
+                    <WrapPanel><Button Content="Actualizează lista" Style="{StaticResource SettingsButton}" Click="UpdateBlocklist_Click" Margin="0,0,8,8" /><Button Content="Revino la lista precedentă" Style="{StaticResource SettingsButton}" Click="RollbackBlocklist_Click" Margin="0,0,0,8" /></WrapPanel>
+                    <TextBlock Text="Ștergerea datelor după interval" Style="{StaticResource SettingsTitle}" Margin="0,24,0,10" />
+                    <ComboBox x:Name="ClearPeriod" SelectedIndex="0" Margin="0,0,0,14"><ComboBoxItem Content="Ultima oră" /><ComboBoxItem Content="Ultimele 24 de ore" /><ComboBoxItem Content="Ultimele 7 zile" /><ComboBoxItem Content="Oricând" /></ComboBox>
+                    <CheckBox x:Name="ClearHistoryToggle" Content="Istoric Vela" Style="{StaticResource SettingsSwitch}" IsChecked="True" Margin="0,0,0,12" />
+                    <CheckBox x:Name="ClearCookiesToggle" Content="Cookie-uri și date de autentificare" Style="{StaticResource SettingsSwitch}" Margin="0,0,0,12" />
+                    <CheckBox x:Name="ClearStorageToggle" Content="Stocarea locală și cache-ul site-urilor" Style="{StaticResource SettingsSwitch}" Margin="0,0,0,16" />
+                    <Button Content="Șterge datele selectate…" Style="{StaticResource SettingsButton}" Click="ClearRange_Click" HorizontalAlignment="Left" />
+                </StackPanel></ScrollViewer>
+            </Grid>
+            <Grid Grid.Row="2" Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0" />
+                <Button Grid.Column="1" Content="Închide" Style="{StaticResource SettingsButton}" Click="Close_Click" />
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
