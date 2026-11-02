@@ -54,8 +54,8 @@ public partial class MainWindow
             var text = checkFailed
                 ? "Starea paginii nu a putut fi verificată. Închiderea poate pierde modificări nesalvate."
                 : "Pagina conține modificări nesalvate sau a înregistrat o protecție la închidere.";
-            if (MessageBox.Show(this, text + "\n\n" + tab.Title + "\n\nÎnchizi pagina?", "Vela — protecția modificărilor",
-                MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return false;
+            if (!MessageDialog.Confirm(this, "Protecția modificărilor",
+                    text + "\n\n" + tab.Title, "Închide pagina", "Anulează")) return false;
         }
         return true;
     }

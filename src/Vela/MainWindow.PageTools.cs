@@ -70,7 +70,9 @@ public partial class MainWindow
         MenuPopup.IsOpen = false;
         if (_active is not { } tab || SiteDataService.Origin(tab.Url) is null || !Uri.TryCreate(tab.Url, UriKind.Absolute, out var uri)) return;
         if (uri.IsLoopback || IPAddress.TryParse(uri.Host, out _) || !uri.Host.Contains('.')) { Status("Traducerea externă este disponibilă doar pentru pagini web publice."); return; }
-        if (MessageBox.Show(this, "Pentru traducere, adresa completă a paginii, inclusiv parametrii ei, va fi trimisă serviciului Google Translate. Continui?", "Vela — traducere externă", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (!MessageDialog.Confirm(this, "Traducere externă",
+                "Pentru traducere, adresa completă a paginii, inclusiv parametrii ei, va fi trimisă serviciului Google Translate.",
+                "Continuă", "Anulează")) return;
         await AddTabAsync("https://translate.google.com/translate?sl=auto&tl=" + Uri.EscapeDataString(_settings.TranslationLanguage) + "&u=" + Uri.EscapeDataString(tab.Url));
     }
     private async void ConnectionInfo_Click(object sender, RoutedEventArgs e)
@@ -78,7 +80,7 @@ public partial class MainWindow
         var tab = _active;
         if (tab is null) return;
         var origin = SiteDataService.Origin(tab.Url);
-        if (origin is null) { MessageBox.Show(this, tab.IsInternalPage ? "Această pagină este servită local de Vela." : "Pagină locală sau adresă fără conexiune HTTPS.", "Vela — conexiune", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+        if (origin is null) { MessageDialog.Inform(this, "Conexiune", tab.IsInternalPage ? "Această pagină este servită local de Vela." : "Pagină locală sau adresă fără conexiune HTTPS."); return; }
         var text = origin + "\n\n" + (tab.IsSecureConnection ? "Conexiune HTTPS validată de motor." : tab.ConnectionError ?? "Conexiunea nu este confirmată ca HTTPS validă.");
         if (tab.IsSecureConnection)
         {
@@ -94,7 +96,7 @@ public partial class MainWindow
             }
             catch (Exception ex) { Log.Write("Read connection certificate: " + ex.Message); text += "\n\nCertificatul nu este disponibil pentru această conexiune în motorul curent."; }
         }
-        MessageBox.Show(this, text, "Vela — informații conexiune", MessageBoxButton.OK, tab.IsSecureConnection ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        MessageDialog.Inform(this, "Informații conexiune", text);
     }
     private void DuplicateTab(Vela.Models.BrowserTab source)
     {

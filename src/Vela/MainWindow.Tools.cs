@@ -99,9 +99,9 @@ public partial class MainWindow
     private bool ConfirmDownloadCloseForSite(IEnumerable<BrowserTab> tabs)
     {
         if (!tabs.Any(t => HasPendingDownload(t))) return true;
-        return MessageBox.Show(_siteSettingsWindow ?? (Window)this,
-            "Site-ul are descărcări în curs sau în pauză. Ștergerea datelor le poate anula. Continui?", "Vela — descărcări",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
+        return MessageDialog.Confirm(_siteSettingsWindow ?? (Window)this, "Descărcări în curs",
+            "Site-ul are descărcări în curs sau în pauză. Ștergerea datelor le poate anula.",
+            "Continuă", "Anulează");
     }
 
     private async void BrowserTool(string action)
@@ -124,7 +124,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             Log.Write("Browser tool: " + ex);
-            MessageBox.Show(_settingsWindow ?? (Window)this, ex.Message, "Vela", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageDialog.Inform(_settingsWindow ?? (Window)this, "Vela", ex.Message);
         }
     }
 
@@ -139,8 +139,8 @@ public partial class MainWindow
             return _bookmarks.Import(File.ReadAllText(dialog.FileName));
         });
         foreach (var window in Application.Current.Windows.OfType<MainWindow>()) window.PopulateMenu();
-        MessageBox.Show(owner, $"Adăugate: {result.Added}\nDeja existente: {result.Duplicates}\nLinkuri neacceptate: {result.Skipped}",
-            "Vela — import favorite", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageDialog.Inform(owner, "Import favorite",
+            $"Adăugate: {result.Added}\nDeja existente: {result.Duplicates}\nLinkuri neacceptate: {result.Skipped}");
     }
 
     private async Task ExportBookmarksAsync()
@@ -150,6 +150,6 @@ public partial class MainWindow
         if (dialog.ShowDialog(owner) != true) return;
         var bookmarks = _bookmarks.All;
         await Task.Run(() => AtomicFile.Write(dialog.FileName, BookmarkHtml.Export(bookmarks)));
-        MessageBox.Show(owner, "Favoritele au fost exportate în fișierul ales.", "Vela", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageDialog.Inform(owner, "Export favorite", "Favoritele au fost exportate în fișierul ales.");
     }
 }

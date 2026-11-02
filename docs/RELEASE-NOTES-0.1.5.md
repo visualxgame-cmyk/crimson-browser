@@ -4,6 +4,7 @@ Compatibilitate și protecție pentru navigare.
 - Popupurile automate sunt limitate la două într-un interval de 20 de secunde pentru același tab. Ferestrele declanșate direct de utilizator nu sunt limitate, iar o fereastră obișnuită de autentificare rămâne posibilă.
 - Managerul de extensii afișează, înainte de instalare și în listă, permisiunile API și site-urile declarate de manifest. Pachetele rămân copii locale gestionate de Vela și extensiile sunt oprite implicit.
 - Cererile de cameră și microfon sunt acoperite de verificări native: sunt identificate clar în bara de permisiuni și pot fi refuzate fără deschiderea dispozitivului.
+- Confirmările de închidere, descărcare și ștergere a datelor, împreună cu notificările, folosesc acum un dialog propriu Vela, rotunjit și adaptat temei active, în locul ferestrei native Windows. Enter confirmă, Escape anulează.
 - Verificarea actualizărilor rămâne manuală, din Setări → Navigare, fără serviciu sau trafic de fundal.
 
 Testele automate nu folosesc conturi Google reale, camere sau microfoane fizice. Conectarea cu confirmare pe telefon și apelurile reale rămân de verificat de utilizator.

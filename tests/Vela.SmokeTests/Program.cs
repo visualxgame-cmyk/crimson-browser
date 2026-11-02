@@ -92,6 +92,7 @@ internal static partial class Program
                 StoreTests();
                 await AdditionalStoreTests();
                 await ModernStoreTests();
+                MessageDialogTests();
                 var window = new MainWindow { Title = "Vela — verificare izolată" };
                 window.Show();
                 if (args.Contains("--preview")) { window.Closed += (_, _) => app.Shutdown(); return; }
@@ -108,6 +109,7 @@ internal static partial class Program
                     await ModernBrowserTests(window); await CloseWindowAsync(window); app.Shutdown(0); return;
                 }
                 await BrowserTests(window);
+                await WindowCloseDialogTests(window);
                 await WorkspaceTests(window);
                 await ModernBrowserTests(window);
                 await ExpansionTests(window);

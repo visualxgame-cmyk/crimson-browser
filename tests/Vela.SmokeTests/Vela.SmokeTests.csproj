@@ -14,6 +14,7 @@
     <!-- Compile the actual application against an isolated data directory. -->
     <Compile Include="../../src/Vela/**/*.cs" Exclude="../../src/Vela/bin/**;../../src/Vela/obj/**;../../src/Vela/App.xaml.cs;../../src/Vela/Services/AppPaths.cs" LinkBase="Application" />
     <Page Include="../../src/Vela/*Window.xaml" Link="%(Filename)%(Extension)" />
+    <Page Include="../../src/Vela/MessageDialog.xaml" Link="MessageDialog.xaml" />
     <Page Include="../../src/Vela/Theme/Theme.xaml" Link="Theme/Theme.xaml" />
     <Resource Include="../../src/Vela/Assets/vela.ico" Link="Assets/vela.ico" />
     <Content Include="../../src/Vela/Assets/**/*" Link="Assets/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

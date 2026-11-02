@@ -129,10 +129,9 @@ public partial class MainWindow : Window
             catch (Exception ex)
             {
                 Log.Write("WebView2 init failed: " + ex);
-                MessageBox.Show(this,
+                MessageDialog.Inform(this, "WebView2",
                     "WebView2 Runtime nu poate porni.\n\n" + ex.Message +
-                    "\n\nInstalează „Microsoft Edge WebView2 Runtime” și încearcă din nou.",
-                    "Vela", MessageBoxButton.OK, MessageBoxImage.Error);
+                    "\n\nInstalează „Microsoft Edge WebView2 Runtime” și încearcă din nou.");
                 Close();
                 return;
             }
@@ -2007,11 +2006,11 @@ public partial class MainWindow : Window
     {
         MenuPopup.IsOpen = false;
 
-        var answer = MessageBox.Show(this,
+        var confirmed = MessageDialog.Confirm(this, "Istoric de navigare",
             "Ștergi tot istoricul de navigare?\n\nFavoritele și sesiunea rămân intacte.",
-            "Vela", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            "Șterge istoricul", "Anulează");
 
-        if (answer != MessageBoxResult.Yes) return;
+        if (!confirmed) return;
 
         _history.Clear();
         PopulateMenu();
@@ -2022,13 +2021,12 @@ public partial class MainWindow : Window
     {
         MenuPopup.IsOpen = false;
 
-        MessageBox.Show(this,
+        MessageDialog.Inform(this, "Despre Vela",
             $"Vela {AppConstants.Version}\n\n" +
             $"Motor: WebView2 (Chromium) — aceeași versiune cu Edge instalat pe sistem.\n" +
             $"Reguli de blocare: {_blocker.RuleCount}\n" +
             $"Cereri blocate de la pornire: {_blocker.BlockedTotal}\n" +
             $"Profil: {AppPaths.Profile}\n\n" +
-            "Construit pentru consum redus: tab-urile din fundal sunt înghețate și eliberate din memorie.",
-            "Despre Vela", MessageBoxButton.OK, MessageBoxImage.Information);
+            "Construit pentru consum redus: tab-urile din fundal sunt înghețate și eliberate din memorie.");
     }
 }

@@ -91,9 +91,10 @@ public partial class SiteSettingsWindow : Window
     {
         if (_busy || _origin is null) return;
         var origin = _origin;
-        if (MessageBox.Show(this, "Ștergi cookie-urile și datele locale pentru:\n\n" + origin +
-            "\n\nTaburile acestui site vor fi reîncărcate. Poți fi deconectat de pe site.", "Vela — datele site-ului",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (!MessageDialog.Confirm(this, "Datele site-ului",
+                "Ștergi cookie-urile și datele locale pentru:\n\n" + origin +
+                "\n\nTaburile acestui site vor fi reîncărcate. Poți fi deconectat de pe site.",
+                "Șterge datele", "Anulează")) return;
         _busy = true;
         ClearDataButton.IsEnabled = false;
         try { StatusText.Text = await _clearData(origin) ? "Datele site-ului au fost șterse." : "Ștergerea a fost anulată."; }

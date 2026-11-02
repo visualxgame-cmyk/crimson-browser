@@ -7,7 +7,8 @@ Prioritatea rămâne consumul redus: șase controale live implicit, trei în mod
 | Solicitări de permisiuni | Bară WPF nemodală pe tab, fără focus furat; Permite/Blochează persistente, Nu acum temporar; cadrele și navigarea eliberează deferral-urile; alegeri private doar în fereastră |
 | Compatibilitatea conectării Google | Formularele de autentificare nu primesc veto-ul injectat de navigare; documentele și cadrele interactive sunt protejate de eliberare; fluxuri sintetice verificate, confirmarea reală pe telefon rămâne de verificat |
 | Măsurători la 1/10/30 de taburi | Site-uri reale în mod normal și economic, fără erori de navigare; excepțiile native de închidere sunt numărate; vezi PERFORMANCE.md |
-| Verificări de compatibilitate și regresie | 274 verificări trecute în profil izolat; permisiuni nemodale, autentificare sintetică, PDF, fișiere, WebRTC în fundal/la minimizare, popupuri, formulare, navigări suprapuse, migrarea setărilor și crash recovery |
+| Verificări de compatibilitate și regresie | 287 verificări trecute în profil izolat; permisiuni nemodale, autentificare sintetică, PDF, fișiere, WebRTC în fundal/la minimizare, popupuri, formulare, navigări suprapuse, migrarea setărilor, dialoguri tematice la închidere și crash recovery |
+| Dialoguri tematice | Închiderea, descărcările, ștergerea datelor și notificările folosesc un card Vela rotunjit, cu paleta activă, Enter/Anulează; MessageBox nativ rămâne doar pentru erorile de pornire |
 | Mod economic | Limite 3 / 1 minut / 5 minute; păstrează preferințele personalizate și protecțiile existente |
 | Activitate media fără sunet | Urmărire prin evenimente pentru WebRTC, redare media și captură; include cadrele și eliberarea protecției după oprire; fără polling de JavaScript |
 | Transfer de fișiere încărcate | POST real prin loopback de 1 MB, SHA-256 identic; fișier sintetic, fără date personale |

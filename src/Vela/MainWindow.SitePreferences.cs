@@ -52,9 +52,12 @@ public partial class MainWindow
         if (IsPrivate) throw new InvalidOperationException("Administrează datele salvate dintr-o fereastră normală.");
         var label = passwords ? "parolele salvate" : "datele de completare automată";
         var owner = _settingsWindow ?? (Window)this;
-        if (MessageBox.Show(owner, "Ștergi " + label + " din profilul Vela? Această acțiune nu se poate anula.", "Vela — date salvate",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
-        await LibraryCore.Profile.ClearBrowsingDataAsync(passwords ? CoreWebView2BrowsingDataKinds.PasswordAutosave : CoreWebView2BrowsingDataKinds.GeneralAutofill);
-        MessageBox.Show(owner, "Datele selectate au fost șterse.", "Vela", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (MessageDialog.Confirm(owner, "Date salvate",
+                "Ștergi " + label + " din profilul Vela? Această acțiune nu se poate anula.",
+                "Șterge", "Anulează"))
+        {
+            await LibraryCore.Profile.ClearBrowsingDataAsync(passwords ? CoreWebView2BrowsingDataKinds.PasswordAutosave : CoreWebView2BrowsingDataKinds.GeneralAutofill);
+            MessageDialog.Inform(owner, "Date salvate", "Datele selectate au fost șterse.");
+        }
     }
 }

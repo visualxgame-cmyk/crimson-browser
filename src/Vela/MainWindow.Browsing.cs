@@ -178,8 +178,9 @@ public partial class MainWindow
     }
 
     private bool ConfirmDownloadClose(BrowserTab? tab = null) => !HasPendingDownload(tab) ||
-        MessageBox.Show(this, "Există descărcări în curs sau în pauză. Închiderea le poate anula. Continui?",
-            "Vela — descărcări", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+        MessageDialog.Confirm(this, "Descărcări în curs",
+            "Există descărcări în curs sau în pauză. Închiderea le poate anula.",
+            "Închide oricum", "Anulează");
 
     private void ForgetDownloads(BrowserTab tab)
     {

@@ -135,7 +135,8 @@ public partial class LibraryWindow : Window
     }
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if (ItemsList.SelectedItem is not Row row || MessageBox.Show(this, "Ștergi înregistrarea selectată?", "Vela", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (ItemsList.SelectedItem is not Row row || !MessageDialog.Confirm(this, "Șterge înregistrarea",
+                "Ștergi înregistrarea selectată?", "Șterge", "Anulează")) return;
         try
         {
             if (row.Data is HistoryEntry history) MainWindow.History.Remove(history);
@@ -178,9 +179,9 @@ public partial class LibraryWindow : Window
         var dialog = new OpenFileDialog { Filter = "Instalator Windows|*.exe;*.msi", Title = "Verifică un instalator fără a-l rula" };
         if (dialog.ShowDialog(this) != true) return;
         var check = await Task.Run(() => ReleaseVerification.Inspect(dialog.FileName));
-        MessageBox.Show(this, "SHA-256: " + check.Sha256 + "\n\n" +
+        MessageDialog.Inform(this, "Verificare fișier", "SHA-256: " + check.Sha256 + "\n\n" +
             (check.TrustedSignature ? "Windows confirmă o semnătură de încredere folosind certificatele disponibile local. Verifică și numele editorului în proprietățile fișierului." : "Semnătura nu este confirmată de Windows (cod 0x" + check.TrustStatus.ToString("X8") + ").") +
-            "\n\nAcest rezultat nu confirmă că fișierul este o versiune oficială Vela. Nu este configurat încă un certificat Vela.", "Vela — verificare fișier", MessageBoxButton.OK, MessageBoxImage.Information);
+            "\n\nAcest rezultat nu confirmă că fișierul este o versiune oficială Vela. Nu este configurat încă un certificat Vela.");
     });
     private async void Backup_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
@@ -198,7 +199,9 @@ public partial class LibraryWindow : Window
         var payload = await Task.Run(() => EncryptedLibrary.Read(dialog.FileName, password));
         if (payload.Purpose != "backup") throw new InvalidDataException("Alege un backup, nu un fișier de sincronizare.");
         _browser.ValidateBackup(payload);
-        if (MessageBox.Show(this, "Restabilești favoritele și setările din backup? O copie criptată a stării actuale va fi păstrată pentru revenire.", "Vela — restaurare", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (!MessageDialog.Confirm(this, "Restaurare backup",
+                "Restabilești favoritele și setările din backup? O copie criptată a stării actuale va fi păstrată pentru revenire.",
+                "Restaurează", "Anulează")) return;
         var rollback = _browser.CreateTransfer("backup");
         var path = Path.Combine(AppPaths.Root, "Backups", "before-restore-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff") + ".vela-backup");
         await Task.Run(() => EncryptedLibrary.Write(path, rollback, password));
@@ -260,13 +263,19 @@ public partial class LibraryWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         var manifest = await Task.Run(() => ExtensionManifest.Read(dialog.FolderName));
         var prompt = $"Instalezi extensia „{manifest.Name}” ({manifest.Version})?\n\nPermisiuni declarate:\n{manifest.AccessSummary}\n\nContinuă numai dacă ai încredere în sursă.";
-        if (MessageBox.Show(this, prompt, "Vela — extensie", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (!MessageDialog.Confirm(this, "Instalare extensie", prompt, "Instalează", "Anulează")) return;
         await _browser.InstallExtensionAsync(dialog.FolderName); await RefreshExtensionsAsync(); StatusText.Text = "Extensia este instalată în profilul normal.";
     });
     private async void ToggleExtension_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     { if (ExtensionList.SelectedItem is ExtensionRow row) { await row.Native.EnableAsync(!row.Enabled); await RefreshExtensionsAsync(); } });
     private async void RemoveExtension_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
-    { if (ExtensionList.SelectedItem is ExtensionRow row && MessageBox.Show(this, "Dezinstalezi extensia selectată?", "Vela", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes) { await row.Native.RemoveAsync(); ManagedExtensions.Remove(row.Native.Id); await RefreshExtensionsAsync(); } });
+    {
+        if (ExtensionList.SelectedItem is not ExtensionRow row ||
+            !MessageDialog.Confirm(this, "Dezinstalare extensie", "Dezinstalezi extensia selectată?", "Dezinstalează", "Anulează")) return;
+        await row.Native.RemoveAsync();
+        ManagedExtensions.Remove(row.Native.Id);
+        await RefreshExtensionsAsync();
+    });
     private async void SmartScreenInfo_Click(object sender, RoutedEventArgs e)
     { await _browser.OpenLibraryAddressAsync("https://learn.microsoft.com/microsoft-edge/webview2/concepts/data-privacy#smartscreen"); }
     private async void UpdateBlocklist_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
@@ -284,7 +293,9 @@ public partial class LibraryWindow : Window
     private async void ClearRange_Click(object sender, RoutedEventArgs e) => await RunAsync(async () =>
     {
         if (ClearHistoryToggle.IsChecked != true && ClearCookiesToggle.IsChecked != true && ClearStorageToggle.IsChecked != true) throw new ArgumentException("Selectează cel puțin un tip de date.");
-        if (MessageBox.Show(this, "Ștergi tipurile de date selectate pentru intervalul ales? Cookie-urile șterse te pot deconecta de pe site-uri.", "Vela — ștergere date", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        if (!MessageDialog.Confirm(this, "Ștergere date",
+                "Ștergi tipurile de date selectate pentru intervalul ales? Cookie-urile șterse te pot deconecta de pe site-uri.",
+                "Șterge datele", "Anulează")) return;
         var since = ClearPeriod.SelectedIndex switch { 0 => DateTimeOffset.UtcNow.AddHours(-1), 1 => DateTimeOffset.UtcNow.AddDays(-1), 2 => DateTimeOffset.UtcNow.AddDays(-7), _ => DateTimeOffset.UnixEpoch };
         StatusText.Text = await _browser.ClearRangeAsync(since, ClearHistoryToggle.IsChecked == true, ClearCookiesToggle.IsChecked == true, ClearStorageToggle.IsChecked == true)
             ? "Datele selectate au fost șterse." : "Ștergerea a fost anulată.";
