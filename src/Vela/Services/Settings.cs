@@ -58,6 +58,7 @@ public sealed class Settings
     public bool SavePasswords { get; set; } = true;
     public bool AutofillEnabled { get; set; } = true;
     public bool ExtensionsEnabled { get; set; }
+    public bool ShowBookmarksBar { get; set; } = true;
     public string SyncDirectory { get; set; } = "";
     public string TranslationLanguage { get; set; } = "ro";
     public DateTimeOffset PreferencesUpdatedAt { get; set; } = DateTimeOffset.UtcNow;

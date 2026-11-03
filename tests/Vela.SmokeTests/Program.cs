@@ -112,6 +112,7 @@ internal static partial class Program
                 await WindowCloseDialogTests(window);
                 await WorkspaceTests(window);
                 await ModernBrowserTests(window);
+                await RoadmapTests(window);
                 await ExpansionTests(window);
                 await MediaProtectionTests(window);
                 await SmallWindowTests(window);
@@ -342,8 +343,11 @@ internal static partial class Program
         await server;
         Check(new FileInfo(Path.Combine(AppPaths.Data, "vela-smoke.bin")).Length == 262144, "Download completes with the exact byte count");
         Invoke(window, "Downloads_Click", null, new RoutedEventArgs());
-        Check(core.IsDefaultDownloadDialogOpen, "Downloads button opens the native management panel");
-        core.CloseDefaultDownloadDialog();
+        var downloadsPopup = Field<System.Windows.Controls.Primitives.Popup>(window, "DownloadsPopup");
+        var downloadList = Field<System.Windows.Controls.ItemsControl>(window, "DownloadsList");
+        Check(downloadsPopup.IsOpen, "Downloads button opens Vela's themed downloads panel");
+        Check(downloadList.Items.Count >= 1, "Completed download appears in the themed downloads list");
+        downloadsPopup.IsOpen = false;
         Check(!(bool)Invoke(window, "HasPendingDownload", tab)!, "Completed download releases its memory protection");
     }
 }

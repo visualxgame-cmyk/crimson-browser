@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
+using Vela.Models;
 using Vela.Services;
 
 namespace Vela;
@@ -15,6 +16,79 @@ internal sealed record ReaderArticle(string Title, string SourceUrl, string Lang
 
 public partial class MainWindow
 {
+    private void PictureInPicture_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        _ = TogglePictureInPictureAsync();
+    }
+
+    /// <summary>
+    /// Chromium only enters Picture-in-Picture from a user gesture. The host script is evaluated
+    /// through DevTools with <c>userGesture: true</c>, which keeps the page's own video in PiP.
+    /// </summary>
+    private async Task TogglePictureInPictureAsync(BrowserTab? target = null)
+    {
+        var tab = target ?? _active;
+        if (tab?.View?.CoreWebView2 is not { } core)
+        {
+            Status("Deschide o pagină cu video pentru Picture-in-Picture.", 4);
+            return;
+        }
+
+        const string expression = """
+            (async () => {
+              try {
+                if (document.pictureInPictureElement) {
+                  await document.exitPictureInPicture();
+                  return "exit";
+                }
+                const videos = Array.from(document.querySelectorAll("video"))
+                  .filter(v => !v.disablePictureInPicture && v.readyState > 0);
+                const video = videos.find(v => !v.paused && !v.ended) || videos[0];
+                if (!video) return "none";
+                await video.requestPictureInPicture();
+                return "enter";
+              } catch (e) { return "blocked"; }
+            })()
+            """;
+
+        try
+        {
+            var request = JsonSerializer.Serialize(new
+            {
+                expression,
+                userGesture = true,
+                awaitPromise = true,
+                returnByValue = true,
+            });
+            var response = await core.CallDevToolsProtocolMethodAsync("Runtime.evaluate", request);
+
+            var value = "";
+            using (var document = JsonDocument.Parse(response))
+            {
+                if (document.RootElement.TryGetProperty("result", out var result) &&
+                    result.TryGetProperty("result", out var inner) &&
+                    inner.TryGetProperty("value", out var text))
+                {
+                    value = text.GetString() ?? "";
+                }
+            }
+
+            Status(value switch
+            {
+                "exit" => "Picture-in-Picture a fost închis.",
+                "enter" => "Video redat în Picture-in-Picture.",
+                "none" => "Pagina nu are un video redabil.",
+                _ => "Picture-in-Picture nu este disponibil pentru acest video.",
+            }, 4);
+        }
+        catch (Exception ex)
+        {
+            Log.Write("Picture-in-Picture: " + ex.Message);
+            Status("Picture-in-Picture nu este disponibil pentru acest video.", 4);
+        }
+    }
+
     private void Print_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;

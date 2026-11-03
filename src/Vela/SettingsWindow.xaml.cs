@@ -55,6 +55,8 @@ public partial class SettingsWindow : Window
         _commit = commit;
         _tools = tools;
         Closed += (_, _) => _lifetime.Cancel();
+        SystemTheme.Changed += SystemThemeChanged;
+        Closed += (_, _) => SystemTheme.Changed -= SystemThemeChanged;
 
         InitializeComponent();
         WindowSizing.Install(this);
@@ -113,43 +115,114 @@ public partial class SettingsWindow : Window
         ThemePanel.Children.Clear();
         _themeCards.Clear();
 
+        AddThemeCard(ThemeCatalog.SystemId, "Sistem", "Urmează tema Windows (deschis sau închis).", BuildSystemPreview());
         foreach (var theme in ThemeCatalog.All)
+            AddThemeCard(theme.Id, theme.Name, theme.Tagline, BuildThemePreview(theme));
+    }
+
+    private void AddThemeCard(string id, string nameText, string tagline, UIElement preview)
+    {
+        var frame = new Border
         {
-            var frame = new Border
-            {
-                CornerRadius = new CornerRadius(10),
-                BorderThickness = new Thickness(2),
-                BorderBrush = Brushes.Transparent,
-                Padding = new Thickness(3),
-                Child = BuildThemePreview(theme),
-            };
+            CornerRadius = new CornerRadius(10),
+            BorderThickness = new Thickness(2),
+            BorderBrush = Brushes.Transparent,
+            Padding = new Thickness(3),
+            Child = preview,
+        };
 
-            var name = new TextBlock
-            {
-                Text = theme.Name,
-                FontSize = 12.5,
-                FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(2, 7, 0, 1),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            name.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
+        var name = new TextBlock
+        {
+            Text = nameText,
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(2, 7, 0, 1),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        name.SetResourceReference(TextBlock.ForegroundProperty, "TextPrimary");
 
-            var stack = new StackPanel { Width = 148 };
-            stack.Children.Add(frame);
-            stack.Children.Add(name);
+        var stack = new StackPanel { Width = 148 };
+        stack.Children.Add(frame);
+        stack.Children.Add(name);
 
-            var button = new Button
-            {
-                Style = (Style)FindResource("ThemeCardButton"),
-                Tag = theme.Id,
-                Content = stack,
-                ToolTip = theme.Tagline,
-            };
-            button.Click += ThemeCard_Click;
+        var button = new Button
+        {
+            Style = (Style)FindResource("ThemeCardButton"),
+            Tag = id,
+            Content = stack,
+            ToolTip = tagline,
+        };
+        button.Click += ThemeCard_Click;
 
-            ThemePanel.Children.Add(button);
-            _themeCards[theme.Id] = frame;
-        }
+        ThemePanel.Children.Add(button);
+        _themeCards[id] = frame;
+    }
+
+    /// <summary>Split light/dark preview used by the "Sistem" card.</summary>
+    private static Grid BuildSystemPreview()
+    {
+        var grid = new Grid { Height = 82, Width = 148, ClipToBounds = true };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        var light = BuildSystemHalf(ThemeCatalog.Get(ThemeCatalog.LightId));
+        var dark = BuildSystemHalf(ThemeCatalog.Get(ThemeCatalog.DarkId));
+        Grid.SetColumn(dark, 1);
+        grid.Children.Add(light);
+        grid.Children.Add(dark);
+        return grid;
+    }
+
+    private static Grid BuildSystemHalf(ThemePalette theme)
+    {
+        var half = new Grid();
+        half.RowDefinitions.Add(new RowDefinition { Height = new GridLength(22) });
+        half.RowDefinitions.Add(new RowDefinition());
+
+        var strip = new Border { Background = ThemeCatalog.Brush(theme.WindowBg) };
+        var tabs = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(7, 0, 0, 0),
+        };
+        tabs.Children.Add(new Border
+        {
+            Width = 18, Height = 6, CornerRadius = new CornerRadius(3),
+            Background = ThemeCatalog.Brush(theme.TabActiveBg), Margin = new Thickness(0, 0, 3, 0),
+        });
+        tabs.Children.Add(new Border
+        {
+            Width = 18, Height = 6, CornerRadius = new CornerRadius(3),
+            Background = ThemeCatalog.Brush(theme.Accent),
+        });
+        strip.Child = tabs;
+        half.Children.Add(strip);
+
+        var content = new Border { Background = ThemeCatalog.Brush(theme.ContentBg) };
+        Grid.SetRow(content, 1);
+        var inner = new Grid { Margin = new Thickness(9, 8, 9, 8) };
+        inner.Children.Add(new Border
+        {
+            Height = 8, CornerRadius = new CornerRadius(4),
+            Background = ThemeCatalog.Brush(theme.OmniboxBg),
+            VerticalAlignment = VerticalAlignment.Top,
+        });
+        var tiles = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Bottom };
+        tiles.Children.Add(new Border
+        {
+            Width = 20, Height = 18, CornerRadius = new CornerRadius(4),
+            Background = ThemeCatalog.Brush(theme.NewTabSurface), Margin = new Thickness(0, 0, 4, 0),
+        });
+        tiles.Children.Add(new Border
+        {
+            Width = 20, Height = 18, CornerRadius = new CornerRadius(4),
+            Background = ThemeCatalog.Brush(theme.NewTabSurface2),
+        });
+        inner.Children.Add(tiles);
+        content.Child = inner;
+        half.Children.Add(content);
+        return half;
     }
 
     private static Grid BuildThemePreview(ThemePalette theme)
@@ -359,7 +432,9 @@ public partial class SettingsWindow : Window
 
     private void SelectTheme(string id)
     {
-        _draft.Theme = ThemeCatalog.Get(id).Id;
+        _draft.Theme = string.Equals(id, ThemeCatalog.SystemId, StringComparison.OrdinalIgnoreCase)
+            ? ThemeCatalog.SystemId
+            : ThemeCatalog.Get(id).Id;
 
         foreach (var (key, frame) in _themeCards)
         {
@@ -821,6 +896,19 @@ public partial class SettingsWindow : Window
         if (_syncing) return;
 
         _preview(_draft);
+    }
+
+    /// <summary>The Windows light/dark choice changed while "Sistem" is being previewed.</summary>
+    private void SystemThemeChanged()
+    {
+        if (!string.Equals(_draft.Theme, ThemeCatalog.SystemId, StringComparison.OrdinalIgnoreCase)) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_committed) return;
+            ThemeCatalog.Apply(_draft);
+            SelectTheme(_draft.Theme);
+            Preview();
+        });
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

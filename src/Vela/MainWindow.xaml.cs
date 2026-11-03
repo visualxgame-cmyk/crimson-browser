@@ -81,6 +81,10 @@ public partial class MainWindow : Window
         TabItems.ItemsSource = _tabs;
         _tabs.CollectionChanged += (_, _) => { UpdateGroupHeaders(); UpdateStatusBar(); ScheduleSessionSave(); };
 
+        _bookmarks.Changed += OnBookmarksChanged;
+        Closed += (_, _) => _bookmarks.Changed -= OnBookmarksChanged;
+        RefreshBookmarksBar();
+
         Loaded += OnLoaded;
         Closing += OnClosing;
         StateChanged += OnStateChanged;
@@ -480,6 +484,7 @@ public partial class MainWindow : Window
             else tab.Owner?.EnforceLiveTabLimit();
         });
         await InstallLinkGesturesAsync(tab, core);
+        AttachPageContextMenu(tab, core);
         await tab.FormTracker.InstallAsync();
 
         core.SourceChanged += (_, _) =>
@@ -1312,8 +1317,8 @@ public partial class MainWindow : Window
             }
 
             e.ResultFilePath = target;
-            // Keep Chromium's on-demand download UI: progress, pause/resume, cancel and file actions.
-            e.Handled = false;
+            // Vela shows its own themed downloads panel, so Chromium's dialog stays hidden.
+            e.Handled = true;
 
             Status($"Se descarcă: {Path.GetFileName(target)}");
 
@@ -1408,6 +1413,9 @@ public partial class MainWindow : Window
                     return true;
                 case Key.D:
                     ToggleBookmark();
+                    return true;
+                case Key.B when shift:
+                    ToggleBookmarksBar();
                     return true;
                 case Key.F:
                     _ = ShowFindAsync();
@@ -1745,14 +1753,6 @@ public partial class MainWindow : Window
         Status(enabled ? "Scutul este activ pentru acest site." : "Scutul este oprit pentru acest site.", 4);
     }
 
-    private void Downloads_Click(object sender, RoutedEventArgs e)
-    {
-        MenuPopup.IsOpen = false;
-        CloseSuggestions();
-        try { _active?.View?.CoreWebView2?.OpenDefaultDownloadDialog(); }
-        catch (Exception ex) { Log.Write("Open downloads: " + ex.Message); }
-    }
-
     // =====================================================================
     //  Settings, themes and new tab background
     // =====================================================================
@@ -1838,6 +1838,19 @@ public partial class MainWindow : Window
         _ = ApplyNewTabThemeAsync(draft);
     }
 
+    /// <summary>The OS switched between light and dark while "Sistem" was selected.</summary>
+    private void OnSystemThemeChanged()
+    {
+        if (!string.Equals(_settings.Theme, ThemeCatalog.SystemId, StringComparison.OrdinalIgnoreCase)) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_shuttingDown) return;
+            ThemeCatalog.Apply(_settings);
+            _ = ApplyNewTabThemeAsync(_settings);
+            PopulateMenu();
+            UpdateStatusBar();
+        });
+    }
     /// <summary>Called by the settings window when the user presses Salvează.</summary>
     private void CommitSettings(Settings draft)
     {
@@ -1928,6 +1941,7 @@ public partial class MainWindow : Window
     private void PopulateMenu()
     {
         RefreshProtectionMenu();
+        BookmarksBarToggle.IsChecked = _settings.ShowBookmarksBar;
         var marks = _bookmarks.All.Take(12).ToList();
         BookmarksList.ItemsSource = marks;
         NoBookmarksText.Visibility = marks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

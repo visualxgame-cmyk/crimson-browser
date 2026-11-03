@@ -101,6 +101,8 @@ public partial class MainWindow
         if (!IsPrivate) SourceInitialized += (_, _) => WindowPlacementStore.Restore(this);
         _bookmarks.Changed += WorkspaceBookmarksChanged;
         Closed += (_, _) => _bookmarks.Changed -= WorkspaceBookmarksChanged;
+        SystemTheme.Changed += OnSystemThemeChanged;
+        Closed += (_, _) => SystemTheme.Changed -= OnSystemThemeChanged;
         RootGrid.AllowDrop = true;
         RootGrid.Drop += Tab_Drop;
         RootGrid.DragOver += (_, e) =>
@@ -153,12 +155,52 @@ public partial class MainWindow
         Add("Duplică tabul", () => DuplicateTab(tab));
         Add(tab.IsMuted ? "Activează sunetul" : "Oprește sunetul", () => ToggleTabMute(tab));
         Add("Mută într-o fereastră nouă", () => _ = MoveTabToNewWindowAsync(tab));
+        Add("Picture-in-Picture", () => _ = TogglePictureInPictureAsync(tab));
         Add("Grupuri de taburi…", () => OpenWorkspace("groups"));
         if (tab.GroupName.Length > 0) Add("Restrânge / extinde grupul " + tab.GroupName, () => ToggleGroup(tab.GroupName));
+        menu.Items.Add(new Separator());
+        Add("Copiază adresa", () => CopyBookmarkUrl(tab.Url));
+        if (_closedTabs.Count > 0) Add("Redeschide tabul închis", ReopenClosedTab);
+        if (_tabs.Count > 1)
+        {
+            Add("Închide celelalte taburi", () => _ = CloseOtherTabsAsync(tab));
+            if (_tabs.IndexOf(tab) < _tabs.Count - 1) Add("Închide taburile din dreapta", () => _ = CloseTabsToRightAsync(tab));
+        }
         menu.Items.Add(new Separator());
         Add("Închide tabul", () => CloseTab(tab));
         element.ContextMenu = menu;
     }
+    private async Task CloseOtherTabsAsync(BrowserTab keep)
+    {
+        var others = _tabs.Where(tab => !ReferenceEquals(tab, keep) && !_closingTabs.Contains(tab.Id)).ToArray();
+        if (others.Length == 0) return;
+        if (!MessageDialog.Confirm(this, "Închide celelalte taburi",
+                $"Închizi {others.Length} taburi? Taburile cu modificări nesalvate sau descărcări în curs te vor întreba separat.",
+                "Închide taburile", "Anulează")) return;
+
+        foreach (var tab in others) await CloseTabIfSafeAsync(tab);
+    }
+
+    private async Task CloseTabsToRightAsync(BrowserTab keep)
+    {
+        var index = _tabs.IndexOf(keep);
+        if (index < 0) return;
+        var others = _tabs.Skip(index + 1).Where(tab => !_closingTabs.Contains(tab.Id)).ToArray();
+        if (others.Length == 0) return;
+        if (!MessageDialog.Confirm(this, "Închide taburile din dreapta",
+                $"Închizi {others.Length} taburi din dreapta? Taburile cu modificări nesalvate sau descărcări în curs te vor întreba separat.",
+                "Închide taburile", "Anulează")) return;
+
+        foreach (var tab in others) await CloseTabIfSafeAsync(tab);
+    }
+
+    private async Task CloseTabIfSafeAsync(BrowserTab tab)
+    {
+        if (!_tabs.Contains(tab) || _closingTabs.Contains(tab.Id)) return;
+        if (ConfirmDownloadClose(tab) && await ConfirmUnsavedCloseAsync([tab]) && _tabs.Contains(tab))
+            CloseTabConfirmed(tab);
+    }
+
     private void Tab_DragMouseDown(object sender, MouseButtonEventArgs e) => _tabDragOrigin = e.GetPosition(this);
     private void Tab_MouseMove(object sender, MouseEventArgs e)
     {

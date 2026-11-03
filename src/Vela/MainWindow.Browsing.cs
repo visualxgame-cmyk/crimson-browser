@@ -23,6 +23,7 @@ public partial class MainWindow
 
     private void InitializeBrowsingFeatures()
     {
+        AttachDownloadsPanel();
         _suggestionTimer.Tick += (_, _) => RefreshSuggestions();
         _sessionTimer.Tick += (_, _) => { _sessionTimer.Stop(); SaveSession(); };
         ShortcutStore.Changed += BroadcastShortcuts;
@@ -155,8 +156,10 @@ public partial class MainWindow
 
     private void TrackDownload(BrowserTab tab, CoreWebView2DownloadOperation operation)
     {
+        TrackDownloadView(operation);
         EventHandler<object> handler = (_, _) =>
         {
+            if (_downloadViews.TryGetValue(operation, out var item)) item.Refresh();
             if (operation.State == CoreWebView2DownloadState.Completed)
             {
                 Status("Descărcat: " + Path.GetFileName(operation.ResultFilePath), 8);

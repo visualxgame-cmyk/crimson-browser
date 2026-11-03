@@ -46,6 +46,10 @@ public sealed record ThemePalette
 /// </summary>
 public static class ThemeCatalog
 {
+    public const string SystemId = "system";
+    public const string DarkId = "vela";
+    public const string LightId = "luminos";
+
     public static IReadOnlyList<ThemePalette> All { get; } =
     [
         new ThemePalette
@@ -59,6 +63,18 @@ public static class ThemeCatalog
             TextPrimary = "#ECEDF1", TextSecondary = "#A0A3AE", TextMuted = "#6E7280",
             PopupBg = "#22242B", InsetBg = "#1A1C22",
             NewTabSurface = "#1B1D23", NewTabSurface2 = "#24262D",
+        },
+        new ThemePalette
+        {
+            Id = LightId, Name = "Luminos", Tagline = "Alb curat, pentru lumină puternică.",
+            Accent = "#FB542B", AccentHover = "#D9431E",
+            WindowBg = "#ECEEF2", ToolbarBg = "#F7F8FA", ContentBg = "#F7F8FA",
+            TabActiveBg = "#FFFFFF", TabHoverBg = "#E9EBEF",
+            BorderSoft = "#DDE1E7", BorderStrong = "#C7CCD5", HoverBg = "#E8EBF0", PressedBg = "#DDE2E9",
+            OmniboxBg = "#FFFFFF", OmniboxFocus = "#FFFFFF",
+            TextPrimary = "#1B1D21", TextSecondary = "#565B66", TextMuted = "#8A909C",
+            PopupBg = "#FFFFFF", InsetBg = "#F2F4F7",
+            NewTabSurface = "#FFFFFF", NewTabSurface2 = "#F1F3F6",
         },
         new ThemePalette
         {
@@ -125,8 +141,12 @@ public static class ThemeCatalog
     /// <summary>The palette currently applied to the UI.</summary>
     public static ThemePalette Current { get; private set; } = All[0];
 
-    public static ThemePalette Get(string? id) =>
-        All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase)) ?? All[0];
+    public static ThemePalette Get(string? id)
+    {
+        if (string.Equals(id, SystemId, StringComparison.OrdinalIgnoreCase))
+            return All.First(theme => theme.Id == (SystemTheme.IsLight ? LightId : DarkId));
+        return All.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase)) ?? All[0];
+    }
 
     /// <summary>Theme with the user's custom accent (if any) applied on top.</summary>
     public static ThemePalette Resolve(Settings settings)

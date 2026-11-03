@@ -172,8 +172,9 @@
             </StackPanel>
         </Grid>
 
-        <!-- ================= TOOLBAR ================= -->
-        <Border Grid.Row="1" Background="{DynamicResource ToolbarBg}" Padding="8,2,8,6"
+        <!-- ================= TOOLBAR + BOOKMARKS BAR ================= -->
+        <StackPanel Grid.Row="1">
+        <Border Background="{DynamicResource ToolbarBg}" Padding="8,2,8,6"
                 MouseLeftButtonDown="TabStrip_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -243,6 +244,66 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Bookmarks bar: a compact strip under the omnibox, hidden on request. -->
+        <Border x:Name="BookmarksBar" Visibility="Collapsed"
+                Background="{DynamicResource WindowBg}"
+                BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,1"
+                Padding="6,2" AutomationProperties.Name="Bară de favorite">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="BookmarksBarEmpty" Grid.Column="0" Visibility="Collapsed"
+                           Text="Favoritele apar aici — apasă Ctrl+D pe o pagină."
+                           FontSize="11" Foreground="{DynamicResource TextMuted}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" />
+
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled" PanningMode="HorizontalOnly">
+                    <ItemsControl x:Name="BookmarksBarItems">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource BookmarkBarButton}" Tag="{Binding Url}"
+                                        Click="BookmarkBarItem_Click"
+                                        ContextMenuOpening="BookmarkBarItem_ContextMenuOpening"
+                                        ToolTip="{Binding Title}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}"
+                                                   FontSize="10" Foreground="{DynamicResource TextMuted}"
+                                                   Margin="0,0,6,0" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                            <Setter Property="Text" Value="&#xE8B7;" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding Title}" MaxWidth="170"
+                                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Button Grid.Column="1" x:Name="BookmarksBarAllButton" Style="{StaticResource IconButton}"
+                        Width="26" Height="24" FontSize="12" Content="&#xE712;"
+                        Margin="4,0,0,0" ToolTip="Toate favoritele"
+                        Click="BookmarksBarAll_Click" />
+            </Grid>
+        </Border>
+        </StackPanel>
 
         <!-- ================= CONTENT ================= -->
         <Border x:Name="PermissionBar" Grid.Row="2" Visibility="Collapsed" Background="{DynamicResource ToolbarBg}" BorderBrush="{DynamicResource BorderSoft}" BorderThickness="0,1,0,1" Padding="14,10" PreviewKeyDown="PermissionBar_KeyDown" AutomationProperties.Name="Permisiune solicitată de site">
@@ -324,6 +385,7 @@
 
         <!-- ================= MENU POPUP ================= -->
         <Popup x:Name="MenuPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade"
                PlacementTarget="{Binding ElementName=MenuButton}" HorizontalOffset="-268">
             <Border Style="{StaticResource PopupSurface}" Width="300" Margin="6">
                 <Border.Effect>
@@ -370,12 +432,17 @@
                         </Button>
                         <Button Style="{StaticResource MenuRowButton}" Content="Permisiuni și date pe site" Click="SiteSettings_Click" />
                         <Button Style="{StaticResource MenuRowButton}" Content="Bibliotecă — istoric, favorite, taburi" Tag="bookmarks" Click="Library_Click" />
+                        <CheckBox x:Name="BookmarksBarToggle" Style="{StaticResource SettingsSwitch}"
+                                  Margin="10,6,10,8" Click="BookmarksBarToggle_Click">
+                            <TextBlock Text="Bară de favorite (Ctrl+Shift+B)" />
+                        </CheckBox>
                         <Button Style="{StaticResource MenuRowButton}" Content="Profiluri, import și grupuri…" Tag="profiles" Click="Workspace_Click" />
                         <Button Style="{StaticResource MenuRowButton}" Content="Consum pe procese…" Tag="resources" Click="Workspace_Click" />
                         <Button Style="{StaticResource MenuRowButton}" Content="Citește mai târziu" Tag="reading" Click="Library_Click" />
                         <Button Style="{StaticResource MenuRowButton}" Click="Print_Click"><DockPanel Width="300"><TextBlock DockPanel.Dock="Right" Text="Ctrl+P" Foreground="{DynamicResource TextMuted}" /><TextBlock Text="Imprimă…" /></DockPanel></Button>
                         <Button Style="{StaticResource MenuRowButton}" Click="SavePdf_Click"><DockPanel Width="300"><TextBlock DockPanel.Dock="Right" Text="Ctrl+Shift+S" Foreground="{DynamicResource TextMuted}" /><TextBlock Text="Salvează PDF…" /></DockPanel></Button>
                         <Button Style="{StaticResource MenuRowButton}" Content="Mod de citire" Click="Reader_Click" />
+                        <Button Style="{StaticResource MenuRowButton}" Content="Picture-in-Picture" Click="PictureInPicture_Click" />
                         <Button Style="{StaticResource MenuRowButton}" Content="Tradu pagina cu Google Translate…" Click="Translate_Click" />
 
                         <Separator Background="{DynamicResource BorderSoft}" Margin="6,6" Height="1" />
@@ -465,8 +532,110 @@
             </Border>
         </Popup>
 
+        <!-- ================= DOWNLOADS PANEL ================= -->
+        <Popup x:Name="DownloadsPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade"
+               PlacementTarget="{Binding ElementName=DownloadsButton}" HorizontalOffset="-318">
+            <Border Style="{StaticResource PopupSurface}" Width="370" Margin="6" Padding="14">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.5" Color="#000000" />
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Descărcări" FontSize="14" FontWeight="SemiBold" />
+                            <TextBlock x:Name="DownloadsCountText" FontSize="11" Foreground="{DynamicResource TextMuted}"
+                                       Margin="8,2,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <Button x:Name="DownloadsFolderButton" Content="&#xE838;" Style="{StaticResource IconButton}"
+                                    Width="24" Height="24" FontSize="11" ToolTip="Deschide folderul descărcărilor"
+                                    Margin="0,0,4,0" Click="DownloadsFolder_Click" />
+                            <Button x:Name="DownloadsClearButton" Content="Golește" Style="{StaticResource MenuRowButton}"
+                                    Padding="8,4" FontSize="11.5"
+                                    Foreground="{DynamicResource TextSecondary}" Click="DownloadsClear_Click"
+                                    ToolTip="Elimină descărcările finalizate din listă" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <TextBlock x:Name="DownloadsEmpty" Text="Nicio descărcare încă. Fișierele salvate apar aici."
+                                   FontSize="12" Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"
+                                   Margin="2,2,2,8" />
+                        <ScrollViewer x:Name="DownloadsScroll" MaxHeight="380" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="DownloadsList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource InsetBg}" CornerRadius="8"
+                                                Padding="10" Margin="0,0,2,7">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="&#xE896;" FontFamily="{StaticResource IconFont}"
+                                                               FontSize="14" Foreground="{DynamicResource TextSecondary}"
+                                                               Margin="0,0,9,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Title}" FontSize="12.5" MaxWidth="176"
+                                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                               ToolTip="{Binding FilePath}" />
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button Content="&#xE8E5;" Style="{StaticResource IconButton}"
+                                                            Width="24" Height="24" FontSize="11" ToolTip="Deschide fișierul"
+                                                            Visibility="{Binding OpenVisibility}"
+                                                            Tag="{Binding}" Click="DownloadOpen_Click" />
+                                                    <Button Content="&#xE838;" Style="{StaticResource IconButton}"
+                                                            Width="24" Height="24" FontSize="11" ToolTip="Arată în folder"
+                                                            Visibility="{Binding RevealVisibility}"
+                                                            Tag="{Binding}" Click="DownloadReveal_Click" />
+                                                    <Button Content="&#xE769;" Style="{StaticResource IconButton}"
+                                                            Width="24" Height="24" FontSize="11" ToolTip="Pauză"
+                                                            Visibility="{Binding PauseVisibility}"
+                                                            Tag="{Binding}" Click="DownloadPause_Click" />
+                                                    <Button Content="&#xE768;" Style="{StaticResource IconButton}"
+                                                            Width="24" Height="24" FontSize="11" ToolTip="Reia"
+                                                            Visibility="{Binding ResumeVisibility}"
+                                                            Tag="{Binding}" Click="DownloadResume_Click" />
+                                                    <Button Content="&#xE711;" Style="{StaticResource IconButton}"
+                                                            Width="24" Height="24" FontSize="11" ToolTip="Anulează"
+                                                            Visibility="{Binding CancelVisibility}"
+                                                            Tag="{Binding}" Click="DownloadCancel_Click" />
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="23,5,0,0">
+                                                    <ProgressBar Style="{StaticResource DownloadProgressBar}"
+                                                                 Value="{Binding Progress, Mode=OneWay}" Height="3"
+                                                                 Visibility="{Binding ProgressVisibility}" />
+                                                    <TextBlock Text="{Binding DetailText}" FontSize="10.5"
+                                                               Foreground="{DynamicResource TextMuted}" Margin="0,5,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Popup>
+
         <!-- ================= SHIELD POPUP ================= -->
         <Popup x:Name="ShieldPopup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               PopupAnimation="Fade"
                PlacementTarget="{Binding ElementName=ShieldButton}" HorizontalOffset="-236">
             <Border Style="{StaticResource PopupSurface}" Width="268" Margin="6" Padding="14">
                 <Border.Effect>
