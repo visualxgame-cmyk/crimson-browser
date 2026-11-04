@@ -1,0 +1,230 @@
+<Window x:Class="CrimsonBrowser.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Crimson Browser Settings" Height="560" Width="700"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False">
+
+    <Border Background="#161720" BorderBrush="{StaticResource CrimsonDarkRedBrush}" BorderThickness="1.5"
+            CornerRadius="16" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="30" ShadowDepth="8" Color="#000000" Opacity="0.85" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="54" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="54" />
+            </Grid.RowDefinitions>
+
+            <!-- HEADER -->
+            <Border Grid.Row="0" Background="#111218" CornerRadius="15 15 0 0" Padding="18 0"
+                    BorderBrush="#252736" BorderThickness="0 0 0 1"
+                    MouseLeftButtonDown="Header_MouseLeftButtonDown" Cursor="SizeAll">
+                <Grid VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Width="18" Height="18" Fill="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 10 0"
+                              Data="M9 1 L16 4 C16 10 13 14 9 17 C5 14 2 10 2 4 Z" />
+                        <TextBlock x:Name="TxtSettingsTitle" Text="Settings" FontSize="15" FontWeight="Bold" Foreground="White"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource CrimsonNavButtonStyle}" Width="30" Height="30"
+                            Click="Close_Click" ToolTip="Close">
+                        <TextBlock Text="✕" FontSize="13" Foreground="#8E92A4" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- BODY -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="180" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Sidebar -->
+                <Border Grid.Column="0" Background="#13141B" BorderBrush="#252736" BorderThickness="0 0 1 0"
+                        Padding="12 16">
+                    <StackPanel>
+                        <Button x:Name="NavGeneralBtn" Style="{StaticResource CrimsonMenuItemStyle}"
+                                Click="Nav_Click" Tag="General" Margin="0 0 0 4">
+                            <TextBlock x:Name="TxtNavGeneral" Text="🌐 General" FontWeight="SemiBold" />
+                        </Button>
+                        <Button x:Name="NavAppearanceBtn" Style="{StaticResource CrimsonMenuItemStyle}"
+                                Click="Nav_Click" Tag="Appearance" Margin="0 0 0 4">
+                            <TextBlock x:Name="TxtNavAppearance" Text="🎨 Appearance" FontWeight="SemiBold" />
+                        </Button>
+                        <Button x:Name="NavSearchBtn" Style="{StaticResource CrimsonMenuItemStyle}"
+                                Click="Nav_Click" Tag="Search" Margin="0 0 0 4">
+                            <TextBlock x:Name="TxtNavSearch" Text="🔍 Search Engine" FontWeight="SemiBold" />
+                        </Button>
+                        <Button x:Name="NavShieldsBtn" Style="{StaticResource CrimsonMenuItemStyle}"
+                                Click="Nav_Click" Tag="Shields" Margin="0 0 0 4">
+                            <TextBlock x:Name="TxtNavShields" Text="🛡️ Shields" FontWeight="SemiBold" />
+                        </Button>
+                        <Button x:Name="NavAboutBtn" Style="{StaticResource CrimsonMenuItemStyle}"
+                                Click="Nav_Click" Tag="About" Margin="0 0 0 4">
+                            <TextBlock x:Name="TxtNavAbout" Text="ℹ️ About" FontWeight="SemiBold" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- Content Panes -->
+                <Border Grid.Column="1" Padding="22 18">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <Grid>
+                            <!-- PANE 1: GENERAL (LANGUAGE) -->
+                            <StackPanel x:Name="PaneGeneral" Visibility="Visible">
+                                <TextBlock x:Name="TxtLangTitle" Text="Language" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
+                                <TextBlock x:Name="TxtLangDesc" Text="Choose the display language for Crimson Browser" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
+                                    <StackPanel>
+                                        <RadioButton x:Name="RadioLangEn" GroupName="LangGroup"
+                                                     Checked="Language_Checked" Margin="0 0 0 12" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🇬🇧" FontSize="14" Margin="0 0 8 0" />
+                                                <TextBlock Text="English (Default)" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioLangRo" GroupName="LangGroup"
+                                                     Checked="Language_Checked" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🇷🇴" FontSize="14" Margin="0 0 8 0" />
+                                                <TextBlock Text="Română" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                            </StackPanel>
+                                        </RadioButton>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- PANE 2: APPEARANCE (WALLPAPER) -->
+                            <StackPanel x:Name="PaneAppearance" Visibility="Collapsed">
+                                <TextBlock x:Name="TxtBgTitle" Text="New Tab Background" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
+                                <TextBlock x:Name="TxtBgDesc" Text="Customize your start page with an image of your choice" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtWallpaperStatus" Text="Default Crimson Stealth Background" FontSize="12"
+                                                   Foreground="#A5A9B8" Margin="0 0 0 14" />
+                                        <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="Auto" Height="36"
+                                                Background="#251219" BorderBrush="{StaticResource CrimsonDarkRedBrush}" BorderThickness="1"
+                                                Padding="16 0" HorizontalAlignment="Left" Click="ChooseImage_Click" Margin="0 0 0 10">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🖼️" Margin="0 0 8 0" />
+                                                <TextBlock x:Name="TxtChooseImgBtn" Text="Choose Custom Image..." FontWeight="SemiBold" Foreground="{StaticResource CrimsonRedGlowBrush}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="Auto" Height="30"
+                                                Background="#222432" BorderBrush="#2F3346" BorderThickness="1"
+                                                Padding="14 0" HorizontalAlignment="Left" Click="ResetImage_Click">
+                                            <TextBlock x:Name="TxtResetImgBtn" Text="Reset to Default Dark Theme" FontSize="11.5" Foreground="#A5A9B8" />
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- PANE 3: SEARCH ENGINE -->
+                            <StackPanel x:Name="PaneSearch" Visibility="Collapsed">
+                                <TextBlock Text="Default Search Engine" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
+                                <TextBlock Text="Choose the search engine used when you type in the address bar" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
+                                    <StackPanel>
+                                        <RadioButton x:Name="RadioGoogle" GroupName="SearchGroup"
+                                                     Checked="SearchEngine_Checked" Margin="0 0 0 14" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🔍" FontSize="14" Margin="0 0 10 0" />
+                                                <StackPanel>
+                                                    <TextBlock Text="Google" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                                    <TextBlock Text="google.com — Default" Foreground="#686C7E" FontSize="11" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioDuckDuckGo" GroupName="SearchGroup"
+                                                     Checked="SearchEngine_Checked" Margin="0 0 0 14" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🦆" FontSize="14" Margin="0 0 10 0" />
+                                                <StackPanel>
+                                                    <TextBlock Text="DuckDuckGo" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                                    <TextBlock Text="duckduckgo.com — Privacy-focused" Foreground="#686C7E" FontSize="11" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioBrave" GroupName="SearchGroup"
+                                                     Checked="SearchEngine_Checked" Margin="0 0 0 14" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🦁" FontSize="14" Margin="0 0 10 0" />
+                                                <StackPanel>
+                                                    <TextBlock Text="Brave Search" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                                    <TextBlock Text="search.brave.com — Independent" Foreground="#686C7E" FontSize="11" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </RadioButton>
+                                        <RadioButton x:Name="RadioBing" GroupName="SearchGroup"
+                                                     Checked="SearchEngine_Checked" Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" Margin="6 0 0 0">
+                                                <TextBlock Text="🔵" FontSize="14" Margin="0 0 10 0" />
+                                                <StackPanel>
+                                                    <TextBlock Text="Bing" Foreground="White" FontSize="12.5" FontWeight="SemiBold" />
+                                                    <TextBlock Text="bing.com — Microsoft" Foreground="#686C7E" FontSize="11" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </RadioButton>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- PANE 4: SHIELDS & PRIVACY -->
+                            <StackPanel x:Name="PaneShields" Visibility="Collapsed">
+                                <TextBlock x:Name="TxtShieldsTitle" Text="Crimson Shields &amp; Privacy" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
+                                <TextBlock x:Name="TxtShieldsDesc" Text="Active protection summary and engine status" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="🛡️ Crimson Shields Engine: Active" Foreground="#44FF44" FontWeight="SemiBold" Margin="0 0 0 6" />
+                                        <TextBlock Text="• Ad &amp; Tracker network blocking enabled" Foreground="#D1D4DC" FontSize="11.5" Margin="0 0 0 4" />
+                                        <TextBlock Text="• Low-RAM Mode (Background tab hibernation) enabled" Foreground="#D1D4DC" FontSize="11.5" Margin="0 0 0 4" />
+                                        <TextBlock Text="• Automatic HTTPS upgrade enabled" Foreground="#D1D4DC" FontSize="11.5" Margin="0 0 0 4" />
+                                        <TextBlock Text="• Spam pop-ups blocker enabled" Foreground="#D1D4DC" FontSize="11.5" Margin="0 0 0 4" />
+                                        <TextBlock Text="• Enhanced YouTube ad skip enabled" Foreground="#D1D4DC" FontSize="11.5" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- PANE 5: ABOUT -->
+                            <StackPanel x:Name="PaneAbout" Visibility="Collapsed">
+                                <TextBlock Text="About Crimson Browser" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
+                                <TextBlock Text="Version 1.0.0 (Release Build)" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="🔴 CRIMSON BROWSER" FontWeight="Bold" Foreground="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 0 6" />
+                                        <TextBlock Text="A modern, high-speed, low-resource web browser powered by the Chromium engine."
+                                                   TextWrapping="Wrap" Foreground="#A5A9B8" FontSize="12" Margin="0 0 0 10" />
+                                        <TextBlock Text="Engine: Chromium Blink &amp; V8 (Microsoft WebView2 Evergreen)" Foreground="#777B8E" FontSize="11" Margin="0 0 0 4" />
+                                        <TextBlock Text="Platform: .NET 10 WPF (Windows x64)" Foreground="#777B8E" FontSize="11" Margin="0 0 0 4" />
+                                        <TextBlock Text="Features: Shields, History, Bookmarks, Incognito, Downloads, Search Engine Choice" Foreground="#777B8E" FontSize="11" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- FOOTER -->
+            <Border Grid.Row="2" Background="#111218" CornerRadius="0 0 15 15" Padding="18 0"
+                    BorderBrush="#252736" BorderThickness="0 1 0 0">
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="130" Height="34"
+                        Background="#E61937" HorizontalAlignment="Right" Click="Close_Click">
+                    <TextBlock x:Name="TxtCloseBtn" Text="Save &amp; Close" FontWeight="Bold" Foreground="White" />
+                </Button>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

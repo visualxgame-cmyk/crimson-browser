@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crimson Browser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 20%, #1c0a0e 0%, #0c0d10 60%, #060709 100%);
+            color: #f1f2f6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Custom Wallpaper Layer */
+        .custom-bg-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            z-index: 0;
+            pointer-events: none;
+            display: none;
+        }
+
+        .custom-bg-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(8, 9, 13, 0.55);
+            backdrop-filter: blur(1.5px);
+            z-index: 0;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* Ambient Glow Effect */
+        .ambient-glow {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(230, 25, 55, 0.22) 0%, rgba(230, 25, 55, 0) 70%);
+            filter: blur(50px);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .container {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 860px;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: auto;
+            margin-bottom: auto;
+        }
+
+        /* Brand & Logo */
+        .brand-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 35px;
+            text-align: center;
+        }
+
+        .logo-wrap {
+            position: relative;
+            width: 90px;
+            height: 90px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: drop-shadow(0 0 25px rgba(230, 25, 55, 0.5));
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+        }
+
+        .logo-wrap:hover {
+            transform: scale(1.08) rotate(2deg);
+        }
+
+        .brand-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #ffffff 30%, #ff4d6d 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand-subtitle {
+            font-size: 0.88rem;
+            color: #9da1b2;
+            letter-spacing: 1.5px;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        /* Search Bar */
+        .search-container {
+            width: 100%;
+            max-width: 660px;
+            margin-bottom: 35px;
+            position: relative;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: rgba(22, 23, 29, 0.85);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(230, 25, 55, 0.35);
+            border-radius: 30px;
+            padding: 8px 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            transition: all 0.25s ease;
+        }
+
+        .search-box:focus-within {
+            border-color: #ff3355;
+            box-shadow: 0 0 25px rgba(230, 25, 55, 0.35), 0 12px 35px rgba(0, 0, 0, 0.7);
+            background: rgba(26, 27, 35, 0.95);
+        }
+
+        .search-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 14px;
+            fill: #e61937;
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 1.05rem;
+            color: #ffffff;
+            user-select: text;
+        }
+
+        .search-input::placeholder {
+            color: #7b8094;
+            font-weight: 400;
+        }
+
+        .search-engine-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(230, 25, 55, 0.15);
+            border: 1px solid rgba(230, 25, 55, 0.4);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            color: #ff6b81;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* Shortcuts Grid */
+        .shortcuts-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            width: 100%;
+            max-width: 660px;
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 600px) {
+            .shortcuts-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .shortcut-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 16px 12px;
+            background: rgba(20, 21, 27, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
+        }
+
+        .shortcut-card:hover {
+            background: rgba(30, 32, 42, 0.85);
+            border-color: rgba(230, 25, 55, 0.5);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(230, 25, 55, 0.2);
+        }
+
+        .shortcut-icon {
+            width: 36px;
+            height: 36px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .shortcut-title {
+            font-size: 0.82rem;
+            color: #d1d4dc;
+            font-weight: 500;
+        }
+
+        /* Feature badges */
+        .features-bar {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .feature-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(18, 19, 24, 0.65);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.78rem;
+            color: #8b8e9b;
+        }
+
+        .feature-badge span.highlight {
+            color: #ff4d6d;
+            font-weight: 600;
+        }
+
+        .badge-dot {
+            width: 7px;
+            height: 7px;
+            background: #e61937;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #ff2a4b;
+        }
+
+        /* Footer & Settings shortcut */
+        footer {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            padding: 18px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #63677a;
+        }
+
+        .settings-fab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(22, 23, 30, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(230, 25, 55, 0.3);
+            border-radius: 20px;
+            padding: 6px 14px;
+            color: #d8dbe5;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .settings-fab:hover {
+            background: rgba(35, 37, 48, 0.9);
+            border-color: #ff3355;
+            color: white;
+            box-shadow: 0 0 15px rgba(230, 25, 55, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Custom Wallpaper Layers -->
+    <div id="customBg" class="custom-bg-layer"></div>
+    <div id="customOverlay" class="custom-bg-overlay"></div>
+
+    <div class="ambient-glow"></div>
+
+    <div class="container">
+        <!-- Brand Header -->
+        <div class="brand-section">
+            <div class="logo-wrap" onclick="openSettings()">
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" width="90" height="90">
+                    <defs>
+                        <linearGradient id="crimsonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#ff3355" />
+                            <stop offset="50%" stop-color="#e61937" />
+                            <stop offset="100%" stop-color="#8a0c20" />
+                        </linearGradient>
+                        <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+                            <stop offset="100%" stop-color="#ff4d6d" stop-opacity="0.3" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M50 8 L85 24 C85 55 68 80 50 92 C32 80 15 55 15 24 Z" 
+                          fill="#13141b" stroke="url(#crimsonGrad)" stroke-width="4" stroke-linejoin="round"/>
+                    <path d="M50 18 L73 30 C73 52 60 70 50 80 C40 70 27 52 27 30 Z" 
+                          fill="url(#crimsonGrad)" opacity="0.35"/>
+                    <path d="M50 24 L68 34 L50 72 L32 34 Z" 
+                          fill="url(#crimsonGrad)"/>
+                    <path d="M50 32 L60 42 L50 62 L40 42 Z" 
+                          fill="url(#glowGrad)"/>
+                </svg>
+            </div>
+            <h1 class="brand-title">CRIMSON</h1>
+            <p id="lblSubtitle" class="brand-subtitle">CHROMIUM POWERED • HIGH SPEED • LOW FOOTPRINT</p>
+        </div>
+
+        <!-- Omnibox Search -->
+        <div class="search-container">
+            <form id="searchForm" onsubmit="handleSearch(event)">
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24">
+                        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search with Google or enter web address..." autofocus autocomplete="off" />
+                    <div class="search-engine-pill">
+                        <span class="badge-dot"></span>
+                        <span>Google</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Quick Shortcuts -->
+        <div class="shortcuts-grid">
+            <a class="shortcut-card" onclick="navigate('https://www.youtube.com')">
+                <div class="shortcut-icon" style="background: rgba(255, 0, 0, 0.15);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#ff0000">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                </div>
+                <span class="shortcut-title">YouTube</span>
+            </a>
+
+            <a class="shortcut-card" onclick="navigate('https://www.google.com')">
+                <div class="shortcut-icon" style="background: rgba(66, 133, 244, 0.15);">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#4285F4">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+                    </svg>
+                </div>
+                <span class="shortcut-title">Google</span>
+            </a>
+
+            <a class="shortcut-card" onclick="navigate('https://github.com')">
+                <div class="shortcut-icon" style="background: rgba(255, 255, 255, 0.1);">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#ffffff">
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+                    </svg>
+                </div>
+                <span class="shortcut-title">GitHub</span>
+            </a>
+
+            <a class="shortcut-card" onclick="navigate('https://www.reddit.com')">
+                <div class="shortcut-icon" style="background: rgba(255, 69, 0, 0.15);">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#ff4500">
+                        <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.702zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.197-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+                    </svg>
+                </div>
+                <span class="shortcut-title">Reddit</span>
+            </a>
+        </div>
+
+        <!-- System & Privacy Status Badges -->
+        <div class="features-bar">
+            <div class="feature-badge">
+                <span class="badge-dot"></span>
+                <span id="lblEngine">Engine: <span class="highlight">Chromium Blink</span></span>
+            </div>
+            <div class="feature-badge">
+                <span class="badge-dot"></span>
+                <span id="lblOpt">Optimization: <span class="highlight">Low RAM Mode</span></span>
+            </div>
+            <div class="feature-badge">
+                <span class="badge-dot"></span>
+                <span id="lblSec">Security: <span class="highlight">Crimson Shields Active</span></span>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <span id="lblFooter">Crimson Browser &copy; 2026 • Built for speed and privacy</span>
+        <button class="settings-fab" onclick="openSettings()">
+            <span>⚙️</span>
+            <span id="lblSettingsBtn">Settings</span>
+        </button>
+    </footer>
+
+    <script>
+        function navigate(url) {
+            window.location.href = url;
+        }
+
+        function handleSearch(e) {
+            e.preventDefault();
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            if (query.startsWith('http://') || query.startsWith('https://')) {
+                window.location.href = query;
+            } else if (query.includes('.') && !query.includes(' ')) {
+                window.location.href = 'https://' + query;
+            } else {
+                window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(query);
+            }
+        }
+
+        function openSettings() {
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage('open-settings');
+            }
+        }
+
+        // Check for Custom Wallpaper
+        function checkWallpaper() {
+            const img = new Image();
+            img.onload = function() {
+                const bg = document.getElementById('customBg');
+                const overlay = document.getElementById('customOverlay');
+                bg.style.backgroundImage = 'url("custom_wallpaper.jpg?v=' + Date.now() + '")';
+                bg.style.display = 'block';
+                overlay.style.display = 'block';
+            };
+            img.onerror = function() {
+                const bg = document.getElementById('customBg');
+                const overlay = document.getElementById('customOverlay');
+                bg.style.display = 'none';
+                overlay.style.display = 'none';
+            };
+            img.src = 'custom_wallpaper.jpg?v=' + Date.now();
+        }
+
+        // Apply localization strings
+        function applyLanguage(lang) {
+            if (lang === 'ro') {
+                document.getElementById('lblSubtitle').innerText = 'MOTOR CHROMIUM • VITEZĂ SPORITĂ • CONSUM REDUS';
+                document.getElementById('searchInput').placeholder = 'Caută pe Google sau introdu o adresă URL...';
+                document.getElementById('lblEngine').innerHTML = 'Motor: <span class="highlight">Chromium Blink</span>';
+                document.getElementById('lblOpt').innerHTML = 'Optimizare: <span class="highlight">Mod Low-RAM</span>';
+                document.getElementById('lblSec').innerHTML = 'Securitate: <span class="highlight">Crimson Shields Activ</span>';
+                document.getElementById('lblFooter').innerText = 'Crimson Browser © 2026 • Construit pentru viteză și intimitate';
+                document.getElementById('lblSettingsBtn').innerText = 'Setări';
+            } else {
+                document.getElementById('lblSubtitle').innerText = 'CHROMIUM POWERED • HIGH SPEED • LOW FOOTPRINT';
+                document.getElementById('searchInput').placeholder = 'Search with Google or enter web address...';
+                document.getElementById('lblEngine').innerHTML = 'Engine: <span class="highlight">Chromium Blink</span>';
+                document.getElementById('lblOpt').innerHTML = 'Optimization: <span class="highlight">Low RAM Mode</span>';
+                document.getElementById('lblSec').innerHTML = 'Security: <span class="highlight">Crimson Shields Active</span>';
+                document.getElementById('lblFooter').innerText = 'Crimson Browser © 2026 • Built for speed and privacy';
+                document.getElementById('lblSettingsBtn').innerText = 'Settings';
+            }
+        }
+
+        // Listen for messages from C# host
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', event => {
+                if (event.data && event.data.type === 'setLanguage') {
+                    applyLanguage(event.data.lang);
+                } else if (event.data && event.data.type === 'refreshWallpaper') {
+                    checkWallpaper();
+                }
+            });
+        }
+
+        // Initial check
+        checkWallpaper();
+    </script>
+</body>
+</html>

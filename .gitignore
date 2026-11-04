@@ -1,7 +1,31 @@
+# Build output
 bin/
 obj/
+artifacts/
+publish/
+
+# Visual Studio
 .vs/
 *.user
 *.suo
-publish/
-artifacts/
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# ReSharper
+_ReSharper*/
+*.DotSettings.user
+
+# Crash / local logs
+crash.log
+*.log
+
+# OS junk
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local runtime data
+Resources/custom_wallpaper.jpg

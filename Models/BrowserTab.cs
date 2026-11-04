@@ -1,0 +1,488 @@
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Windows;
+using CrimsonBrowser.Services;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
+
+namespace CrimsonBrowser.Models;
+
+public class BrowserTab : INotifyPropertyChanged
+{
+    private readonly CoreWebView2Environment _environment;
+    private string _title = "New Tab";
+    private string _url   = "crimson://start";
+    private bool   _isLoading;
+    private bool   _canGoBack;
+    private bool   _canGoForward;
+    private bool   _isActive;
+    private string? _faviconUrl;
+
+    public string Id { get; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>Incognito tabs must never write to the on-disk history.</summary>
+    public bool IsIncognito { get; }
+
+    public WebView2 WebView { get; }
+
+    /// <summary>True when this tab is showing the Crimson start page.</summary>
+    public bool IsStartPage =>
+        string.IsNullOrWhiteSpace(_url) ||
+        _url == "crimson://start" ||
+        _url.StartsWith("https://start.crimson", StringComparison.OrdinalIgnoreCase) ||
+        _url.StartsWith("data:text/html",         StringComparison.OrdinalIgnoreCase);
+
+    public string Title
+    {
+        get => _title;
+        set => SetField(ref _title, value);
+    }
+
+    public string Url
+    {
+        get => _url;
+        set
+        {
+            // Normalize start page variants so they never show in the omnibox
+            string clean = (value.StartsWith("https://start.crimson", StringComparison.OrdinalIgnoreCase) ||
+                            value.StartsWith("data:text/html",         StringComparison.OrdinalIgnoreCase))
+                           ? "crimson://start"
+                           : value;
+            SetField(ref _url, clean);
+        }
+    }
+
+    public bool IsLoading
+    {
+        get => _isLoading;
+        set => SetField(ref _isLoading, value);
+    }
+
+    public bool CanGoBack
+    {
+        get => _canGoBack;
+        set => SetField(ref _canGoBack, value);
+    }
+
+    public bool CanGoForward
+    {
+        get => _canGoForward;
+        set => SetField(ref _canGoForward, value);
+    }
+
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (SetField(ref _isActive, value))
+            {
+                WebView.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+
+                // Low-RAM Optimizer: suspend background tabs to cut memory usage
+                try
+                {
+                    if (ShieldService.Instance.LowRamMode && WebView.CoreWebView2 != null)
+                    {
+                        if (value)
+                            WebView.CoreWebView2.Resume();
+                        else
+                            _ = WebView.CoreWebView2.TrySuspendAsync();
+                    }
+                }
+                catch { }
+            }
+        }
+    }
+
+    public string? FaviconUrl
+    {
+        get => _faviconUrl;
+        set => SetField(ref _faviconUrl, value);
+    }
+
+    public event Action<BrowserTab, string>? RequestNewTab;
+    public event Action<BrowserTab>?        RequestClose;
+    public event Action?                    RequestOpenSettings;
+
+    public BrowserTab(CoreWebView2Environment environment, bool isIncognito = false)
+    {
+        _environment = environment;
+        IsIncognito  = isIncognito;
+
+        WebView = new WebView2
+        {
+            Visibility = Visibility.Collapsed,
+            DefaultBackgroundColor = System.Drawing.Color.FromArgb(12, 13, 16)
+        };
+
+        _ = InitializeAsync(environment);
+    }
+
+    private async Task InitializeAsync(CoreWebView2Environment environment)
+    {
+        try
+        {
+            await WebView.EnsureCoreWebView2Async(environment);
+
+            if (WebView.CoreWebView2 != null)
+            {
+                // Map local resources to virtual host https://start.crimson
+                string resourcesFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+                if (Directory.Exists(resourcesFolder))
+                {
+                    WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        "start.crimson",
+                        resourcesFolder,
+                        CoreWebView2HostResourceAccessKind.Allow
+                    );
+                }
+
+                // Setup Crimson Shields Network Filtering (Ad/Tracker Blocker)
+                WebView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+                WebView.CoreWebView2.WebResourceRequested += CoreWebView2_WebResourceRequested;
+
+                // Configure browser settings
+                WebView.CoreWebView2.Settings.IsStatusBarEnabled         = false;
+                WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+                WebView.CoreWebView2.Settings.AreDevToolsEnabled         = true;
+
+                // Event Listeners
+                WebView.CoreWebView2.NavigationStarting    += CoreWebView2_NavigationStarting;
+                WebView.CoreWebView2.NavigationCompleted   += CoreWebView2_NavigationCompleted;
+                WebView.CoreWebView2.SourceChanged         += CoreWebView2_SourceChanged;
+                WebView.CoreWebView2.DocumentTitleChanged  += CoreWebView2_DocumentTitleChanged;
+                WebView.CoreWebView2.FaviconChanged        += CoreWebView2_FaviconChanged;
+                WebView.CoreWebView2.NewWindowRequested    += CoreWebView2_NewWindowRequested;
+                WebView.CoreWebView2.WindowCloseRequested  += CoreWebView2_WindowCloseRequested;
+                WebView.CoreWebView2.WebMessageReceived    += CoreWebView2_WebMessageReceived;
+                WebView.CoreWebView2.DownloadStarting      += CoreWebView2_DownloadStarting;
+
+                LoadStartPage();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to initialize WebView2: {ex.Message}");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // NETWORK: Crimson Shields Ad / Tracker Blocker
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void CoreWebView2_WebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        if (ShieldService.Instance.ShouldBlockUrl(e.Request.Uri))
+        {
+            // Block request with an empty 403 Forbidden response
+            e.Response = _environment.CreateWebResourceResponse(null, 403, "Blocked by Crimson Shields", null);
+            ShieldService.Instance.IncrementBlockedCount();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // NAVIGATION EVENTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        // Enforce HTTPS if the shield setting is on
+        if (ShieldService.Instance.IsShieldsEnabled &&
+            ShieldService.Instance.EnforceHttps &&
+            e.Uri.StartsWith("http://",        StringComparison.OrdinalIgnoreCase) &&
+            !e.Uri.StartsWith("http://localhost",  StringComparison.OrdinalIgnoreCase) &&
+            !e.Uri.StartsWith("http://127.0.0.1",  StringComparison.OrdinalIgnoreCase))
+        {
+            e.Cancel = true;
+            string secureUri = "https://" + e.Uri.Substring(7);
+            WebView.CoreWebView2?.Navigate(secureUri);
+            return;
+        }
+
+        IsLoading = true;
+        Url       = e.Uri;
+        UpdateHistoryState();
+    }
+
+    private async void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        IsLoading = false;
+        UpdateHistoryState();
+
+        if (IsStartPage)
+        {
+            Title = LocalizationService.Instance.Get("NewTab");
+            Url   = "crimson://start";
+
+            // Sync language and wallpaper into the start page
+            try
+            {
+                string lang = LocalizationService.Instance.CurrentLanguage;
+                _ = WebView.CoreWebView2?.ExecuteScriptAsync($"applyLanguage('{lang}'); checkWallpaper();");
+            }
+            catch { }
+        }
+        else if (WebView.CoreWebView2 != null)
+        {
+            Title = string.IsNullOrWhiteSpace(WebView.CoreWebView2.DocumentTitle)
+                    ? "Crimson Tab"
+                    : WebView.CoreWebView2.DocumentTitle;
+
+            // ── Record navigation in browsing history (never in Incognito) ──
+            if (!IsIncognito)
+                HistoryService.Instance.AddEntry(Title, _url);
+
+            // ── Cosmetic Ad Blocker: hide empty ad slots ──
+            if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers)
+            {
+                try
+                {
+                    await WebView.CoreWebView2.ExecuteScriptAsync(
+                        "(function() {" +
+                        "  var el = document.getElementById('crimson-ad-blocker-css');" +
+                        "  if (!el) {" +
+                        "    el = document.createElement('style');" +
+                        "    el.id = 'crimson-ad-blocker-css';" +
+                        "    el.innerHTML = 'ins.adsbygoogle,[id*=\"google_ads\"],[class*=\"banner-ad\"]," +
+                        "[class*=\"ad-container\"],.ad-slot,.ad-banner,.adsbygoogle," +
+                        "#player-ads,.ytp-ad-module,.ytp-ad-overlay-container," +
+                        ".ytp-ad-player-overlay,.video-ads { display:none!important; }';" +
+                        "    (document.head||document.documentElement).appendChild(el);" +
+                        "  }" +
+                        "})();"
+                    );
+                }
+                catch { }
+
+                // ── Enhanced YouTube Ad Skipper ──
+                string currentUrl = _url;
+                if (currentUrl.Contains("youtube.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        await WebView.CoreWebView2.ExecuteScriptAsync(
+                            "(function() {" +
+                            "  if (window._crimsonYtAdBlocker) return;" +
+                            "  window._crimsonYtAdBlocker = true;" +
+                            "  setInterval(function() {" +
+                            "    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');" +
+                            "    if (skip) { skip.click(); return; }" +
+                            "    var v = document.querySelector('video');" +
+                            "    if (v && document.querySelector('.ad-showing')) {" +
+                            "      try { v.currentTime = v.duration; } catch(e){}" +
+                            "    }" +
+                            "    var overlay = document.querySelector('.ytp-ad-overlay-close-button');" +
+                            "    if (overlay) overlay.click();" +
+                            "  }, 300);" +
+                            "})();"
+                        );
+                    }
+                    catch { }
+                }
+            }
+        }
+    }
+
+    private void CoreWebView2_SourceChanged(object? sender, CoreWebView2SourceChangedEventArgs e)
+    {
+        if (WebView.Source != null)
+        {
+            Url = WebView.Source.ToString();
+        }
+        UpdateHistoryState();
+    }
+
+    private void CoreWebView2_DocumentTitleChanged(object? sender, object e)
+    {
+        if (IsStartPage)
+        {
+            Title = LocalizationService.Instance.Get("NewTab");
+            return;
+        }
+
+        if (WebView.CoreWebView2 != null && !string.IsNullOrWhiteSpace(WebView.CoreWebView2.DocumentTitle))
+        {
+            Title = WebView.CoreWebView2.DocumentTitle;
+        }
+    }
+
+    private void CoreWebView2_FaviconChanged(object? sender, object e)
+    {
+        if (WebView.CoreWebView2 != null)
+        {
+            FaviconUrl = WebView.CoreWebView2.FaviconUri;
+        }
+    }
+
+    private void CoreWebView2_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        RequestNewTab?.Invoke(this, e.Uri);
+    }
+
+    private void CoreWebView2_WindowCloseRequested(object? sender, object e)
+    {
+        RequestClose?.Invoke(this);
+    }
+
+    private void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
+        {
+            string message = e.TryGetWebMessageAsString();
+            if (message == "open-settings")
+            {
+                RequestOpenSettings?.Invoke();
+            }
+        }
+        catch { }
+    }
+
+    private void CoreWebView2_DownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
+    {
+        // Let Chromium handle the file saving; track progress in our Downloads hub
+        e.Handled = false;
+        DownloadsService.Instance.Track(e.DownloadOperation);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUBLIC API
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public void UpdateStartPageLanguage(string lang)
+    {
+        if (IsStartPage && WebView.CoreWebView2 != null)
+        {
+            _ = WebView.CoreWebView2.ExecuteScriptAsync($"applyLanguage('{lang}');");
+        }
+    }
+
+    public void RefreshStartPageWallpaper()
+    {
+        if (IsStartPage && WebView.CoreWebView2 != null)
+        {
+            _ = WebView.CoreWebView2.ExecuteScriptAsync("checkWallpaper();");
+        }
+    }
+
+    public void UpdateHistoryState()
+    {
+        CanGoBack    = WebView.CanGoBack;
+        CanGoForward = WebView.CanGoForward;
+    }
+
+    public void Navigate(string target)
+    {
+        if (string.IsNullOrWhiteSpace(target) || target == "crimson://start")
+        {
+            LoadStartPage();
+            return;
+        }
+
+        string cleanTarget = target.Trim();
+
+        if (!cleanTarget.StartsWith("http://",   StringComparison.OrdinalIgnoreCase) &&
+            !cleanTarget.StartsWith("https://",  StringComparison.OrdinalIgnoreCase) &&
+            !cleanTarget.StartsWith("file://",   StringComparison.OrdinalIgnoreCase))
+        {
+            if (cleanTarget.Contains('.') && !cleanTarget.Contains(' '))
+            {
+                cleanTarget = "https://" + cleanTarget;
+            }
+            else
+            {
+                // Use whatever search engine the user has selected in Settings
+                cleanTarget = SettingsService.Instance.BuildSearchUrl(cleanTarget);
+            }
+        }
+
+        try
+        {
+            WebView.CoreWebView2?.Navigate(cleanTarget);
+        }
+        catch { }
+    }
+
+    public void LoadStartPage()
+    {
+        Url   = "crimson://start";
+        Title = LocalizationService.Instance.Get("NewTab");
+
+        try
+        {
+            if (WebView.CoreWebView2 != null)
+            {
+                WebView.CoreWebView2.Navigate("https://start.crimson/startpage.html");
+                UpdateHistoryState();
+                return;
+            }
+        }
+        catch { }
+
+        // Fallback: load from disk (before virtual host is ready)
+        string startHtmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "startpage.html");
+        if (File.Exists(startHtmlPath))
+        {
+            string html = File.ReadAllText(startHtmlPath);
+            WebView.NavigateToString(html);
+        }
+        UpdateHistoryState();
+    }
+
+    public void GoBack()
+    {
+        if (WebView.CanGoBack) WebView.GoBack();
+    }
+
+    public void GoForward()
+    {
+        if (WebView.CanGoForward) WebView.GoForward();
+    }
+
+    public void Reload()
+    {
+        if (IsStartPage)
+            LoadStartPage();
+        else
+            WebView.Reload();
+    }
+
+    public void Stop()
+    {
+        WebView.Stop();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (WebView.CoreWebView2 != null)
+            {
+                WebView.CoreWebView2.WebResourceRequested  -= CoreWebView2_WebResourceRequested;
+                WebView.CoreWebView2.NavigationStarting    -= CoreWebView2_NavigationStarting;
+                WebView.CoreWebView2.NavigationCompleted   -= CoreWebView2_NavigationCompleted;
+                WebView.CoreWebView2.SourceChanged         -= CoreWebView2_SourceChanged;
+                WebView.CoreWebView2.DocumentTitleChanged  -= CoreWebView2_DocumentTitleChanged;
+                WebView.CoreWebView2.FaviconChanged        -= CoreWebView2_FaviconChanged;
+                WebView.CoreWebView2.NewWindowRequested    -= CoreWebView2_NewWindowRequested;
+                WebView.CoreWebView2.WindowCloseRequested  -= CoreWebView2_WindowCloseRequested;
+                WebView.CoreWebView2.WebMessageReceived    -= CoreWebView2_WebMessageReceived;
+                WebView.CoreWebView2.DownloadStarting      -= CoreWebView2_DownloadStarting;
+            }
+            WebView.Dispose();
+        }
+        catch { }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        return true;
+    }
+}

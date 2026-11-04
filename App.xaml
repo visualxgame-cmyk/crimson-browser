@@ -1,0 +1,181 @@
+<Application x:Class="CrimsonBrowser.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:CrimsonBrowser"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- Crimson Theme Color Palette -->
+        <Color x:Key="CrimsonRedColor">#E61937</Color>
+        <Color x:Key="CrimsonRedGlowColor">#FF3355</Color>
+        <Color x:Key="CrimsonDarkRedColor">#990F24</Color>
+        <Color x:Key="CrimsonBgDarkColor">#0D0E12</Color>
+        <Color x:Key="CrimsonBgBarColor">#13141B</Color>
+        <Color x:Key="CrimsonBgPanelColor">#1A1C25</Color>
+        <Color x:Key="CrimsonBgHoverColor">#252836</Color>
+        <Color x:Key="CrimsonBorderColor">#292C3B</Color>
+        <Color x:Key="TextWhiteColor">#F1F2F6</Color>
+        <Color x:Key="TextMutedColor">#8E92A4</Color>
+
+        <SolidColorBrush x:Key="CrimsonRedBrush" Color="{StaticResource CrimsonRedColor}" />
+        <SolidColorBrush x:Key="CrimsonRedGlowBrush" Color="{StaticResource CrimsonRedGlowColor}" />
+        <SolidColorBrush x:Key="CrimsonDarkRedBrush" Color="{StaticResource CrimsonDarkRedColor}" />
+        <SolidColorBrush x:Key="CrimsonBgDarkBrush" Color="{StaticResource CrimsonBgDarkColor}" />
+        <SolidColorBrush x:Key="CrimsonBgBarBrush" Color="{StaticResource CrimsonBgBarColor}" />
+        <SolidColorBrush x:Key="CrimsonBgPanelBrush" Color="{StaticResource CrimsonBgPanelColor}" />
+        <SolidColorBrush x:Key="CrimsonBgHoverBrush" Color="{StaticResource CrimsonBgHoverColor}" />
+        <SolidColorBrush x:Key="CrimsonBorderBrush" Color="{StaticResource CrimsonBorderColor}" />
+        <SolidColorBrush x:Key="TextWhiteBrush" Color="{StaticResource TextWhiteColor}" />
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+
+        <!-- Crimson Icon Button Style -->
+        <Style x:Key="CrimsonNavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#252836" />
+                                <Setter Property="Foreground" Value="{StaticResource TextWhiteBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#351722" />
+                                <Setter Property="Foreground" Value="{StaticResource CrimsonRedGlowBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.3" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Window Chrome Button Style (Minimize/Maximize) -->
+        <Style x:Key="CrimsonChromeBtnStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#252836" />
+                                <Setter Property="Foreground" Value="{StaticResource TextWhiteBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#323649" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Close Window Button Style -->
+        <Style x:Key="CrimsonCloseBtnStyle" TargetType="Button" BasedOn="{StaticResource CrimsonChromeBtnStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#E61937" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#A80D24" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Sleek Crimson Toggle Switch Style -->
+        <Style x:Key="CrimsonToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="42" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="track" Background="#262838" CornerRadius="12" SnapsToDevicePixels="True"
+                                BorderBrush="#383C50" BorderThickness="1.2">
+                            <Grid>
+                                <Ellipse x:Name="thumb" Width="16" Height="16" Fill="#8E92A4" 
+                                         HorizontalAlignment="Left" Margin="3 0 0 0">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.4" />
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="track" Property="Background" Value="#E61937" />
+                                <Setter TargetName="track" Property="BorderBrush" Value="#FF3355" />
+                                <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="thumb" Property="Margin" Value="0 0 3 0" />
+                                <Setter TargetName="thumb" Property="Fill" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="track" Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern Sleek Crimson Menu Item Button Style -->
+        <Style x:Key="CrimsonMenuItemStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#D8DBE5" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" 
+                                Padding="10 0" SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#252838" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#381520" />
+                                <Setter Property="Foreground" Value="{StaticResource CrimsonRedGlowBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Application.Resources>
+</Application>
