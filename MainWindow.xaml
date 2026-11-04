@@ -29,17 +29,26 @@
         <KeyBinding Key="T"  Modifiers="Control+Shift"        Command="{Binding ReopenClosedTabCommand,   RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="B"  Modifiers="Control+Shift"        Command="{Binding ToggleBookmarksBarCommand,RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="D"  Modifiers="Control"              Command="{Binding ToggleBookmarkCommand,    RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F11"                                 Command="{Binding ToggleFullscreenCommand,  RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F"  Modifiers="Control"              Command="{Binding FindCommand,              RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control"             Command="{Binding NextTabCommand,           RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control+Shift"       Command="{Binding PrevTabCommand,           RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="D0" Modifiers="Control"              Command="{Binding ResetZoomCommand,         RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="OemPlus"  Modifiers="Control"        Command="{Binding ZoomInCommand,            RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="OemMinus" Modifiers="Control"        Command="{Binding ZoomOutCommand,           RelativeSource={RelativeSource AncestorType=Window}}" />
     </Window.InputBindings>
 
     <Grid>
         <Grid.RowDefinitions>
             <!-- Row 0: Tab strip & title bar -->
-            <RowDefinition Height="44" />
+            <RowDefinition x:Name="TopBarRow" Height="44" />
             <!-- Row 1: Nav bar & omnibox -->
-            <RowDefinition Height="50" />
+            <RowDefinition x:Name="NavBarRow" Height="50" />
             <!-- Row 2: Bookmarks bar (collapsible) -->
             <RowDefinition x:Name="BookmarksBarRow" Height="Auto" />
-            <!-- Row 3: Web content viewport -->
+            <!-- Row 3: Find in page bar (collapsible) -->
+            <RowDefinition x:Name="FindBarRow" Height="Auto" />
+            <!-- Row 4: Web content viewport -->
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -85,16 +94,30 @@
                                     <Border x:Name="TabBorder" Width="180" Height="36" Margin="0 0 3 0"
                                             CornerRadius="8 8 0 0" Cursor="Hand"
                                             Background="#14151C" BorderBrush="#222430" BorderThickness="1 1 1 0"
-                                            MouseLeftButtonDown="Tab_MouseLeftButtonDown">
+                                            MouseLeftButtonDown="Tab_MouseLeftButtonDown"
+                                            MouseUp="Tab_MouseUp">
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Duplicate tab" Click="TabContext_Duplicate" />
+                                                <MenuItem Header="Copy address" Click="TabContext_CopyUrl" />
+                                                <Separator />
+                                                <MenuItem Header="Close tab" Click="TabContext_Close" />
+                                                <MenuItem Header="Close other tabs" Click="TabContext_CloseOthers" />
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
                                         <Grid Margin="10 0 8 0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="16" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="20" />
                                             </Grid.ColumnDefinitions>
-                                            <Ellipse Grid.Column="0" Width="8" Height="8"
-                                                     Fill="{StaticResource CrimsonRedGlowBrush}"
-                                                     VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            <Grid Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center">
+                                                <Ellipse Width="8" Height="8"
+                                                         Fill="{StaticResource CrimsonRedGlowBrush}"
+                                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                <Image Source="{Binding FaviconUrl}" Width="16" Height="16"
+                                                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Grid>
                                             <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8 0 4 0"
                                                        VerticalAlignment="Center" FontSize="11.5" Foreground="#C9CCD8"
                                                        TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
@@ -305,7 +328,7 @@
         <!-- ============================================================ -->
         <!-- ROW 3: WEB CONTENT VIEWPORT                                 -->
         <!-- ============================================================ -->
-        <Grid Grid.Row="3" Background="{StaticResource CrimsonBgDarkBrush}" x:Name="WebContainer" />
+        <Grid Grid.Row="4" Background="{StaticResource CrimsonBgDarkBrush}" x:Name="WebContainer" />
 
         <!-- ============================================================ -->
         <!-- FLOATING: CRIMSON SHIELDS POPUP                             -->
@@ -550,6 +573,30 @@
                         </Grid>
                     </Button>
 
+                    <!-- Find on page -->
+                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuFind_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Find on page" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="Ctrl+F" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <!-- Fullscreen -->
+                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuFullscreen_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Fullscreen" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="F11" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
                     <!-- Bookmarks Bar Toggle -->
                     <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuToggleBookmarksBar_Click">
                         <Grid>
@@ -640,6 +687,38 @@
                 </StackPanel>
             </Border>
         </Popup>
+
+        <!-- ============================================================ -->
+        <!-- ROW 3: FIND IN PAGE BAR                                     -->
+        <!-- ============================================================ -->
+        <Border x:Name="FindBar" Grid.Row="3" Visibility="Collapsed"
+                Background="#13141B" BorderBrush="#1C1D26" BorderThickness="0 0 0 1"
+                Padding="12 5">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock Text="Find on page" Foreground="#8E92A4" FontSize="11.5"
+                           VerticalAlignment="Center" Margin="0 0 10 0" />
+                <TextBox x:Name="FindTextBox" Width="230" Height="28"
+                         Background="#1A1C25" Foreground="White" BorderThickness="0"
+                         Padding="8 0" VerticalContentAlignment="Center" FontSize="12"
+                         CaretBrush="{StaticResource CrimsonRedGlowBrush}"
+                         TextChanged="FindTextBox_TextChanged"
+                         KeyDown="FindTextBox_KeyDown" />
+                <TextBlock x:Name="FindMatchText" Text="0/0" Width="52" TextAlignment="Center"
+                           Foreground="#8E92A4" FontSize="11" VerticalAlignment="Center" Margin="4 0" />
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="Previous match (Shift+Enter)" Click="FindPrev_Click">
+                    <TextBlock Text="↑" FontSize="13" Foreground="#C9CCD8" />
+                </Button>
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="Next match (Enter)" Click="FindNext_Click">
+                    <TextBlock Text="↓" FontSize="13" Foreground="#C9CCD8" />
+                </Button>
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="Close (Esc)" Click="FindClose_Click">
+                    <TextBlock Text="✕" FontSize="11" Foreground="#8E92A4" />
+                </Button>
+            </StackPanel>
+        </Border>
 
     </Grid>
 </Window>

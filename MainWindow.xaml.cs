@@ -18,6 +18,12 @@ public partial class MainWindow : Window
     private BrowserTab? _activeTab;
     private bool _isOmniboxFocused;
 
+    private readonly bool _restoreSession;
+    private bool _isFullscreen;
+    private WindowState _preFullscreenState = WindowState.Normal;
+    private Rect _preFullscreenBounds = Rect.Empty;
+    private bool _bookmarksBarWasVisible;
+
     // Stack for Ctrl+Shift+T — reopen last closed tab
     private readonly Stack<(string url, string title)> _closedTabStack = new();
 
@@ -33,9 +39,18 @@ public partial class MainWindow : Window
     public ICommand ToggleBookmarksBarCommand { get; }
     public ICommand ToggleBookmarkCommand    { get; }
     public ICommand NewWindowCommand         { get; }
+    public ICommand ToggleFullscreenCommand  { get; }
+    public ICommand NextTabCommand           { get; }
+    public ICommand PrevTabCommand           { get; }
+    public ICommand FindCommand              { get; }
+    public ICommand ResetZoomCommand         { get; }
+    public ICommand ZoomInCommand            { get; }
+    public ICommand ZoomOutCommand           { get; }
 
-    public MainWindow()
+    public MainWindow(bool restoreSession = false)
     {
+        _restoreSession = restoreSession;
+
         InitializeComponent();
 
         NewTabCommand            = new RelayCommand(_ => AddNewTab());
@@ -49,6 +64,13 @@ public partial class MainWindow : Window
         ToggleBookmarksBarCommand = new RelayCommand(_ => ToggleBookmarksBar());
         ToggleBookmarkCommand    = new RelayCommand(_ => ToggleCurrentBookmark());
         NewWindowCommand         = new RelayCommand(_ => { var w = new MainWindow(); w.Show(); });
+        ToggleFullscreenCommand  = new RelayCommand(_ => ToggleFullscreen());
+        NextTabCommand           = new RelayCommand(_ => SelectNextTab(1));
+        PrevTabCommand           = new RelayCommand(_ => SelectNextTab(-1));
+        FindCommand              = new RelayCommand(_ => OpenFind());
+        ResetZoomCommand         = new RelayCommand(_ => SetZoom(1.0));
+        ZoomInCommand            = new RelayCommand(_ => SetZoom((_activeTab?.WebView.ZoomFactor ?? 1.0) + 0.1));
+        ZoomOutCommand           = new RelayCommand(_ => SetZoom((_activeTab?.WebView.ZoomFactor ?? 1.0) - 0.1));
 
         TabsItemsControl.ItemsSource        = Tabs;
         BookmarksBarItemsControl.ItemsSource = BookmarksService.Instance.Bookmarks;
@@ -66,6 +88,8 @@ public partial class MainWindow : Window
 
         Loaded       += MainWindow_Loaded;
         StateChanged += MainWindow_StateChanged;
+        Closing      += MainWindow_Closing;
+        PreviewKeyDown += Window_PreviewKeyDown;
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -89,7 +113,33 @@ public partial class MainWindow : Window
 
             _webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
 
-            AddNewTab();
+            // A URL passed on the command line (or forwarded from a second launch) wins over
+            // the previous session. Secondary windows never restore or save the session.
+            string? startupUrl = _restoreSession ? App.TakePendingStartupUrl() : null;
+
+            SessionState? session = _restoreSession && startupUrl is null
+                ? SessionService.Load()
+                : null;
+
+            if (session is not null)
+                ApplySessionBounds(session);
+
+            if (!string.IsNullOrWhiteSpace(startupUrl))
+            {
+                AddNewTab(startupUrl);
+            }
+            else if (session is not null && session.Urls.Count > 0)
+            {
+                foreach (string url in session.Urls)
+                    AddNewTab(url);
+
+                int activeIndex = Math.Clamp(session.ActiveIndex, 0, Tabs.Count - 1);
+                SetActiveTab(Tabs[activeIndex]);
+            }
+            else
+            {
+                AddNewTab();
+            }
         }
         catch (Exception ex)
         {
@@ -121,6 +171,12 @@ public partial class MainWindow : Window
         tab.RequestOpenSettings += () =>
             Dispatcher.Invoke(OpenSettings);
 
+        tab.RequestShortcut += (senderTab, action) =>
+            Dispatcher.Invoke(() => HandleShortcut(senderTab, action));
+
+        tab.FullscreenChanged += isFullscreen =>
+            Dispatcher.Invoke(() => SetFullscreen(isFullscreen));
+
         tab.PropertyChanged += Tab_PropertyChanged;
 
         Tabs.Add(tab);
@@ -134,6 +190,10 @@ public partial class MainWindow : Window
     public void SetActiveTab(BrowserTab tab)
     {
         if (_activeTab != null) _activeTab.IsActive = false;
+
+        if (FindBar.Visibility == Visibility.Visible)
+            CloseFind();
+
         _activeTab = tab;
         _activeTab.IsActive = true;
         UpdateUiForActiveTab();
@@ -169,6 +229,258 @@ public partial class MainWindow : Window
         var (url, _) = _closedTabStack.Pop();
         AddNewTab(url);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SESSION RESTORE / SAVE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ApplySessionBounds(SessionState session)
+    {
+        if (session.Width > 0 && session.Height > 0)
+        {
+            Width  = Math.Max(MinWidth, session.Width);
+            Height = Math.Max(MinHeight, session.Height);
+        }
+
+        if (!double.IsNaN(session.Left) && !double.IsNaN(session.Top))
+        {
+            double minLeft = SystemParameters.VirtualScreenLeft;
+            double minTop  = SystemParameters.VirtualScreenTop;
+            double maxLeft = minLeft + SystemParameters.VirtualScreenWidth  - Width;
+            double maxTop  = minTop  + SystemParameters.VirtualScreenHeight - Height;
+
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = Math.Clamp(session.Left, minLeft, Math.Max(minLeft, maxLeft));
+            Top  = Math.Clamp(session.Top,  minTop,  Math.Max(minTop,  maxTop));
+        }
+
+        if (session.Maximized)
+            WindowState = WindowState.Maximized;
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e) => SaveSession();
+
+    private void SaveSession()
+    {
+        // Only the primary window owns the shared session file.
+        if (Application.Current?.MainWindow != this) return;
+
+        var urls = Tabs.Where(t => !t.IsStartPage && !string.IsNullOrWhiteSpace(t.Url))
+                       .Select(t => t.Url)
+                       .ToList();
+
+        int activeIndex = 0;
+        if (_activeTab is not null && !_activeTab.IsStartPage)
+        {
+            int index = urls.IndexOf(_activeTab.Url);
+            if (index >= 0) activeIndex = index;
+        }
+
+        Rect bounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+
+        SessionService.Save(new SessionState
+        {
+            Urls        = urls,
+            ActiveIndex = activeIndex,
+            Left        = bounds.Left,
+            Top         = bounds.Top,
+            Width       = bounds.Width,
+            Height      = bounds.Height,
+            Maximized   = WindowState == WindowState.Maximized
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SHORTCUTS (forwarded from the page because WebView2 swallows key input)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void HandleShortcut(BrowserTab tab, string action)
+    {
+        switch (action)
+        {
+            case "fullscreen": ToggleFullscreen(); break;
+            case "escape":
+                if (FindBar.Visibility == Visibility.Visible) CloseFind();
+                else if (_isFullscreen) SetFullscreen(false);
+                break;
+            case "reload":
+                if (tab.IsLoading) tab.Stop();
+                else tab.Reload();
+                break;
+            case "new-tab":       AddNewTab(); break;
+            case "close-tab":     CloseTab(tab); break;
+            case "reopen-tab":    ReopenLastTab(); break;
+            case "incognito":     OpenIncognito(); break;
+            case "bookmarks-bar": ToggleBookmarksBar(); break;
+            case "focus-omnibox":
+                OmniboxTextBox.Focus();
+                OmniboxTextBox.SelectAll();
+                break;
+            case "bookmark": ToggleCurrentBookmark(); break;
+            case "history":  OpenHistory(); break;
+            case "find":     OpenFind(); break;
+            case "zoom-in":  SetZoom(tab.WebView.ZoomFactor + 0.1); break;
+            case "zoom-out": SetZoom(tab.WebView.ZoomFactor - 0.1); break;
+            case "zoom-reset": SetZoom(1.0); break;
+            case "next-tab": SelectNextTab(1); break;
+            case "prev-tab": SelectNextTab(-1); break;
+            default:
+                if (action.StartsWith("tab-", StringComparison.Ordinal) &&
+                    int.TryParse(action[4..], out int number))
+                {
+                    int index = number - 1;
+                    if (index >= 0 && index < Tabs.Count) SetActiveTab(Tabs[index]);
+                }
+                break;
+        }
+    }
+
+    private void SelectNextTab(int delta)
+    {
+        if (Tabs.Count <= 1) return;
+        int index = _activeTab is null ? 0 : Tabs.IndexOf(_activeTab);
+        int next  = (index + delta + Tabs.Count) % Tabs.Count;
+        SetActiveTab(Tabs[next]);
+    }
+
+    private void SetZoom(double zoom)
+    {
+        if (_activeTab is null) return;
+        double clamped = Math.Clamp(zoom, 0.25, 3.0);
+        _activeTab.WebView.ZoomFactor = clamped;
+        UpdateMenuZoomDisplay();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FULLSCREEN
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ToggleFullscreen() => SetFullscreen(!_isFullscreen);
+
+    private void SetFullscreen(bool enable)
+    {
+        if (enable == _isFullscreen) return;
+
+        if (enable)
+        {
+            _preFullscreenState = WindowState;
+            _preFullscreenBounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+            _bookmarksBarWasVisible = BookmarksBarBorder.Visibility == Visibility.Visible;
+
+            TopBarRow.Height = new GridLength(0);
+            NavBarRow.Height = new GridLength(0);
+            BookmarksBarBorder.Visibility = Visibility.Collapsed;
+
+            if (WindowState == WindowState.Maximized)
+                WindowState = WindowState.Normal;
+
+            _isFullscreen = true;
+            FullscreenHelper.Enter(this);
+        }
+        else
+        {
+            _isFullscreen = false;
+            FullscreenHelper.Exit(this);
+
+            TopBarRow.Height = new GridLength(44);
+            NavBarRow.Height = new GridLength(50);
+            if (_bookmarksBarWasVisible)
+                BookmarksBarBorder.Visibility = Visibility.Visible;
+
+            if (_preFullscreenBounds != Rect.Empty)
+            {
+                Left   = _preFullscreenBounds.Left;
+                Top    = _preFullscreenBounds.Top;
+                Width  = _preFullscreenBounds.Width;
+                Height = _preFullscreenBounds.Height;
+            }
+
+            if (_preFullscreenState == WindowState.Maximized)
+                WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+
+        if (FindBar.Visibility == Visibility.Visible)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+        else if (_isFullscreen)
+        {
+            SetFullscreen(false);
+            e.Handled = true;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIND IN PAGE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void OpenFind()
+    {
+        FindBar.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            FindTextBox.Focus();
+            FindTextBox.SelectAll();
+        }), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void CloseFind()
+    {
+        FindBar.Visibility = Visibility.Collapsed;
+        FindMatchText.Text = "0/0";
+        _activeTab?.StopFind();
+        _activeTab?.WebView.Focus();
+    }
+
+    private async void RunFind(bool backward)
+    {
+        if (_activeTab is null) return;
+
+        string term = FindTextBox.Text;
+        if (string.IsNullOrEmpty(term))
+        {
+            _activeTab.StopFind();
+            FindMatchText.Text = "0/0";
+            return;
+        }
+
+        var (index, count) = await _activeTab.FindAsync(term, backward);
+        FindMatchText.Text = count > 0 && index > 0 ? $"{index}/{count}" : "0/0";
+    }
+
+    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (FindBar.Visibility != Visibility.Visible) return;
+        RunFind(false);
+    }
+
+    private void FindTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            RunFind(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+    }
+
+    private void FindNext_Click(object sender, RoutedEventArgs e)  => RunFind(false);
+    private void FindPrev_Click(object sender, RoutedEventArgs e)  => RunFind(true);
+    private void FindClose_Click(object sender, RoutedEventArgs e) => CloseFind();
 
     private void Tab_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -308,6 +620,50 @@ public partial class MainWindow : Window
     private void CloseTab_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is BrowserTab tab) CloseTab(tab);
+    }
+
+    private void Tab_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Middle &&
+            sender is FrameworkElement el &&
+            el.DataContext is BrowserTab tab)
+        {
+            CloseTab(tab);
+            e.Handled = true;
+        }
+    }
+
+    private static BrowserTab? ContextTab(object sender) =>
+        (sender as FrameworkElement)?.DataContext as BrowserTab;
+
+    private void TabContext_Close(object sender, RoutedEventArgs e)
+    {
+        if (ContextTab(sender) is { } tab) CloseTab(tab);
+    }
+
+    private void TabContext_CloseOthers(object sender, RoutedEventArgs e)
+    {
+        if (ContextTab(sender) is not { } target) return;
+
+        foreach (var tab in Tabs.ToList())
+        {
+            if (!ReferenceEquals(tab, target)) CloseTab(tab);
+        }
+
+        SetActiveTab(target);
+    }
+
+    private void TabContext_Duplicate(object sender, RoutedEventArgs e)
+    {
+        if (ContextTab(sender) is { IsStartPage: false } tab) AddNewTab(tab.Url);
+    }
+
+    private void TabContext_CopyUrl(object sender, RoutedEventArgs e)
+    {
+        if (ContextTab(sender) is { IsStartPage: false } tab)
+        {
+            try { Clipboard.SetText(tab.Url); } catch { }
+        }
     }
 
     private void NewTab_Click(object sender, RoutedEventArgs e) => AddNewTab();
@@ -527,6 +883,18 @@ public partial class MainWindow : Window
         OpenHistory();
     }
 
+    private void MenuFind_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        OpenFind();
+    }
+
+    private void MenuFullscreen_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        ToggleFullscreen();
+    }
+
     private void MenuToggleBookmarksBar_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
@@ -556,34 +924,42 @@ public partial class MainWindow : Window
     private async void MenuClearData_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
+
+        bool confirmed = CrimsonDialog.Show(
+            this,
+            "Clear browsing data",
+            "This will clear the cache, cookies, site data and history for Crimson Browser. Bookmarks and settings are kept.",
+            "Clear data",
+            "Cancel",
+            danger: true);
+
+        if (!confirmed) return;
+
         if (_activeTab?.WebView.CoreWebView2 != null)
         {
             await _activeTab.WebView.CoreWebView2.Profile.ClearBrowsingDataAsync();
             HistoryService.Instance.Clear();
-            MessageBox.Show(
-                "Cache, browsing data, and history cleared successfully!",
-                "Crimson Browser",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information
-            );
+
+            CrimsonDialog.Info(
+                this,
+                "Data cleared",
+                "Cache, browsing data and history were cleared successfully.");
         }
     }
 
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
-        MessageBox.Show(
+        CrimsonDialog.Info(
+            this,
+            "About Crimson Browser",
             "🔴 Crimson Browser v1.0.0\n\n" +
             "• Engine: Chromium (Blink & V8)\n" +
             "• Platform: .NET 10 & Microsoft WebView2 Evergreen\n" +
             "• Theme: Crimson Stealth (Red & Black)\n" +
             "• Resource Footprint: Ultra-low (Low-RAM Optimizer Active)\n" +
             "• Protection: Crimson Shields Engine\n" +
-            "• Features: History, Bookmarks Bar, Incognito, Downloads Hub",
-            "About Crimson Browser",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information
-        );
+            "• Features: History, Bookmarks Bar, Incognito, Downloads Hub, Session Restore, Find in Page");
     }
 
     private void MenuSettings_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; OpenSettings(); }
@@ -617,6 +993,13 @@ public partial class MainWindow : Window
             _activeTab.Navigate(url);
         else
             AddNewTab(url);
+    }
+
+    /// <summary>Entry point for URLs forwarded by a second Crimson process.</summary>
+    public void OpenExternalUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        NavigateOrAddTab(url.Trim().Trim('"'));
     }
 
     public void RefreshAllStartPages()

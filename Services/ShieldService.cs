@@ -15,34 +15,64 @@ public class ShieldService : INotifyPropertyChanged
     private bool _blockPopups = true;
     private int _blockedCount = 0;
 
+    public ShieldService()
+    {
+        var saved = SettingsService.Instance;
+        _isShieldsEnabled   = saved.ShieldsEnabled;
+        _blockAdsAndTrackers = saved.BlockAds;
+        _enforceHttps       = saved.EnforceHttps;
+        _lowRamMode         = saved.LowRamMode;
+        _blockPopups        = saved.BlockPopups;
+    }
+
     public bool IsShieldsEnabled
     {
         get => _isShieldsEnabled;
-        set => SetField(ref _isShieldsEnabled, value);
+        set
+        {
+            if (SetField(ref _isShieldsEnabled, value))
+                SettingsService.Instance.ShieldsEnabled = value;
+        }
     }
 
     public bool BlockAdsAndTrackers
     {
         get => _blockAdsAndTrackers;
-        set => SetField(ref _blockAdsAndTrackers, value);
+        set
+        {
+            if (SetField(ref _blockAdsAndTrackers, value))
+                SettingsService.Instance.BlockAds = value;
+        }
     }
 
     public bool EnforceHttps
     {
         get => _enforceHttps;
-        set => SetField(ref _enforceHttps, value);
+        set
+        {
+            if (SetField(ref _enforceHttps, value))
+                SettingsService.Instance.EnforceHttps = value;
+        }
     }
 
     public bool LowRamMode
     {
         get => _lowRamMode;
-        set => SetField(ref _lowRamMode, value);
+        set
+        {
+            if (SetField(ref _lowRamMode, value))
+                SettingsService.Instance.LowRamMode = value;
+        }
     }
 
     public bool BlockPopups
     {
         get => _blockPopups;
-        set => SetField(ref _blockPopups, value);
+        set
+        {
+            if (SetField(ref _blockPopups, value))
+                SettingsService.Instance.BlockPopups = value;
+        }
     }
 
     public int BlockedCount

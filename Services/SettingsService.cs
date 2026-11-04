@@ -11,6 +11,13 @@ public class SettingsData
     public string SearchEngine { get; set; } = "Google"; // Google, DuckDuckGo, Brave, Bing
     public string? CustomBackgroundImagePath { get; set; }
     public double BackgroundDimming { get; set; } = 0.4;
+
+    // Crimson Shields, persisted so the toggles survive a restart.
+    public bool ShieldsEnabled { get; set; } = true;
+    public bool BlockAds { get; set; } = true;
+    public bool LowRamMode { get; set; } = true;
+    public bool EnforceHttps { get; set; } = true;
+    public bool BlockPopups { get; set; } = true;
 }
 
 public class SettingsService : INotifyPropertyChanged
@@ -92,6 +99,44 @@ public class SettingsService : INotifyPropertyChanged
                 Save();
             }
         }
+    }
+
+    public bool ShieldsEnabled
+    {
+        get => _data.ShieldsEnabled;
+        set => SetShield(nameof(ShieldsEnabled), _data.ShieldsEnabled, value, v => _data.ShieldsEnabled = v);
+    }
+
+    public bool BlockAds
+    {
+        get => _data.BlockAds;
+        set => SetShield(nameof(BlockAds), _data.BlockAds, value, v => _data.BlockAds = v);
+    }
+
+    public bool LowRamMode
+    {
+        get => _data.LowRamMode;
+        set => SetShield(nameof(LowRamMode), _data.LowRamMode, value, v => _data.LowRamMode = v);
+    }
+
+    public bool EnforceHttps
+    {
+        get => _data.EnforceHttps;
+        set => SetShield(nameof(EnforceHttps), _data.EnforceHttps, value, v => _data.EnforceHttps = v);
+    }
+
+    public bool BlockPopups
+    {
+        get => _data.BlockPopups;
+        set => SetShield(nameof(BlockPopups), _data.BlockPopups, value, v => _data.BlockPopups = v);
+    }
+
+    private void SetShield(string propertyName, bool current, bool value, Action<bool> apply)
+    {
+        if (current == value) return;
+        apply(value);
+        OnPropertyChanged(propertyName);
+        Save();
     }
 
     public event Action? SettingsUpdated;

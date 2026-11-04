@@ -62,13 +62,15 @@ public partial class HistoryWindow : Window
 
     private void ClearAll_Click(object sender, RoutedEventArgs e)
     {
-        var result = MessageBox.Show(
-            "Clear all browsing history?",
-            "Crimson Browser",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question
-        );
-        if (result == MessageBoxResult.Yes)
+        bool confirmed = CrimsonDialog.Show(
+            this,
+            "Clear browsing history",
+            "Clear all browsing history? This cannot be undone.",
+            "Clear history",
+            "Cancel",
+            danger: true);
+
+        if (confirmed)
         {
             HistoryService.Instance.Clear();
             RefreshList(string.Empty);

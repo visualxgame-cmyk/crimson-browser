@@ -86,9 +86,14 @@ public class BrowserTab : INotifyPropertyChanged
                     if (ShieldService.Instance.LowRamMode && WebView.CoreWebView2 != null)
                     {
                         if (value)
+                        {
                             WebView.CoreWebView2.Resume();
-                        else
+                        }
+                        else if (!WebView.CoreWebView2.IsDocumentPlayingAudio)
+                        {
+                            // Never suspend a background tab that is playing music or video.
                             _ = WebView.CoreWebView2.TrySuspendAsync();
+                        }
                     }
                 }
                 catch { }
@@ -105,6 +110,11 @@ public class BrowserTab : INotifyPropertyChanged
     public event Action<BrowserTab, string>? RequestNewTab;
     public event Action<BrowserTab>?        RequestClose;
     public event Action?                    RequestOpenSettings;
+    public event Action<BrowserTab, string>? RequestShortcut;
+    public event Action<bool>?              FullscreenChanged;
+
+    private string _findTerm = string.Empty;
+    private string? _pendingUrl;
 
     public BrowserTab(CoreWebView2Environment environment, bool isIncognito = false)
     {
@@ -148,6 +158,10 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 WebView.CoreWebView2.Settings.AreDevToolsEnabled         = true;
 
+                // Let Crimson handle browser shortcuts (Ctrl+F, Ctrl+P, F5, zoom...) through
+                // the injected key bridge instead of WebView2's built-in accelerators.
+                WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+
                 // Event Listeners
                 WebView.CoreWebView2.NavigationStarting    += CoreWebView2_NavigationStarting;
                 WebView.CoreWebView2.NavigationCompleted   += CoreWebView2_NavigationCompleted;
@@ -158,8 +172,20 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.WindowCloseRequested  += CoreWebView2_WindowCloseRequested;
                 WebView.CoreWebView2.WebMessageReceived    += CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.DownloadStarting      += CoreWebView2_DownloadStarting;
+                WebView.CoreWebView2.ContainsFullScreenElementChanged += CoreWebView2_ContainsFullScreenElementChanged;
 
-                LoadStartPage();
+                await InstallKeyboardBridgeAsync();
+
+                if (!string.IsNullOrWhiteSpace(_pendingUrl))
+                {
+                    string pending = _pendingUrl;
+                    _pendingUrl = null;
+                    Navigate(pending);
+                }
+                else
+                {
+                    LoadStartPage();
+                }
             }
         }
         catch (Exception ex)
@@ -318,6 +344,15 @@ public class BrowserTab : INotifyPropertyChanged
 
     private void CoreWebView2_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
+        // A real pop-up blocker: scripts cannot open windows without a user gesture.
+        if (ShieldService.Instance.IsShieldsEnabled &&
+            ShieldService.Instance.BlockPopups &&
+            !e.IsUserInitiated)
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
         RequestNewTab?.Invoke(this, e.Uri);
     }
@@ -336,8 +371,122 @@ public class BrowserTab : INotifyPropertyChanged
             {
                 RequestOpenSettings?.Invoke();
             }
+            else if (message.StartsWith("crimson:", StringComparison.Ordinal))
+            {
+                RequestShortcut?.Invoke(this, message["crimson:".Length..]);
+            }
         }
         catch { }
+    }
+
+    private void CoreWebView2_ContainsFullScreenElementChanged(object? sender, object e)
+    {
+        FullscreenChanged?.Invoke(WebView.CoreWebView2?.ContainsFullScreenElement == true);
+    }
+
+    /// <summary>
+    /// WPF does not receive keyboard input while WebView2 has focus, so browser shortcuts are
+    /// captured in the page (capture phase) and forwarded to the host over postMessage.
+    /// </summary>
+    private async Task InstallKeyboardBridgeAsync()
+    {
+        const string script = """
+            (function () {
+                if (window.__crimsonKeyBridge) return;
+                window.__crimsonKeyBridge = true;
+
+                function send(action) {
+                    try { window.chrome.webview.postMessage('crimson:' + action); } catch (e) {}
+                }
+
+                window.addEventListener('keydown', function (e) {
+                    var ctrl = e.ctrlKey || e.metaKey;
+                    var key = (e.key || '').toLowerCase();
+                    var action = null;
+
+                    if (e.key === 'F11') action = 'fullscreen';
+                    else if (e.key === 'F5') action = 'reload';
+                    else if (e.key === 'Escape') { send('escape'); return; }
+                    else if (ctrl && e.shiftKey && !e.altKey) {
+                        if (e.key === 'Tab') action = 'prev-tab';
+                        else if (key === 't') action = 'reopen-tab';
+                        else if (key === 'n') action = 'incognito';
+                        else if (key === 'b') action = 'bookmarks-bar';
+                    }
+                    else if (ctrl && !e.shiftKey && !e.altKey) {
+                        if (e.key === 'Tab') action = 'next-tab';
+                        else if (key === 't') action = 'new-tab';
+                        else if (key === 'w') action = 'close-tab';
+                        else if (key === 'l') action = 'focus-omnibox';
+                        else if (key === 'r') action = 'reload';
+                        else if (key === 'd') action = 'bookmark';
+                        else if (key === 'h') action = 'history';
+                        else if (key === 'f') action = 'find';
+                        else if (key === '0') action = 'zoom-reset';
+                        else if (key === '+' || key === '=') action = 'zoom-in';
+                        else if (key === '-') action = 'zoom-out';
+                        else if (key >= '1' && key <= '9') action = 'tab-' + key;
+                    }
+
+                    if (action) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        send(action);
+                    }
+                }, true);
+            })();
+            """;
+
+        try
+        {
+            if (WebView.CoreWebView2 != null)
+                await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+        }
+        catch { }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIND IN PAGE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<(int Index, int Count)> FindAsync(string term, bool backward = false)
+    {
+        if (WebView.CoreWebView2 == null) return (0, 0);
+
+        try
+        {
+            var find = WebView.CoreWebView2.Find;
+
+            if (term != _findTerm)
+            {
+                _findTerm = term;
+                var options = _environment.CreateFindOptions();
+                options.FindTerm = term;
+                options.SuppressDefaultFindDialog = true;
+                options.ShouldHighlightAllMatches = true;
+                await find.StartAsync(options);
+            }
+            else if (backward)
+            {
+                find.FindPrevious();
+            }
+            else
+            {
+                find.FindNext();
+            }
+
+            return (find.ActiveMatchIndex, find.MatchCount);
+        }
+        catch
+        {
+            return (0, 0);
+        }
+    }
+
+    public void StopFind()
+    {
+        _findTerm = string.Empty;
+        try { WebView.CoreWebView2?.Find.Stop(); } catch { }
     }
 
     private void CoreWebView2_DownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
@@ -381,11 +530,16 @@ public class BrowserTab : INotifyPropertyChanged
             return;
         }
 
-        string cleanTarget = target.Trim();
+        string cleanTarget = target.Trim().Trim('"');
+
+        if (File.Exists(cleanTarget))
+            cleanTarget = new Uri(cleanTarget).AbsoluteUri;
 
         if (!cleanTarget.StartsWith("http://",   StringComparison.OrdinalIgnoreCase) &&
             !cleanTarget.StartsWith("https://",  StringComparison.OrdinalIgnoreCase) &&
-            !cleanTarget.StartsWith("file://",   StringComparison.OrdinalIgnoreCase))
+            !cleanTarget.StartsWith("file://",   StringComparison.OrdinalIgnoreCase) &&
+            !cleanTarget.StartsWith("about:",    StringComparison.OrdinalIgnoreCase) &&
+            !cleanTarget.StartsWith("data:",     StringComparison.OrdinalIgnoreCase))
         {
             if (cleanTarget.Contains('.') && !cleanTarget.Contains(' '))
             {
@@ -398,9 +552,16 @@ public class BrowserTab : INotifyPropertyChanged
             }
         }
 
+        if (WebView.CoreWebView2 is null)
+        {
+            // WebView2 is still initializing; replay this navigation once it is ready.
+            _pendingUrl = cleanTarget;
+            return;
+        }
+
         try
         {
-            WebView.CoreWebView2?.Navigate(cleanTarget);
+            WebView.CoreWebView2.Navigate(cleanTarget);
         }
         catch { }
     }
@@ -470,6 +631,7 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.WindowCloseRequested  -= CoreWebView2_WindowCloseRequested;
                 WebView.CoreWebView2.WebMessageReceived    -= CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.DownloadStarting      -= CoreWebView2_DownloadStarting;
+                WebView.CoreWebView2.ContainsFullScreenElementChanged -= CoreWebView2_ContainsFullScreenElementChanged;
             }
             WebView.Dispose();
         }
