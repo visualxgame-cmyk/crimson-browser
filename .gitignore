@@ -3,6 +3,10 @@ bin/
 obj/
 artifacts/
 publish/
+dist/
+
+# Third-party installer bootstrap (downloaded on demand by build-installer.ps1)
+installer/redist/
 
 # Visual Studio
 .vs/

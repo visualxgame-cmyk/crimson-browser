@@ -463,7 +463,7 @@
             img.onload = function() {
                 const bg = document.getElementById('customBg');
                 const overlay = document.getElementById('customOverlay');
-                bg.style.backgroundImage = 'url("custom_wallpaper.jpg?v=' + Date.now() + '")';
+                bg.style.backgroundImage = 'url("https://profile.crimson/custom_wallpaper.jpg?v=' + Date.now() + '")';
                 bg.style.display = 'block';
                 overlay.style.display = 'block';
             };
@@ -473,7 +473,7 @@
                 bg.style.display = 'none';
                 overlay.style.display = 'none';
             };
-            img.src = 'custom_wallpaper.jpg?v=' + Date.now();
+            img.src = 'https://profile.crimson/custom_wallpaper.jpg?v=' + Date.now();
         }
 
         // Apply localization strings

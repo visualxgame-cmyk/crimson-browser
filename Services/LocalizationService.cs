@@ -103,6 +103,8 @@ public class LocalizationService : INotifyPropertyChanged
             ["ZoomOut"] = "Zoom out",
 
             ["DownloadsClearCompleted"] = "Clear completed",
+            ["DownloadsOpenFile"] = "Open file",
+            ["DownloadsOpenFolder"] = "Show in folder",
             ["NoDownloads"] = "No downloads yet",
             ["DownloadCompleted"] = "Completed",
             ["DownloadFailed"] = "Failed",
@@ -308,6 +310,8 @@ public class LocalizationService : INotifyPropertyChanged
             ["ZoomOut"] = "Micșorează",
 
             ["DownloadsClearCompleted"] = "Șterge finalizate",
+            ["DownloadsOpenFile"] = "Deschide fișierul",
+            ["DownloadsOpenFolder"] = "Arată în folder",
             ["NoDownloads"] = "Nicio descărcare încă",
             ["DownloadCompleted"] = "Finalizat",
             ["DownloadFailed"] = "Eșuat",

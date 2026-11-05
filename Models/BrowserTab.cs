@@ -115,6 +115,7 @@ public class BrowserTab : INotifyPropertyChanged
 
     /// <summary>Raised for permission requests so the host can show a Crimson-themed prompt.</summary>
     public event Action<BrowserTab, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
+    public event Action<BrowserTab, string>? InitializationFailed;
 
     private string _findTerm = string.Empty;
     private string? _pendingUrl;
@@ -151,6 +152,12 @@ public class BrowserTab : INotifyPropertyChanged
                         CoreWebView2HostResourceAccessKind.Allow
                     );
                 }
+
+                // Keep mutable user assets outside the read-only installation folder.
+                WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "profile.crimson",
+                    SettingsService.Instance.WallpaperFolder,
+                    CoreWebView2HostResourceAccessKind.Allow);
 
                 // Setup Crimson Shields Network Filtering (Ad/Tracker Blocker)
                 WebView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
@@ -196,6 +203,7 @@ public class BrowserTab : INotifyPropertyChanged
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to initialize WebView2: {ex.Message}");
+            InitializationFailed?.Invoke(this, ex.Message);
         }
     }
 
@@ -287,31 +295,6 @@ public class BrowserTab : INotifyPropertyChanged
                 }
                 catch { }
 
-                // ── Enhanced YouTube Ad Skipper ──
-                string currentUrl = _url;
-                if (currentUrl.Contains("youtube.com", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        await WebView.CoreWebView2.ExecuteScriptAsync(
-                            "(function() {" +
-                            "  if (window._crimsonYtAdBlocker) return;" +
-                            "  window._crimsonYtAdBlocker = true;" +
-                            "  setInterval(function() {" +
-                            "    var skip = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');" +
-                            "    if (skip) { skip.click(); return; }" +
-                            "    var v = document.querySelector('video');" +
-                            "    if (v && document.querySelector('.ad-showing')) {" +
-                            "      try { v.currentTime = v.duration; } catch(e){}" +
-                            "    }" +
-                            "    var overlay = document.querySelector('.ytp-ad-overlay-close-button');" +
-                            "    if (overlay) overlay.click();" +
-                            "  }, 300);" +
-                            "})();"
-                        );
-                    }
-                    catch { }
-                }
             }
         }
     }
@@ -453,6 +436,7 @@ public class BrowserTab : INotifyPropertyChanged
                     else if (ctrl && !e.shiftKey && !e.altKey) {
                         if (e.key === 'Tab') action = 'next-tab';
                         else if (key === 't') action = 'new-tab';
+                        else if (key === 'n') action = 'new-window';
                         else if (key === 'w') action = 'close-tab';
                         else if (key === 'l') action = 'focus-omnibox';
                         else if (key === 'r') action = 'reload';
@@ -641,6 +625,12 @@ public class BrowserTab : INotifyPropertyChanged
 
     public void Reload()
     {
+        if (WebView.CoreWebView2 is null)
+        {
+            _ = InitializeAsync(_environment);
+            return;
+        }
+
         if (IsStartPage)
             LoadStartPage();
         else

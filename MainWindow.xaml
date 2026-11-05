@@ -484,6 +484,16 @@
                                                          Margin="0 6 0 0" Background="#252636"
                                                          Foreground="{StaticResource CrimsonRedGlowBrush}"
                                                          BorderThickness="0" />
+                                             <StackPanel Orientation="Horizontal" Margin="0 7 0 0">
+                                                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Height="24" Width="Auto" Padding="8 0"
+                                                         Click="OpenDownloadedFile_Click" IsEnabled="{Binding IsCompleted}">
+                                                     <TextBlock Text="{loc:Loc DownloadsOpenFile}" FontSize="10.5" Foreground="#D1D4DC" />
+                                                 </Button>
+                                                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Height="24" Width="Auto" Padding="8 0" Margin="6 0 0 0"
+                                                         Click="OpenDownloadFolder_Click">
+                                                     <TextBlock Text="{loc:Loc DownloadsOpenFolder}" FontSize="10.5" Foreground="#D1D4DC" />
+                                                 </Button>
+                                             </StackPanel>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>

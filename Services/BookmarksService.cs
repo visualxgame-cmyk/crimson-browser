@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Text.Json;
 
 namespace CrimsonBrowser.Services;
 
@@ -70,8 +69,7 @@ public class BookmarksService
         {
             if (File.Exists(_filePath))
             {
-                string json = File.ReadAllText(_filePath);
-                var list = JsonSerializer.Deserialize<List<Bookmark>>(json);
+                var list = AtomicFileStore.Read<List<Bookmark>>(_filePath);
                 if (list != null)
                 {
                     foreach (var b in list) Bookmarks.Add(b);
@@ -85,9 +83,7 @@ public class BookmarksService
     {
         try
         {
-            string dir = Path.GetDirectoryName(_filePath)!;
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(_filePath, JsonSerializer.Serialize(Bookmarks.ToList()));
+            AtomicFileStore.Write(_filePath, Bookmarks.ToList());
         }
         catch { }
     }

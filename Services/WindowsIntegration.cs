@@ -42,7 +42,7 @@ internal static class WindowsIntegration
 
             new(@"Software\Clients\StartMenuInternet\CrimsonBrowser", "", AppName),
             new(@"Software\Clients\StartMenuInternet\CrimsonBrowser\DefaultIcon", "", quoted + ",0"),
-            new(@"Software\Clients\StartMenuInternet\CrimsonBrowser\shell\open\command", "", quoted),
+            new(@"Software\Clients\StartMenuInternet\CrimsonBrowser\shell\open\command", "", command),
 
             new(Capabilities, "ApplicationName", AppName),
             new(Capabilities, "ApplicationDescription", LocalizationService.Instance.Get("AppDescription")),

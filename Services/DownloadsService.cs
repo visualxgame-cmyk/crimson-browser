@@ -54,6 +54,8 @@ public class DownloadItem : INotifyPropertyChanged
         set => SetField(ref _status, value);
     }
 
+    public bool IsCompleted => Status == DownloadStatus.Completed && File.Exists(SavePath);
+
     public string StatusText => Status switch
     {
         DownloadStatus.InProgress => $"{ReceivedBytes / 1024} KB / {(TotalBytes > 0 ? TotalBytes / 1024 + " KB" : "??")}",
@@ -75,6 +77,8 @@ public class DownloadItem : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         if (name == nameof(Status) || name == nameof(ReceivedBytes))
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
+        if (name == nameof(Status))
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCompleted)));
         return true;
     }
 }

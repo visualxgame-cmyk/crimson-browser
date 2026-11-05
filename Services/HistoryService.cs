@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Text.Json;
 
 namespace CrimsonBrowser.Services;
 
@@ -73,8 +72,7 @@ public class HistoryService
         {
             if (File.Exists(_historyFilePath))
             {
-                string json = File.ReadAllText(_historyFilePath);
-                var loaded = JsonSerializer.Deserialize<List<HistoryEntry>>(json);
+                var loaded = AtomicFileStore.Read<List<HistoryEntry>>(_historyFilePath);
                 if (loaded != null) _entries = loaded;
             }
         }
@@ -85,9 +83,7 @@ public class HistoryService
     {
         try
         {
-            string dir = Path.GetDirectoryName(_historyFilePath)!;
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.WriteAllText(_historyFilePath, JsonSerializer.Serialize(_entries));
+            AtomicFileStore.Write(_historyFilePath, _entries);
         }
         catch { }
     }

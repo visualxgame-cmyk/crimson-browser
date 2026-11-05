@@ -37,6 +37,7 @@ public partial class App : Application
 
         _singleInstance.MessageReceived += OnExternalMessage;
         PendingStartupUrl = StartupUrl(e.Args);
+        StartupCleanup.RemoveStaleIncognitoProfiles();
 
         base.OnStartup(e);
 

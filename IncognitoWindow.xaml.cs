@@ -290,6 +290,7 @@ public partial class IncognitoWindow : Window
                 else tab.Reload();
                 break;
             case "new-tab": AddNewTab(); break;
+            case "new-window": new IncognitoWindow().Show(); break;
             case "close-tab": CloseTab(tab); break;
             case "focus-omnibox":
                 OmniboxTextBox.Focus();

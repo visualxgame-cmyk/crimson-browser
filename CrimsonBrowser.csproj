@@ -10,6 +10,15 @@
     <AssemblyName>CrimsonBrowser</AssemblyName>
     <RootNamespace>CrimsonBrowser</RootNamespace>
     <ApplicationIcon>crimson.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>Crimson Browser</Product>
+    <AssemblyTitle>Crimson Browser</AssemblyTitle>
+    <Company>Crimson Browser</Company>
+    <Description>A fast, low-memory Chromium browser with Crimson Shields privacy protection.</Description>
+    <Copyright>Copyright © 2026 Crimson Browser</Copyright>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +36,11 @@
     <None Update="Resources\startpage.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <!-- Test sources are compiled only by their dedicated project, never by the WPF executable. -->
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 
 namespace CrimsonBrowser.Services;
 
@@ -28,7 +27,7 @@ public static class SessionService
         try
         {
             if (!File.Exists(FilePath)) return null;
-            return JsonSerializer.Deserialize<SessionState>(File.ReadAllText(FilePath));
+            return AtomicFileStore.Read<SessionState>(FilePath);
         }
         catch
         {
@@ -40,8 +39,7 @@ public static class SessionService
     {
         try
         {
-            Directory.CreateDirectory(Folder);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(state));
+            AtomicFileStore.Write(FilePath, state);
         }
         catch
         {

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 
 namespace CrimsonBrowser.Services;
 
@@ -27,9 +26,12 @@ public class SettingsService : INotifyPropertyChanged
 
     private readonly string _settingsFolder;
     private readonly string _settingsFilePath;
-    private readonly string _resourcesWallpaperPath;
+    private readonly string _wallpaperFolder;
+    private readonly string _wallpaperPath;
 
     private SettingsData _data = new();
+
+    internal string WallpaperFolder => _wallpaperFolder;
 
     public string Language
     {
@@ -131,6 +133,7 @@ public class SettingsService : INotifyPropertyChanged
         set => SetShield(nameof(BlockPopups), _data.BlockPopups, value, v => _data.BlockPopups = v);
     }
 
+
     private void SetShield(string propertyName, bool current, bool value, Action<bool> apply)
     {
         if (current == value) return;
@@ -148,7 +151,10 @@ public class SettingsService : INotifyPropertyChanged
             "CrimsonBrowser"
         );
         _settingsFilePath = Path.Combine(_settingsFolder, "settings.json");
-        _resourcesWallpaperPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "custom_wallpaper.jpg");
+        // User data must never be written below the installation directory.  Installed
+        // builds normally live in Program Files, where a standard user has no write access.
+        _wallpaperFolder = Path.Combine(_settingsFolder, "Wallpaper");
+        _wallpaperPath = Path.Combine(_wallpaperFolder, "custom_wallpaper.jpg");
 
         Load();
     }
@@ -159,8 +165,7 @@ public class SettingsService : INotifyPropertyChanged
         {
             if (File.Exists(_settingsFilePath))
             {
-                string json = File.ReadAllText(_settingsFilePath);
-                var loaded = JsonSerializer.Deserialize<SettingsData>(json);
+                var loaded = AtomicFileStore.Read<SettingsData>(_settingsFilePath);
                 if (loaded != null)
                 {
                     _data = loaded;
@@ -179,11 +184,10 @@ public class SettingsService : INotifyPropertyChanged
         {
             if (!Directory.Exists(_settingsFolder))
             {
-                Directory.CreateDirectory(_settingsFolder);
+                Directory.CreateDirectory(_wallpaperFolder);
             }
 
-            string json = JsonSerializer.Serialize(_data, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_settingsFilePath, json);
+            AtomicFileStore.Write(_settingsFilePath, _data);
             SettingsUpdated?.Invoke();
         }
         catch { }
@@ -195,23 +199,11 @@ public class SettingsService : INotifyPropertyChanged
         {
             if (File.Exists(sourceFilePath))
             {
-                // Copy image into app Resources folder for the start page virtual host
-                string targetDir = Path.GetDirectoryName(_resourcesWallpaperPath)!;
-                if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                Directory.CreateDirectory(_wallpaperFolder);
+                File.Copy(sourceFilePath, _wallpaperPath, true);
 
-                File.Copy(sourceFilePath, _resourcesWallpaperPath, true);
-
-                // Also copy to bin/Debug output directory if different
-                string binResourcesPath = Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, "Resources", "custom_wallpaper.jpg");
-                if (!string.Equals(binResourcesPath, _resourcesWallpaperPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    string binDir = Path.GetDirectoryName(binResourcesPath)!;
-                    if (!Directory.Exists(binDir)) Directory.CreateDirectory(binDir);
-                    File.Copy(sourceFilePath, binResourcesPath, true);
-                }
-
-                CustomBackgroundImagePath = sourceFilePath;
+                // The start page loads the file via the profile-local virtual host.
+                CustomBackgroundImagePath = _wallpaperPath;
                 SettingsUpdated?.Invoke();
             }
         }
@@ -225,9 +217,9 @@ public class SettingsService : INotifyPropertyChanged
     {
         try
         {
-            if (File.Exists(_resourcesWallpaperPath))
+            if (File.Exists(_wallpaperPath))
             {
-                File.Delete(_resourcesWallpaperPath);
+                File.Delete(_wallpaperPath);
             }
             CustomBackgroundImagePath = null;
             SettingsUpdated?.Invoke();
@@ -235,7 +227,7 @@ public class SettingsService : INotifyPropertyChanged
         catch { }
     }
 
-    public bool HasCustomWallpaper => File.Exists(_resourcesWallpaperPath);
+    public bool HasCustomWallpaper => File.Exists(_wallpaperPath);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

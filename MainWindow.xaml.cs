@@ -184,6 +184,15 @@ public partial class MainWindow : Window
         tab.PermissionRequested += (senderTab, args) =>
             _permissionBroker.Handle(senderTab, args);
 
+        tab.InitializationFailed += (failedTab, message) => Dispatcher.Invoke(() =>
+        {
+            if (!Tabs.Contains(failedTab)) return;
+            CrimsonDialog.Info(
+                this,
+                LocalizationService.Instance.Get("WebView2MissingTitle"),
+                LocalizationService.Instance.Format("WebView2MissingMessage", message));
+        });
+
         tab.PropertyChanged += Tab_PropertyChanged;
 
         Tabs.Add(tab);
@@ -317,6 +326,7 @@ public partial class MainWindow : Window
                 else tab.Reload();
                 break;
             case "new-tab":       AddNewTab(); break;
+            case "new-window":    new MainWindow(restoreSession: false).Show(); break;
             case "close-tab":     CloseTab(tab); break;
             case "reopen-tab":    ReopenLastTab(); break;
             case "incognito":     OpenIncognito(); break;
@@ -767,6 +777,25 @@ public partial class MainWindow : Window
     {
         DownloadsService.Instance.ClearCompleted();
         UpdateDownloadsBadge();
+    }
+
+    private void OpenDownloadedFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: DownloadItem item } && item.IsCompleted)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.SavePath) { UseShellExecute = true }); }
+            catch { }
+        }
+    }
+
+    private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DownloadItem item }) return;
+        string? folder = Path.GetDirectoryName(item.SavePath);
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+
+        try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + item.SavePath + "\""); }
+        catch { }
     }
 
     private void MenuDownloads_Click(object sender, RoutedEventArgs e)
