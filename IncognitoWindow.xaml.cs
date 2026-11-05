@@ -17,6 +17,7 @@ public partial class IncognitoWindow : Window
     public ObservableCollection<BrowserTab> Tabs { get; } = new();
     private BrowserTab? _activeTab;
     private bool _isOmniboxFocused;
+    private readonly PermissionBroker _permissionBroker;
 
     public ICommand NewTabCommand          { get; }
     public ICommand CloseCurrentTabCommand { get; }
@@ -27,6 +28,9 @@ public partial class IncognitoWindow : Window
     public IncognitoWindow()
     {
         InitializeComponent();
+
+        // Incognito choices are kept in memory only for this window.
+        _permissionBroker = new PermissionBroker(this, persistChoices: false);
 
         NewTabCommand          = new RelayCommand(_ => AddNewTab());
         CloseCurrentTabCommand = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
@@ -85,6 +89,7 @@ public partial class IncognitoWindow : Window
 
         tab.RequestNewTab += (senderTab, targetUrl) => Dispatcher.Invoke(() => AddNewTab(targetUrl));
         tab.RequestClose  += (senderTab) => Dispatcher.Invoke(() => CloseTab(senderTab));
+        tab.PermissionRequested += (senderTab, args) => _permissionBroker.Handle(senderTab, args);
         tab.PropertyChanged += Tab_PropertyChanged;
 
         Tabs.Add(tab);

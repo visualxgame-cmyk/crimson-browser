@@ -672,6 +672,19 @@
                         </Grid>
                     </Button>
 
+                    <!-- Set as default browser -->
+                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuDefaultBrowser_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" x:Name="MenuDefaultBrowserText" Text="Set as default browser" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" x:Name="MenuDefaultBrowserHint" Text="Windows" Foreground="#777B8E"
+                                       FontSize="11" VerticalAlignment="Center" Margin="10 0 0 0" />
+                        </Grid>
+                    </Button>
+
                     <!-- About -->
                     <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuAbout_Click">
                         <Grid>

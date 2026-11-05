@@ -113,6 +113,9 @@ public class BrowserTab : INotifyPropertyChanged
     public event Action<BrowserTab, string>? RequestShortcut;
     public event Action<bool>?              FullscreenChanged;
 
+    /// <summary>Raised for permission requests so the host can show a Crimson-themed prompt.</summary>
+    public event Action<BrowserTab, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
+
     private string _findTerm = string.Empty;
     private string? _pendingUrl;
 
@@ -172,6 +175,8 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.WindowCloseRequested  += CoreWebView2_WindowCloseRequested;
                 WebView.CoreWebView2.WebMessageReceived    += CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.DownloadStarting      += CoreWebView2_DownloadStarting;
+                WebView.CoreWebView2.PermissionRequested   += CoreWebView2_PermissionRequested;
+                WebView.CoreWebView2.FrameCreated          += CoreWebView2_FrameCreated;
                 WebView.CoreWebView2.ContainsFullScreenElementChanged += CoreWebView2_ContainsFullScreenElementChanged;
 
                 await InstallKeyboardBridgeAsync();
@@ -382,6 +387,38 @@ public class BrowserTab : INotifyPropertyChanged
     private void CoreWebView2_ContainsFullScreenElementChanged(object? sender, object e)
     {
         FullscreenChanged?.Invoke(WebView.CoreWebView2?.ContainsFullScreenElement == true);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SITE PERMISSIONS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void CoreWebView2_PermissionRequested(object? sender, CoreWebView2PermissionRequestedEventArgs e)
+    {
+        e.Handled = true;
+        RaisePermissionRequested(e);
+    }
+
+    private void CoreWebView2_FrameCreated(object? sender, CoreWebView2FrameCreatedEventArgs e)
+    {
+        // Third-party frames can request permissions too; route them to the same prompt.
+        e.Frame.PermissionRequested += (_, args) =>
+        {
+            args.Handled = true;
+            RaisePermissionRequested(args);
+        };
+    }
+
+    private void RaisePermissionRequested(CoreWebView2PermissionRequestedEventArgs args)
+    {
+        if (PermissionRequested is { } handler)
+        {
+            handler(this, args);
+            return;
+        }
+
+        // No host is listening: fail closed instead of leaving Chromium's default UI.
+        try { args.State = CoreWebView2PermissionState.Deny; } catch { }
     }
 
     /// <summary>
@@ -631,6 +668,8 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.WindowCloseRequested  -= CoreWebView2_WindowCloseRequested;
                 WebView.CoreWebView2.WebMessageReceived    -= CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.DownloadStarting      -= CoreWebView2_DownloadStarting;
+                WebView.CoreWebView2.PermissionRequested   -= CoreWebView2_PermissionRequested;
+                WebView.CoreWebView2.FrameCreated          -= CoreWebView2_FrameCreated;
                 WebView.CoreWebView2.ContainsFullScreenElementChanged -= CoreWebView2_ContainsFullScreenElementChanged;
             }
             WebView.Dispose();

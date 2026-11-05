@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private WindowState _preFullscreenState = WindowState.Normal;
     private Rect _preFullscreenBounds = Rect.Empty;
     private bool _bookmarksBarWasVisible;
+    private readonly PermissionBroker _permissionBroker;
 
     // Stack for Ctrl+Shift+T — reopen last closed tab
     private readonly Stack<(string url, string title)> _closedTabStack = new();
@@ -52,6 +53,8 @@ public partial class MainWindow : Window
         _restoreSession = restoreSession;
 
         InitializeComponent();
+
+        _permissionBroker = new PermissionBroker(this, persistChoices: true);
 
         NewTabCommand            = new RelayCommand(_ => AddNewTab());
         CloseCurrentTabCommand   = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
@@ -176,6 +179,9 @@ public partial class MainWindow : Window
 
         tab.FullscreenChanged += isFullscreen =>
             Dispatcher.Invoke(() => SetFullscreen(isFullscreen));
+
+        tab.PermissionRequested += (senderTab, args) =>
+            _permissionBroker.Handle(senderTab, args);
 
         tab.PropertyChanged += Tab_PropertyChanged;
 
@@ -852,7 +858,17 @@ public partial class MainWindow : Window
     private void MenuBtn_Click(object sender, RoutedEventArgs e)
     {
         UpdateMenuZoomDisplay();
+        UpdateDefaultBrowserMenu();
         MenuPopup.IsOpen = !MenuPopup.IsOpen;
+    }
+
+    private void UpdateDefaultBrowserMenu()
+    {
+        bool isDefault = WindowsIntegration.IsDefaultBrowser();
+        MenuDefaultBrowserText.Text = isDefault
+            ? "Crimson is your default browser"
+            : "Set as default browser";
+        MenuDefaultBrowserHint.Text = isDefault ? "✓" : "Windows";
     }
 
     private void UpdateMenuZoomDisplay()
@@ -963,6 +979,37 @@ public partial class MainWindow : Window
     }
 
     private void MenuSettings_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; OpenSettings(); }
+
+    private void MenuDefaultBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+
+        if (WindowsIntegration.IsDefaultBrowser())
+        {
+            CrimsonDialog.Info(this, "Default browser", "Crimson Browser is already your default browser.");
+            return;
+        }
+
+        bool proceed = CrimsonDialog.Show(
+            this,
+            "Set Crimson as default browser",
+            "Windows will open its Default apps panel where Crimson Browser is already registered. " +
+            "Select Crimson Browser under \"Web browser\" to confirm the change.\n\n" +
+            "This only writes settings for your Windows user account; no administrator rights are required.",
+            "Open Windows Settings",
+            "Cancel");
+
+        if (!proceed) return;
+
+        try
+        {
+            WindowsIntegration.Register();
+        }
+        catch (Exception ex)
+        {
+            CrimsonDialog.Info(this, "Could not register Crimson Browser", ex.Message);
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // SETTINGS / HISTORY / INCOGNITO
