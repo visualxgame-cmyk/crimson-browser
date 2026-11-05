@@ -156,6 +156,10 @@ public class SettingsService : INotifyPropertyChanged
         _wallpaperFolder = Path.Combine(_settingsFolder, "Wallpaper");
         _wallpaperPath = Path.Combine(_wallpaperFolder, "custom_wallpaper.jpg");
 
+        // WebView2 requires the virtual-host folder to exist before it is mapped.
+        // Creating this empty profile folder is harmless and prevents first-run startup failures.
+        Directory.CreateDirectory(_wallpaperFolder);
+
         Load();
     }
 
