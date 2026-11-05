@@ -151,14 +151,17 @@ public partial class SettingsWindow : Window
             UpdateStatusText.Text = loc.Format("UpdateAvailable", update.Version);
             if (CrimsonDialog.Show(this, loc.Get("UpdateAvailableTitle"),
                     loc.Format("UpdateAvailableMessage", update.ReleaseName, update.Version),
-                    loc.Get("OpenRelease"), loc.Get("DialogCancel")))
+                    loc.Get("DownloadAndInstall"), loc.Get("DialogCancel")))
             {
-                _mainWindow.NavigateOrAddTab(update.ReleaseUrl);
+                UpdateStatusText.Text = loc.Get("DownloadingUpdate");
+                var progress = new Progress<double>(value =>
+                    UpdateStatusText.Text = loc.Format("DownloadingUpdateProgress", Math.Round(value * 100)));
+                await UpdateService.DownloadAndInstallAsync(update, progress);
             }
         }
         catch (Exception)
         {
-            UpdateStatusText.Text = loc.Get("UpdateCheckFailed");
+            UpdateStatusText.Text = loc.Get("UpdateInstallFailed");
         }
         finally
         {
