@@ -124,4 +124,45 @@ public partial class SettingsWindow : Window
     {
         Close();
     }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdatesButton.IsEnabled = false;
+        var loc = LocalizationService.Instance;
+        UpdateStatusText.Text = loc.Get("CheckingUpdates");
+
+        try
+        {
+            UpdateCheckResult result = await UpdateService.CheckAsync();
+            if (result.Status == UpdateCheckStatus.NoPublishedRelease)
+            {
+                UpdateStatusText.Text = loc.Get("NoPublishedRelease");
+                return;
+            }
+
+            if (result.Status == UpdateCheckStatus.Current)
+            {
+                UpdateStatusText.Text = loc.Format("UpdatesCurrent", UpdateService.CurrentVersion);
+                return;
+            }
+
+            UpdateInfo update = result.Update!;
+
+            UpdateStatusText.Text = loc.Format("UpdateAvailable", update.Version);
+            if (CrimsonDialog.Show(this, loc.Get("UpdateAvailableTitle"),
+                    loc.Format("UpdateAvailableMessage", update.ReleaseName, update.Version),
+                    loc.Get("OpenRelease"), loc.Get("DialogCancel")))
+            {
+                _mainWindow.NavigateOrAddTab(update.ReleaseUrl);
+            }
+        }
+        catch (Exception)
+        {
+            UpdateStatusText.Text = loc.Get("UpdateCheckFailed");
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
 }

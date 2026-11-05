@@ -210,6 +210,13 @@
                                         <TextBlock Text="{loc:Loc SettingsEngine}" Foreground="#777B8E" FontSize="11" Margin="0 0 0 4" />
                                         <TextBlock Text="{loc:Loc SettingsPlatform}" Foreground="#777B8E" FontSize="11" Margin="0 0 0 4" />
                                         <TextBlock Text="{loc:Loc SettingsFeatures}" Foreground="#777B8E" FontSize="11" />
+                                         <Button x:Name="CheckUpdatesButton" Style="{StaticResource CrimsonNavButtonStyle}" Width="Auto" Height="34"
+                                                 Background="#251219" BorderBrush="{StaticResource CrimsonDarkRedBrush}" BorderThickness="1"
+                                                 Padding="14 0" HorizontalAlignment="Left" Margin="0 16 0 0"
+                                                 Click="CheckUpdates_Click">
+                                             <TextBlock Text="{loc:Loc CheckUpdates}" FontWeight="SemiBold" Foreground="{StaticResource CrimsonRedGlowBrush}" />
+                                         </Button>
+                                         <TextBlock x:Name="UpdateStatusText" Foreground="#8E92A4" FontSize="11" Margin="0 8 0 0" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
