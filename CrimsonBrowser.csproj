@@ -15,9 +15,9 @@
     <FileVersion>1.0.0.0</FileVersion>
     <Product>Crimson Browser</Product>
     <AssemblyTitle>Crimson Browser</AssemblyTitle>
-    <Company>Crimson Browser</Company>
+    <Company>VisualX Studio</Company>
     <Description>A fast, low-memory Chromium browser with Crimson Shields privacy protection.</Description>
-    <Copyright>Copyright © 2026 Crimson Browser</Copyright>
+    <Copyright>Copyright © 2026 VisualX Studio</Copyright>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

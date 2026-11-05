@@ -116,14 +116,6 @@
             -webkit-text-fill-color: transparent;
         }
 
-        .brand-subtitle {
-            font-size: 0.88rem;
-            color: #9da1b2;
-            letter-spacing: 1.5px;
-            margin-top: 4px;
-            font-weight: 600;
-        }
-
         /* Search Bar */
         .search-container {
             width: 100%;
@@ -346,7 +338,6 @@
                 </svg>
             </div>
             <h1 class="brand-title">CRIMSON</h1>
-            <p id="lblSubtitle" class="brand-subtitle">CHROMIUM POWERED • HIGH SPEED • LOW FOOTPRINT</p>
         </div>
 
         <!-- Omnibox Search -->
@@ -479,7 +470,6 @@
         // Apply localization strings
         function applyLanguage(lang) {
             if (lang === 'ro') {
-                document.getElementById('lblSubtitle').innerText = 'MOTOR CHROMIUM • VITEZĂ SPORITĂ • CONSUM REDUS';
                 document.getElementById('searchInput').placeholder = 'Caută pe Google sau introdu o adresă URL...';
                 document.getElementById('lblEngine').innerHTML = 'Motor: <span class="highlight">Chromium Blink</span>';
                 document.getElementById('lblOpt').innerHTML = 'Optimizare: <span class="highlight">Mod Low-RAM</span>';
@@ -487,7 +477,6 @@
                 document.getElementById('lblFooter').innerText = 'Crimson Browser © 2026 • Construit pentru viteză și intimitate';
                 document.getElementById('lblSettingsBtn').innerText = 'Setări';
             } else {
-                document.getElementById('lblSubtitle').innerText = 'CHROMIUM POWERED • HIGH SPEED • LOW FOOTPRINT';
                 document.getElementById('searchInput').placeholder = 'Search with Google or enter web address...';
                 document.getElementById('lblEngine').innerHTML = 'Engine: <span class="highlight">Chromium Blink</span>';
                 document.getElementById('lblOpt').innerHTML = 'Optimization: <span class="highlight">Low RAM Mode</span>';

@@ -205,6 +205,7 @@
                                 <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
                                     <StackPanel>
                                         <TextBlock Text="🔴 CRIMSON BROWSER" FontWeight="Bold" Foreground="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 0 6" />
+                                            <TextBlock Text="{loc:Loc MadeByVisualX}" Foreground="#A5A9B8" FontSize="11" Margin="0 0 0 10" />
                                         <TextBlock Text="{loc:Loc SettingsAboutDesc}"
                                                    TextWrapping="Wrap" Foreground="#A5A9B8" FontSize="12" Margin="0 0 0 10" />
                                         <TextBlock Text="{loc:Loc SettingsEngine}" Foreground="#777B8E" FontSize="11" Margin="0 0 0 4" />

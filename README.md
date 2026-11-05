@@ -1,6 +1,6 @@
 # 🔴 CRIMSON BROWSER
 
-**Crimson Browser** este un browser web modern, ultra-rapid și cu consum redus de resurse, bazat pe motorul **Chromium (Blink & V8)** prin Microsoft WebView2 Evergreen, conceput cu o tematică stealth **Red & Black (Crimson)**.
+**Crimson Browser** este un browser web modern, ultra-rapid și cu consum redus de resurse, bazat pe motorul **Chromium (Blink & V8)** prin Microsoft WebView2 Evergreen, conceput cu o tematică stealth **Red & Black (Crimson)**. Creat de **VisualX Studio**.
 
 ---
 

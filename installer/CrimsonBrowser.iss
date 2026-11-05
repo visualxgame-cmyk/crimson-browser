@@ -5,7 +5,7 @@
 
 #define MyAppName "Crimson Browser"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "Crimson Browser"
+#define MyAppPublisher "VisualX Studio"
 #define MyAppExeName "CrimsonBrowser.exe"
 #define MyAppId "{{63B6F537-ADAB-40C0-A6CB-D42BE3873E59}"
 

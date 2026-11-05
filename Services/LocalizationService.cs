@@ -124,7 +124,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["ClearDataDoneMessage"] = "Cache, browsing data and history were cleared successfully.",
 
             ["AboutTitle"] = "About Crimson Browser",
-            ["AboutBody"] = "🔴 Crimson Browser v1.0.0\n\n• Engine: Chromium (Blink & V8)\n• Platform: .NET 10 & Microsoft WebView2 Evergreen\n• Theme: Crimson Stealth (Red & Black)\n• Resource Footprint: Ultra-low (Low-RAM Optimizer Active)\n• Protection: Crimson Shields Engine\n• Features: History, Bookmarks Bar, Incognito, Downloads Hub, Session Restore, Find in Page, Themed Permissions",
+            ["AboutBody"] = "🔴 Crimson Browser v1.0.0\nMade by VisualX Studio\n\n• Engine: Chromium (Blink & V8)\n• Platform: .NET 10 & Microsoft WebView2 Evergreen\n• Theme: Crimson Stealth (Red & Black)\n• Resource Footprint: Ultra-low (Low-RAM Optimizer Active)\n• Protection: Crimson Shields Engine\n• Features: History, Bookmarks Bar, Incognito, Downloads Hub, Session Restore, Find in Page, Themed Permissions",
 
             ["DefaultBrowserTitle"] = "Set Crimson as default browser",
             ["DefaultBrowserAlreadyTitle"] = "Default browser",
@@ -197,6 +197,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["SettingsShieldsPrivacy"] = "Crimson Shields & Privacy",
             ["SettingsShieldsSummary"] = "Active protection summary and engine status",
             ["SettingsAbout"] = "About Crimson Browser",
+            ["MadeByVisualX"] = "Made by VisualX Studio",
             ["SettingsVersion"] = "Version 1.0.0 (Release Build)",
             ["SettingsAboutDesc"] = "A modern, high-speed, low-resource web browser powered by the Chromium engine.",
             ["SettingsEngine"] = "Engine: Chromium Blink & V8 (Microsoft WebView2 Evergreen)",
@@ -214,8 +215,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["CloseSettings"] = "Save & Close",
 
             ["AboutHeader"] = "Crimson Browser v1.0.0",
-            ["AboutDescription"] = "Fast, lightweight Chromium-based browser with Stealth Crimson styling.",
-            ["StartSubtitle"] = "CHROMIUM POWERED • HIGH SPEED • LOW FOOTPRINT",
+            ["AboutDescription"] = "Fast, lightweight Chromium-based browser by VisualX Studio.",
             ["StartSearchPlaceholder"] = "Search with Google or enter web address...",
             ["StartEngine"] = "Engine: Chromium Blink",
             ["StartOpt"] = "Optimization: Low RAM Mode",
@@ -340,7 +340,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["ClearDataDoneMessage"] = "Cache-ul, datele de navigare și istoricul au fost șterse cu succes.",
 
             ["AboutTitle"] = "Despre Crimson Browser",
-            ["AboutBody"] = "🔴 Crimson Browser v1.0.0\n\n• Motor: Chromium (Blink & V8)\n• Platformă: .NET 10 & Microsoft WebView2 Evergreen\n• Temă: Crimson Stealth (Roșu & Negru)\n• Consum: Ultra-redus (Optimizare Low-RAM activă)\n• Protecție: Motorul Crimson Shields\n• Funcții: Istoric, Bară de favorite, Incognito, Descărcări, Restaurare sesiune, Căutare în pagină, Permisiuni tematice",
+            ["AboutBody"] = "🔴 Crimson Browser v1.0.0\nCreat de VisualX Studio\n\n• Motor: Chromium (Blink & V8)\n• Platformă: .NET 10 & Microsoft WebView2 Evergreen\n• Temă: Crimson Stealth (Roșu & Negru)\n• Consum: Ultra-redus (Optimizare Low-RAM activă)\n• Protecție: Motorul Crimson Shields\n• Funcții: Istoric, Bară de favorite, Incognito, Descărcări, Restaurare sesiune, Căutare în pagină, Permisiuni tematice",
 
             ["DefaultBrowserTitle"] = "Setează Crimson ca browser implicit",
             ["DefaultBrowserAlreadyTitle"] = "Browser implicit",
@@ -413,6 +413,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["SettingsShieldsPrivacy"] = "Crimson Shields & Confidențialitate",
             ["SettingsShieldsSummary"] = "Rezumatul protecției active și starea motorului",
             ["SettingsAbout"] = "Despre Crimson Browser",
+            ["MadeByVisualX"] = "Creat de VisualX Studio",
             ["SettingsVersion"] = "Versiunea 1.0.0 (build de lansare)",
             ["SettingsAboutDesc"] = "Un browser modern, rapid și cu consum redus, bazat pe motorul Chromium.",
             ["SettingsEngine"] = "Motor: Chromium Blink & V8 (Microsoft WebView2 Evergreen)",
@@ -430,8 +431,7 @@ public class LocalizationService : INotifyPropertyChanged
             ["CloseSettings"] = "Salvează & Închide",
 
             ["AboutHeader"] = "Crimson Browser v1.0.0",
-            ["AboutDescription"] = "Browser rapid, bazat pe Chromium, cu consum redus și tematică Crimson.",
-            ["StartSubtitle"] = "MOTOR CHROMIUM • VITEZĂ SPORITĂ • CONSUM REDUS",
+            ["AboutDescription"] = "Browser rapid, bazat pe Chromium, cu consum redus, creat de VisualX Studio.",
             ["StartSearchPlaceholder"] = "Caută pe Google sau introdu o adresă URL...",
             ["StartEngine"] = "Motor: Chromium Blink",
             ["StartOpt"] = "Optimizare: Mod Low-RAM",
