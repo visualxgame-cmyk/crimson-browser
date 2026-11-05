@@ -19,11 +19,19 @@ public partial class IncognitoWindow : Window
     private bool _isOmniboxFocused;
     private readonly PermissionBroker _permissionBroker;
 
+    private bool _isFullscreen;
+    private WindowState _preFullscreenState = WindowState.Normal;
+    private Rect _preFullscreenBounds = Rect.Empty;
+
     public ICommand NewTabCommand          { get; }
     public ICommand CloseCurrentTabCommand { get; }
     public ICommand RefreshCommand         { get; }
     public ICommand FocusOmniboxCommand    { get; }
     public ICommand OpenDevToolsCommand    { get; }
+    public ICommand ToggleFullscreenCommand { get; }
+    public ICommand NextTabCommand         { get; }
+    public ICommand PrevTabCommand         { get; }
+    public ICommand FindCommand            { get; }
 
     public IncognitoWindow()
     {
@@ -37,11 +45,29 @@ public partial class IncognitoWindow : Window
         RefreshCommand         = new RelayCommand(_ => _activeTab?.Reload());
         FocusOmniboxCommand    = new RelayCommand(_ => { OmniboxTextBox.Focus(); OmniboxTextBox.SelectAll(); });
         OpenDevToolsCommand    = new RelayCommand(_ => _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow());
+        ToggleFullscreenCommand = new RelayCommand(_ => ToggleFullscreen());
+        NextTabCommand         = new RelayCommand(_ => SelectNextTab(1));
+        PrevTabCommand         = new RelayCommand(_ => SelectNextTab(-1));
+        FindCommand            = new RelayCommand(_ => OpenFind());
 
         TabsItemsControl.ItemsSource = Tabs;
 
         Loaded       += IncognitoWindow_Loaded;
         StateChanged += IncognitoWindow_StateChanged;
+        PreviewKeyDown += Window_PreviewKeyDown;
+        LocalizationService.Instance.LanguageChanged += IncognitoWindow_LanguageChanged;
+    }
+
+    private void IncognitoWindow_LanguageChanged()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_activeTab != null)
+                UpdateReloadIcon(_activeTab.IsLoading);
+
+            MaximizeBtn.ToolTip = LocalizationService.Instance.Get(
+                WindowState == WindowState.Maximized ? "RestoreTooltip" : "MaximizeTooltip");
+        });
     }
 
     private async void IncognitoWindow_Loaded(object sender, RoutedEventArgs e)
@@ -70,9 +96,10 @@ public partial class IncognitoWindow : Window
         }
         catch (Exception ex)
         {
+            var loc = LocalizationService.Instance;
             MessageBox.Show(
-                $"Failed to start Incognito mode:\n{ex.Message}",
-                "Crimson Browser",
+                loc.Format("IncognitoStartErrorMessage", ex.Message),
+                loc.Get("IncognitoStartErrorTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error
             );
@@ -90,6 +117,8 @@ public partial class IncognitoWindow : Window
         tab.RequestNewTab += (senderTab, targetUrl) => Dispatcher.Invoke(() => AddNewTab(targetUrl));
         tab.RequestClose  += (senderTab) => Dispatcher.Invoke(() => CloseTab(senderTab));
         tab.PermissionRequested += (senderTab, args) => _permissionBroker.Handle(senderTab, args);
+        tab.RequestShortcut += (senderTab, action) => Dispatcher.Invoke(() => HandleShortcut(senderTab, action));
+        tab.FullscreenChanged += isFullscreen => Dispatcher.Invoke(() => SetFullscreen(isFullscreen));
         tab.PropertyChanged += Tab_PropertyChanged;
 
         Tabs.Add(tab);
@@ -103,6 +132,10 @@ public partial class IncognitoWindow : Window
     public void SetActiveTab(BrowserTab tab)
     {
         if (_activeTab != null) _activeTab.IsActive = false;
+
+        if (FindBar.Visibility == Visibility.Visible)
+            CloseFind();
+
         _activeTab = tab;
         _activeTab.IsActive = true;
         UpdateUiForActiveTab();
@@ -173,15 +206,17 @@ public partial class IncognitoWindow : Window
 
     private void UpdateReloadIcon(bool isLoading)
     {
+        var loc = LocalizationService.Instance;
+
         if (isLoading)
         {
             ReloadIcon.Data = Geometry.Parse("M3 3 L11 11 M11 3 L3 11");
-            ReloadBtn.ToolTip = "Stop";
+            ReloadBtn.ToolTip = loc.Get("StopTooltip");
         }
         else
         {
             ReloadIcon.Data = Geometry.Parse("M7 1 A6 6 0 1 1 2 7 M7 1 L4 4 M7 1 L10 4");
-            ReloadBtn.ToolTip = "Reload";
+            ReloadBtn.ToolTip = loc.Get("ReloadTooltip");
         }
     }
 
@@ -237,6 +272,196 @@ public partial class IncognitoWindow : Window
         _activeTab?.Navigate(query);
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // SHORTCUTS (forwarded from the page because WebView2 swallows key input)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void HandleShortcut(BrowserTab tab, string action)
+    {
+        switch (action)
+        {
+            case "fullscreen": ToggleFullscreen(); break;
+            case "escape":
+                if (FindBar.Visibility == Visibility.Visible) CloseFind();
+                else if (_isFullscreen) SetFullscreen(false);
+                break;
+            case "reload":
+                if (tab.IsLoading) tab.Stop();
+                else tab.Reload();
+                break;
+            case "new-tab": AddNewTab(); break;
+            case "close-tab": CloseTab(tab); break;
+            case "focus-omnibox":
+                OmniboxTextBox.Focus();
+                OmniboxTextBox.SelectAll();
+                break;
+            case "find": OpenFind(); break;
+            case "zoom-in":  SetZoom(tab.WebView.ZoomFactor + 0.1); break;
+            case "zoom-out": SetZoom(tab.WebView.ZoomFactor - 0.1); break;
+            case "zoom-reset": SetZoom(1.0); break;
+            case "next-tab": SelectNextTab(1); break;
+            case "prev-tab": SelectNextTab(-1); break;
+            default:
+                if (action.StartsWith("tab-", StringComparison.Ordinal) &&
+                    int.TryParse(action[4..], out int number))
+                {
+                    int index = number - 1;
+                    if (index >= 0 && index < Tabs.Count) SetActiveTab(Tabs[index]);
+                }
+                break;
+        }
+    }
+
+    private void SelectNextTab(int delta)
+    {
+        if (Tabs.Count <= 1) return;
+        int index = _activeTab is null ? 0 : Tabs.IndexOf(_activeTab);
+        int next  = (index + delta + Tabs.Count) % Tabs.Count;
+        SetActiveTab(Tabs[next]);
+    }
+
+    private void SetZoom(double zoom)
+    {
+        if (_activeTab is null) return;
+        _activeTab.WebView.ZoomFactor = Math.Clamp(zoom, 0.25, 3.0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FULLSCREEN
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void ToggleFullscreen() => SetFullscreen(!_isFullscreen);
+
+    private void SetFullscreen(bool enable)
+    {
+        if (enable == _isFullscreen) return;
+
+        if (enable)
+        {
+            _preFullscreenState = WindowState;
+            _preFullscreenBounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+
+            TopBarRow.Height = new GridLength(0);
+            NavBarRow.Height = new GridLength(0);
+
+            if (WindowState == WindowState.Maximized)
+                WindowState = WindowState.Normal;
+
+            _isFullscreen = true;
+            FullscreenHelper.Enter(this);
+        }
+        else
+        {
+            _isFullscreen = false;
+            FullscreenHelper.Exit(this);
+
+            TopBarRow.Height = new GridLength(44);
+            NavBarRow.Height = new GridLength(50);
+
+            if (_preFullscreenBounds != Rect.Empty)
+            {
+                Left   = _preFullscreenBounds.Left;
+                Top    = _preFullscreenBounds.Top;
+                Width  = _preFullscreenBounds.Width;
+                Height = _preFullscreenBounds.Height;
+            }
+
+            if (_preFullscreenState == WindowState.Maximized)
+                WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+
+        if (FindBar.Visibility == Visibility.Visible)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+        else if (_isFullscreen)
+        {
+            SetFullscreen(false);
+            e.Handled = true;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FIND IN PAGE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void OpenFind()
+    {
+        FindBar.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            FindTextBox.Focus();
+            FindTextBox.SelectAll();
+        }), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void CloseFind()
+    {
+        FindBar.Visibility = Visibility.Collapsed;
+        FindMatchText.Text = "0/0";
+        _activeTab?.StopFind();
+        _activeTab?.WebView.Focus();
+    }
+
+    private async void RunFind(bool backward)
+    {
+        if (_activeTab is null) return;
+
+        string term = FindTextBox.Text;
+        if (string.IsNullOrEmpty(term))
+        {
+            _activeTab.StopFind();
+            FindMatchText.Text = "0/0";
+            return;
+        }
+
+        var (index, count) = await _activeTab.FindAsync(term, backward);
+        FindMatchText.Text = count > 0 && index > 0 ? $"{index}/{count}" : "0/0";
+    }
+
+    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (FindBar.Visibility != Visibility.Visible) return;
+        RunFind(false);
+    }
+
+    private void FindTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            RunFind(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+    }
+
+    private void FindNext_Click(object sender, RoutedEventArgs e)  => RunFind(false);
+    private void FindPrev_Click(object sender, RoutedEventArgs e)  => RunFind(true);
+    private void FindClose_Click(object sender, RoutedEventArgs e) => CloseFind();
+
+    private void Tab_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Middle &&
+            sender is FrameworkElement el &&
+            el.DataContext is BrowserTab tab)
+        {
+            CloseTab(tab);
+            e.Handled = true;
+        }
+    }
+
     // ── Window chrome ──
     private void MinimizeBtn_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
@@ -250,12 +475,16 @@ public partial class IncognitoWindow : Window
         MaximizeIcon.Data = WindowState == WindowState.Maximized
             ? Geometry.Parse("M2 1 L9 1 L9 8 M1 3 L8 3 L8 10 L1 10 Z")
             : Geometry.Parse("M1 1 L9 1 L9 9 L1 9 Z");
+
+        MaximizeBtn.ToolTip = LocalizationService.Instance.Get(
+            WindowState == WindowState.Maximized ? "RestoreTooltip" : "MaximizeTooltip");
     }
 
     private void CloseBtn_Click(object sender, RoutedEventArgs e) => Close();
 
     protected override void OnClosed(EventArgs e)
     {
+        LocalizationService.Instance.LanguageChanged -= IncognitoWindow_LanguageChanged;
         base.OnClosed(e);
         // Clean up temp profile directory
         try

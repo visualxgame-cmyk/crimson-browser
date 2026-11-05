@@ -27,7 +27,7 @@ internal static class WindowsIntegration
             executable.Contains('"') ||
             !executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("The Crimson Browser executable path is not valid.");
+            throw new ArgumentException(LocalizationService.Instance.Get("InvalidExecutablePath"));
         }
 
         string quoted  = "\"" + executable + "\"";
@@ -45,7 +45,7 @@ internal static class WindowsIntegration
             new(@"Software\Clients\StartMenuInternet\CrimsonBrowser\shell\open\command", "", quoted),
 
             new(Capabilities, "ApplicationName", AppName),
-            new(Capabilities, "ApplicationDescription", "A fast, low-memory browser with Crimson Shields privacy protection"),
+            new(Capabilities, "ApplicationDescription", LocalizationService.Instance.Get("AppDescription")),
             new(Capabilities, "ApplicationIcon", quoted + ",0"),
             new(Capabilities + @"\URLAssociations", "http",  ProgId),
             new(Capabilities + @"\URLAssociations", "https", ProgId),
@@ -75,7 +75,7 @@ internal static class WindowsIntegration
     public static void Register()
     {
         string executable = Environment.ProcessPath
-            ?? throw new InvalidOperationException("The Crimson Browser executable could not be located.");
+            ?? throw new InvalidOperationException(LocalizationService.Instance.Get("ExecutableNotFound"));
 
         foreach (var entry in RegistrationPlan(executable))
         {

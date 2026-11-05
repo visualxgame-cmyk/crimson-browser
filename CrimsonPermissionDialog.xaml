@@ -1,7 +1,8 @@
 <Window x:Class="CrimsonBrowser.CrimsonPermissionDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Permission request"
+        xmlns:loc="clr-namespace:CrimsonBrowser.Services"
+        Title="{loc:Loc PermissionTitle}"
         Width="460" SizeToContent="Height"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False"
@@ -74,12 +75,12 @@
                           Data="M9 0 L18 4 C18 12 14 17 9 18 C4 17 0 12 0 4 Z" />
                 </Border>
 
-                <TextBlock Grid.Column="1" Text="Permission request"
+                <TextBlock Grid.Column="1" Text="{loc:Loc PermissionTitle}"
                            FontSize="15" FontWeight="Bold" Foreground="White"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
 
                 <Button Grid.Column="2" Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
-                        Click="Block_Click" ToolTip="Close">
+                        Click="Block_Click" ToolTip="{loc:Loc CloseTooltip}">
                     <TextBlock Text="✕" FontSize="12" Foreground="#8E92A4" />
                 </Button>
             </Grid>
@@ -97,19 +98,19 @@
 
             <!-- Remember -->
             <CheckBox Grid.Row="2" x:Name="RememberCheck" Margin="2 0 2 20"
-                      Content="Remember this decision for this site" />
+                      Content="{loc:Loc PermissionRemember}" />
 
             <!-- Buttons -->
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource CrimsonNavButtonStyle}"
                         Width="Auto" Height="34" Padding="18 0" Margin="0 0 10 0"
                         Background="#222432" Click="Block_Click">
-                    <TextBlock Text="Block" FontSize="12" FontWeight="SemiBold" Foreground="#C9CCD8" />
+                    <TextBlock Text="{loc:Loc PermissionBlock}" FontSize="12" FontWeight="SemiBold" Foreground="#C9CCD8" />
                 </Button>
                 <Button Style="{StaticResource CrimsonNavButtonStyle}"
                         Width="Auto" Height="34" Padding="20 0"
                         Background="#E61937" Click="Allow_Click">
-                    <TextBlock Text="Allow" FontSize="12" FontWeight="Bold" Foreground="White" />
+                    <TextBlock Text="{loc:Loc PermissionAllow}" FontSize="12" FontWeight="Bold" Foreground="White" />
                 </Button>
             </StackPanel>
         </Grid>

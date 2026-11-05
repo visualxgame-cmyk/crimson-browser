@@ -108,9 +108,10 @@ public partial class App : Application
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         LogException("DispatcherUnhandledException", e.Exception);
+        var loc = LocalizationService.Instance;
         MessageBox.Show(
-            $"Crimson Browser a întâmpinat o eroare neașteptată.\n\n{e.Exception.Message}\n\nDetalii: {CrashLogPath}",
-            "Crimson Browser",
+            loc.Format("CrashMessage", e.Exception.Message, CrashLogPath),
+            loc.Get("CrashTitle"),
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;

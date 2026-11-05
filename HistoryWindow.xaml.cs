@@ -9,6 +9,7 @@ namespace CrimsonBrowser;
 public partial class HistoryWindow : Window
 {
     private readonly MainWindow _mainWindow;
+    private string _lastQuery = string.Empty;
 
     public HistoryWindow(MainWindow mainWindow)
     {
@@ -17,6 +18,18 @@ public partial class HistoryWindow : Window
 
         InitializeComponent();
         Loaded += HistoryWindow_Loaded;
+        LocalizationService.Instance.LanguageChanged += HistoryWindow_LanguageChanged;
+    }
+
+    private void HistoryWindow_LanguageChanged()
+    {
+        Dispatcher.Invoke(() => RefreshList(_lastQuery));
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        LocalizationService.Instance.LanguageChanged -= HistoryWindow_LanguageChanged;
+        base.OnClosed(e);
     }
 
     private void HistoryWindow_Loaded(object sender, RoutedEventArgs e)
@@ -45,9 +58,12 @@ public partial class HistoryWindow : Window
 
     private void RefreshList(string query)
     {
+        _lastQuery = query;
         var entries = HistoryService.Instance.Search(query);
         HistoryList.ItemsSource = entries;
-        EntryCountText.Text = $"{entries.Count} entries";
+
+        string countKey = entries.Count == 1 ? "HistoryEntry" : "HistoryEntries";
+        EntryCountText.Text = LocalizationService.Instance.Format(countKey, entries.Count);
     }
 
     private void HistoryItem_Click(object sender, MouseButtonEventArgs e)
@@ -62,12 +78,13 @@ public partial class HistoryWindow : Window
 
     private void ClearAll_Click(object sender, RoutedEventArgs e)
     {
+        var loc = LocalizationService.Instance;
         bool confirmed = CrimsonDialog.Show(
             this,
-            "Clear browsing history",
-            "Clear all browsing history? This cannot be undone.",
-            "Clear history",
-            "Cancel",
+            loc.Get("HistoryClearTitle"),
+            loc.Get("HistoryClearMessage"),
+            loc.Get("HistoryClearAction"),
+            loc.Get("DialogCancel"),
             danger: true);
 
         if (confirmed)

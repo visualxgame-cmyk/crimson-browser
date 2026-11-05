@@ -173,19 +173,19 @@ internal sealed class PermissionBroker
 
     private static string Describe(CoreWebView2PermissionKind kind) => kind switch
     {
-        CoreWebView2PermissionKind.Microphone                  => "microphone",
-        CoreWebView2PermissionKind.Camera                      => "camera",
-        CoreWebView2PermissionKind.Geolocation                 => "location",
-        CoreWebView2PermissionKind.Notifications               => "notifications",
-        CoreWebView2PermissionKind.ClipboardRead               => "clipboard",
-        CoreWebView2PermissionKind.OtherSensors                => "motion sensors",
-        CoreWebView2PermissionKind.MultipleAutomaticDownloads  => "multiple automatic downloads",
-        CoreWebView2PermissionKind.FileReadWrite               => "files",
-        CoreWebView2PermissionKind.Autoplay                    => "automatic media playback",
-        CoreWebView2PermissionKind.LocalFonts                  => "local fonts",
-        CoreWebView2PermissionKind.MidiSystemExclusiveMessages => "MIDI devices",
-        CoreWebView2PermissionKind.WindowManagement            => "window management",
-        CoreWebView2PermissionKind.PersistentStorage           => "persistent storage",
-        _                                                      => "browser features"
+        CoreWebView2PermissionKind.Microphone                  => LocalizationService.Instance.Get("PermissionMicrophone"),
+        CoreWebView2PermissionKind.Camera                      => LocalizationService.Instance.Get("PermissionCamera"),
+        CoreWebView2PermissionKind.Geolocation                 => LocalizationService.Instance.Get("PermissionLocation"),
+        CoreWebView2PermissionKind.Notifications               => LocalizationService.Instance.Get("PermissionNotifications"),
+        CoreWebView2PermissionKind.ClipboardRead               => LocalizationService.Instance.Get("PermissionClipboard"),
+        CoreWebView2PermissionKind.OtherSensors                => LocalizationService.Instance.Get("PermissionSensors"),
+        CoreWebView2PermissionKind.MultipleAutomaticDownloads  => LocalizationService.Instance.Get("PermissionDownloads"),
+        CoreWebView2PermissionKind.FileReadWrite               => LocalizationService.Instance.Get("PermissionFiles"),
+        CoreWebView2PermissionKind.Autoplay                    => LocalizationService.Instance.Get("PermissionAutoplay"),
+        CoreWebView2PermissionKind.LocalFonts                  => LocalizationService.Instance.Get("PermissionFonts"),
+        CoreWebView2PermissionKind.MidiSystemExclusiveMessages => LocalizationService.Instance.Get("PermissionMidi"),
+        CoreWebView2PermissionKind.WindowManagement            => LocalizationService.Instance.Get("PermissionWindow"),
+        CoreWebView2PermissionKind.PersistentStorage           => LocalizationService.Instance.Get("PermissionStorage"),
+        _                                                      => LocalizationService.Instance.Get("PermissionGeneric")
     };
 }

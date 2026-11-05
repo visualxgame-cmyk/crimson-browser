@@ -146,9 +146,10 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            var loc = LocalizationService.Instance;
             MessageBox.Show(
-                $"Error starting Chromium engine:\n{ex.Message}\n\nMake sure Microsoft Edge WebView2 Runtime is installed.",
-                "Crimson Browser Error",
+                loc.Format("WebView2MissingMessage", ex.Message),
+                loc.Get("WebView2MissingTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error
             );
@@ -560,15 +561,17 @@ public partial class MainWindow : Window
 
     private void UpdateReloadIcon(bool isLoading)
     {
+        var loc = LocalizationService.Instance;
+
         if (isLoading)
         {
             ReloadIcon.Data   = Geometry.Parse("M3 3 L11 11 M11 3 L3 11");
-            ReloadBtn.ToolTip = "Stop loading";
+            ReloadBtn.ToolTip = loc.Get("StopTooltip");
         }
         else
         {
             ReloadIcon.Data   = Geometry.Parse("M7 1 A6 6 0 1 1 2 7 M7 1 L4 4 M7 1 L10 4");
-            ReloadBtn.ToolTip = "Reload (Ctrl+R / F5)";
+            ReloadBtn.ToolTip = loc.Get("ReloadTooltip");
         }
     }
 
@@ -785,7 +788,7 @@ public partial class MainWindow : Window
         ToggleHttps.IsChecked  = ShieldService.Instance.EnforceHttps;
         TogglePopups.IsChecked = ShieldService.Instance.BlockPopups;
 
-        BlockedStatsText.Text = $"{ShieldService.Instance.BlockedCount} items blocked";
+        UpdateBlockedStats();
         UpdateShieldsUi();
 
         ShieldService.Instance.PropertyChanged += (s, e) =>
@@ -793,25 +796,33 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(() =>
             {
                 if (e.PropertyName == nameof(ShieldService.BlockedCount))
-                    BlockedStatsText.Text = $"{ShieldService.Instance.BlockedCount} items blocked";
+                    UpdateBlockedStats();
                 else if (e.PropertyName == nameof(ShieldService.IsShieldsEnabled))
                     UpdateShieldsUi();
             });
         };
     }
 
+    private void UpdateBlockedStats()
+    {
+        int count = ShieldService.Instance.BlockedCount;
+        string key = count == 1 ? "ShieldItemBlocked" : "ShieldItemsBlocked";
+        BlockedStatsText.Text = LocalizationService.Instance.Format(key, count);
+    }
+
     private void UpdateShieldsUi()
     {
         bool enabled = ShieldService.Instance.IsShieldsEnabled;
+        var loc = LocalizationService.Instance;
 
         if (enabled)
         {
-            ShieldBtnText.Text       = "SHIELDS";
+            ShieldBtnText.Text       = loc.Get("ShieldsButton");
             ShieldBtnText.Foreground = (Brush)FindResource("CrimsonRedGlowBrush");
             ShieldBtnIcon.Fill       = (Brush)FindResource("CrimsonRedGlowBrush");
             ShieldsBtnBorder.Background   = new SolidColorBrush(Color.FromRgb(37, 18, 25));
             ShieldsBtnBorder.BorderBrush  = (Brush)FindResource("CrimsonDarkRedBrush");
-            ShieldsStatusSubtext.Text     = "Protection active on this site";
+            ShieldsStatusSubtext.Text     = loc.Get("ShieldsActive");
             ShieldsStatusSubtext.Foreground = (Brush)FindResource("CrimsonRedGlowBrush");
             PopupShieldIcon.Fill      = (Brush)FindResource("CrimsonRedGlowBrush");
             ShieldOptionsPanel.IsEnabled = true;
@@ -819,12 +830,12 @@ public partial class MainWindow : Window
         }
         else
         {
-            ShieldBtnText.Text       = "SHIELDS OFF";
+            ShieldBtnText.Text       = loc.Get("ShieldsButtonOff");
             ShieldBtnText.Foreground = new SolidColorBrush(Color.FromRgb(140, 145, 160));
             ShieldBtnIcon.Fill       = new SolidColorBrush(Color.FromRgb(140, 145, 160));
             ShieldsBtnBorder.Background   = new SolidColorBrush(Color.FromRgb(24, 25, 33));
             ShieldsBtnBorder.BorderBrush  = new SolidColorBrush(Color.FromRgb(45, 48, 62));
-            ShieldsStatusSubtext.Text     = "Protection disabled";
+            ShieldsStatusSubtext.Text     = loc.Get("ShieldsDisabled");
             ShieldsStatusSubtext.Foreground = new SolidColorBrush(Color.FromRgb(140, 145, 160));
             PopupShieldIcon.Fill      = new SolidColorBrush(Color.FromRgb(140, 145, 160));
             ShieldOptionsPanel.IsEnabled = false;
@@ -865,10 +876,14 @@ public partial class MainWindow : Window
     private void UpdateDefaultBrowserMenu()
     {
         bool isDefault = WindowsIntegration.IsDefaultBrowser();
-        MenuDefaultBrowserText.Text = isDefault
-            ? "Crimson is your default browser"
-            : "Set as default browser";
-        MenuDefaultBrowserHint.Text = isDefault ? "✓" : "Windows";
+        var loc = LocalizationService.Instance;
+
+        MenuDefaultBrowserText.Text = loc.Get(isDefault
+            ? "MenuDefaultBrowserAlready"
+            : "MenuDefaultBrowser");
+        MenuDefaultBrowserHint.Text = loc.Get(isDefault
+            ? "MenuDefaultBrowserDone"
+            : "MenuDefaultBrowserHint");
     }
 
     private void UpdateMenuZoomDisplay()
@@ -940,13 +955,14 @@ public partial class MainWindow : Window
     private async void MenuClearData_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
+        var loc = LocalizationService.Instance;
 
         bool confirmed = CrimsonDialog.Show(
             this,
-            "Clear browsing data",
-            "This will clear the cache, cookies, site data and history for Crimson Browser. Bookmarks and settings are kept.",
-            "Clear data",
-            "Cancel",
+            loc.Get("ClearDataTitle"),
+            loc.Get("ClearDataMessage"),
+            loc.Get("ClearDataAction"),
+            loc.Get("DialogCancel"),
             danger: true);
 
         if (!confirmed) return;
@@ -958,24 +974,19 @@ public partial class MainWindow : Window
 
             CrimsonDialog.Info(
                 this,
-                "Data cleared",
-                "Cache, browsing data and history were cleared successfully.");
+                loc.Get("ClearDataDoneTitle"),
+                loc.Get("ClearDataDoneMessage"));
         }
     }
 
     private void MenuAbout_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
+        var loc = LocalizationService.Instance;
         CrimsonDialog.Info(
             this,
-            "About Crimson Browser",
-            "🔴 Crimson Browser v1.0.0\n\n" +
-            "• Engine: Chromium (Blink & V8)\n" +
-            "• Platform: .NET 10 & Microsoft WebView2 Evergreen\n" +
-            "• Theme: Crimson Stealth (Red & Black)\n" +
-            "• Resource Footprint: Ultra-low (Low-RAM Optimizer Active)\n" +
-            "• Protection: Crimson Shields Engine\n" +
-            "• Features: History, Bookmarks Bar, Incognito, Downloads Hub, Session Restore, Find in Page");
+            loc.Get("AboutTitle"),
+            loc.Get("AboutBody"));
     }
 
     private void MenuSettings_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; OpenSettings(); }
@@ -983,21 +994,23 @@ public partial class MainWindow : Window
     private void MenuDefaultBrowser_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
+        var loc = LocalizationService.Instance;
 
         if (WindowsIntegration.IsDefaultBrowser())
         {
-            CrimsonDialog.Info(this, "Default browser", "Crimson Browser is already your default browser.");
+            CrimsonDialog.Info(
+                this,
+                loc.Get("DefaultBrowserAlreadyTitle"),
+                loc.Get("DefaultBrowserAlreadyMessage"));
             return;
         }
 
         bool proceed = CrimsonDialog.Show(
             this,
-            "Set Crimson as default browser",
-            "Windows will open its Default apps panel where Crimson Browser is already registered. " +
-            "Select Crimson Browser under \"Web browser\" to confirm the change.\n\n" +
-            "This only writes settings for your Windows user account; no administrator rights are required.",
-            "Open Windows Settings",
-            "Cancel");
+            loc.Get("DefaultBrowserTitle"),
+            loc.Get("DefaultBrowserMessage"),
+            loc.Get("DefaultBrowserOpen"),
+            loc.Get("DialogCancel"));
 
         if (!proceed) return;
 
@@ -1007,7 +1020,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            CrimsonDialog.Info(this, "Could not register Crimson Browser", ex.Message);
+            CrimsonDialog.Info(this, loc.Get("DefaultBrowserErrorTitle"), ex.Message);
         }
     }
 
@@ -1057,17 +1070,18 @@ public partial class MainWindow : Window
 
     public void ApplyLocalizationToAllUi()
     {
-        if (OmniboxPlaceholder == null || BackBtn == null || MenuClearDataText == null) return;
+        if (BlockedStatsText == null || MenuDefaultBrowserText == null) return;
         var loc = LocalizationService.Instance;
 
-        OmniboxPlaceholder.Text = loc.Get("OmniboxPlaceholder");
-        BackBtn.ToolTip    = loc.Get("BackTooltip");
-        ForwardBtn.ToolTip = loc.Get("ForwardTooltip");
-        ReloadBtn.ToolTip  = loc.Get("ReloadTooltip");
-
-        MenuClearDataText.Text = loc.Get("MenuClearData");
-        MenuSettingsText.Text  = loc.Get("MenuSettings");
-        MenuAboutText.Text     = loc.Get("MenuAbout");
+        // Static XAML labels refresh themselves through the {loc:Loc ...} bindings.
+        // Only values computed in code need an explicit refresh.
+        UpdateBlockedStats();
+        UpdateShieldsUi();
+        UpdateDefaultBrowserMenu();
+        UpdateReloadIcon(_activeTab?.IsLoading ?? false);
+        MaximizeBtn.ToolTip = loc.Get(WindowState == WindowState.Maximized
+            ? "RestoreTooltip"
+            : "MaximizeTooltip");
 
         foreach (var tab in Tabs)
         {
@@ -1095,7 +1109,8 @@ public partial class MainWindow : Window
         MaximizeIcon.Data = WindowState == WindowState.Maximized
             ? Geometry.Parse("M2 1 L9 1 L9 8 M1 3 L8 3 L8 10 L1 10 Z")
             : Geometry.Parse("M1 1 L9 1 L9 9 L1 9 Z");
-        MaximizeBtn.ToolTip = WindowState == WindowState.Maximized ? "Restore" : "Maximize";
+        MaximizeBtn.ToolTip = LocalizationService.Instance.Get(
+            WindowState == WindowState.Maximized ? "RestoreTooltip" : "MaximizeTooltip");
     }
 
     private void CloseBtn_Click(object sender, RoutedEventArgs e) => Close();

@@ -3,9 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:loc="clr-namespace:CrimsonBrowser.Services"
         xmlns:models="clr-namespace:CrimsonBrowser.Models"
         mc:Ignorable="d"
-        Title="Crimson Browser — Incognito" Icon="crimson.ico"
+        Title="{loc:Loc IncognitoTitle}" Icon="crimson.ico"
         Height="780" Width="1200" MinHeight="500" MinWidth="700"
         WindowStartupLocation="CenterScreen"
         Background="#09060D"
@@ -23,12 +24,17 @@
         <KeyBinding Key="F5"                           Command="{Binding RefreshCommand,         RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="L"  Modifiers="Control"       Command="{Binding FocusOmniboxCommand,    RelativeSource={RelativeSource AncestorType=Window}}" />
         <KeyBinding Key="F12"                          Command="{Binding OpenDevToolsCommand,    RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F11"                          Command="{Binding ToggleFullscreenCommand,RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="F"  Modifiers="Control"       Command="{Binding FindCommand,            RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control"      Command="{Binding NextTabCommand,         RelativeSource={RelativeSource AncestorType=Window}}" />
+        <KeyBinding Key="Tab" Modifiers="Control+Shift" Command="{Binding PrevTabCommand,        RelativeSource={RelativeSource AncestorType=Window}}" />
     </Window.InputBindings>
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="44" />
-            <RowDefinition Height="50" />
+            <RowDefinition x:Name="TopBarRow" Height="44" />
+            <RowDefinition x:Name="NavBarRow" Height="50" />
+            <RowDefinition x:Name="FindBarRow" Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -49,11 +55,11 @@
                         <Path Fill="#09060D" Margin="2" Data="M9 1 L16 4 C16 10 13 14 9 17 C5 14 2 10 2 4 Z" />
                         <Path Fill="#A040FF" Margin="4" Data="M7 1 L12 4 L7 13 L2 4 Z" />
                     </Grid>
-                    <TextBlock Text="INCOGNITO" FontSize="12" FontWeight="Bold" Foreground="#A040FF"
+                    <TextBlock Text="{loc:Loc IncognitoBadge}" FontSize="12" FontWeight="Bold" Foreground="#A040FF"
                                VerticalAlignment="Center" />
                     <Border Background="#1D0D33" BorderBrush="#3D1A66" BorderThickness="1" CornerRadius="8"
                             Padding="6 2" Margin="8 0 0 0">
-                        <TextBlock Text="🕶️ Private" FontSize="10" Foreground="#A040FF" FontWeight="SemiBold" />
+                        <TextBlock Text="{loc:Loc IncognitoPrivate}" FontSize="10" Foreground="#A040FF" FontWeight="SemiBold" />
                     </Border>
                 </StackPanel>
 
@@ -73,15 +79,20 @@
                                     <Border x:Name="TabBorder" Width="180" Height="36" Margin="0 0 3 0"
                                             CornerRadius="8 8 0 0" Cursor="Hand"
                                             Background="#120B1C" BorderBrush="#2A1A40" BorderThickness="1 1 1 0"
-                                            MouseLeftButtonDown="Tab_MouseLeftButtonDown">
+                                            MouseLeftButtonDown="Tab_MouseLeftButtonDown"
+                                            MouseUp="Tab_MouseUp">
                                         <Grid Margin="10 0 8 0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="16" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="20" />
                                             </Grid.ColumnDefinitions>
-                                            <Ellipse Grid.Column="0" Width="8" Height="8" Fill="#8B00FF"
-                                                     VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            <Grid Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center">
+                                                <Ellipse Width="8" Height="8" Fill="#8B00FF"
+                                                         VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                <Image Source="{Binding FaviconUrl}" Width="16" Height="16"
+                                                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                            </Grid>
                                             <TextBlock Grid.Column="1" Text="{Binding Title}" Margin="8 0 4 0"
                                                        VerticalAlignment="Center" FontSize="11.5" Foreground="#C9CCD8"
                                                        TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
@@ -102,7 +113,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="30" Height="30"
-                                Margin="4 0 4 4" VerticalAlignment="Center" ToolTip="New Private Tab (Ctrl+T)"
+                                Margin="4 0 4 4" VerticalAlignment="Center" ToolTip="{loc:Loc IncognitoNewTab}"
                                 Click="NewTab_Click">
                             <TextBlock Text="+" FontSize="16" FontWeight="SemiBold" Margin="0 -2 0 0" />
                         </Button>
@@ -112,16 +123,16 @@
                 <!-- Window Controls -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Style="{StaticResource CrimsonChromeBtnStyle}" Click="MinimizeBtn_Click" ToolTip="Minimize">
+                    <Button Style="{StaticResource CrimsonChromeBtnStyle}" Click="MinimizeBtn_Click" ToolTip="{loc:Loc MinimizeTooltip}">
                         <Path Width="10" Height="2" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M0 0 L10 0 L10 2 L0 2 Z" />
                     </Button>
-                    <Button x:Name="MaximizeBtn" Style="{StaticResource CrimsonChromeBtnStyle}" Click="MaximizeBtn_Click" ToolTip="Maximize">
+                    <Button x:Name="MaximizeBtn" Style="{StaticResource CrimsonChromeBtnStyle}" Click="MaximizeBtn_Click" ToolTip="{loc:Loc MaximizeTooltip}">
                         <Path x:Name="MaximizeIcon" Width="10" Height="10"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.2" Data="M1 1 L9 1 L9 9 L1 9 Z" />
                     </Button>
-                    <Button Style="{StaticResource CrimsonCloseBtnStyle}" Click="CloseBtn_Click" ToolTip="Close">
+                    <Button Style="{StaticResource CrimsonCloseBtnStyle}" Click="CloseBtn_Click" ToolTip="{loc:Loc CloseTooltip}">
                         <Path Width="10" Height="10"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5" Data="M1 1 L9 9 M9 1 L1 9" />
@@ -142,17 +153,17 @@
                 <!-- Nav Buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0 0 10 0">
                     <Button x:Name="BackBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Back" Click="BackBtn_Click">
+                            ToolTip="{loc:Loc BackTooltip}" Click="BackBtn_Click">
                         <Path Width="14" Height="14" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M12 7 L4 7 L8 3 L7 2 L1 8 L7 14 L8 13 L4 9 L12 9 Z" />
                     </Button>
                     <Button x:Name="ForwardBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Forward" Click="ForwardBtn_Click">
+                            ToolTip="{loc:Loc ForwardTooltip}" Click="ForwardBtn_Click">
                         <Path Width="14" Height="14" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M2 7 L10 7 L6 3 L7 2 L13 8 L7 14 L6 13 L10 9 L2 9 Z" />
                     </Button>
                     <Button x:Name="ReloadBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Reload" Click="ReloadBtn_Click">
+                            ToolTip="{loc:Loc ReloadTooltip}" Click="ReloadBtn_Click">
                         <Path x:Name="ReloadIcon" Width="14" Height="14"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5" Data="M7 1 A6 6 0 1 1 2 7 M7 1 L4 4 M7 1 L10 4" />
@@ -177,11 +188,11 @@
                                  KeyDown="OmniboxTextBox_KeyDown"
                                  GotFocus="OmniboxTextBox_GotFocus"
                                  LostFocus="OmniboxTextBox_LostFocus" />
-                        <TextBlock Grid.Column="1" x:Name="OmniboxPlaceholder" Text="Private search..."
+                        <TextBlock Grid.Column="1" x:Name="OmniboxPlaceholder" Text="{loc:Loc IncognitoPlaceholder}"
                                    Foreground="#686C7E" FontSize="12.5" VerticalAlignment="Center"
                                    IsHitTestVisible="False" Margin="2 0 0 0" />
                         <Button Grid.Column="2" Style="{StaticResource CrimsonNavButtonStyle}" Width="26" Height="26"
-                                ToolTip="Navigate" Click="GoBtn_Click">
+                                ToolTip="{loc:Loc NavigateTooltip}" Click="GoBtn_Click">
                             <Path Width="10" Height="10" Fill="#8B00FF"
                                   Data="M1 5 L7 5 L5 2 L6 1 L10 5 L6 9 L5 8 L7 5 Z" />
                         </Button>
@@ -191,14 +202,44 @@
                 <!-- Right Actions -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10 0 0 0">
                     <Button Style="{StaticResource CrimsonNavButtonStyle}" Margin="2 0 0 0"
-                            ToolTip="Close Incognito Window" Click="CloseBtn_Click">
-                        <TextBlock Text="✕ Exit Private" FontSize="11" FontWeight="SemiBold" Foreground="#A040FF" />
+                            ToolTip="{loc:Loc IncognitoCloseTooltip}" Click="CloseBtn_Click">
+                        <TextBlock Text="{loc:Loc IncognitoExit}" FontSize="11" FontWeight="SemiBold" Foreground="#A040FF" />
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ROW 2: WEB CONTENT -->
-        <Grid Grid.Row="2" Background="#09060D" x:Name="WebContainer" />
+        <!-- ROW 2: FIND IN PAGE BAR -->
+        <Border x:Name="FindBar" Grid.Row="2" Visibility="Collapsed"
+                Background="#0F0B16" BorderBrush="#28183A" BorderThickness="0 0 0 1"
+                Padding="12 5">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock Text="{loc:Loc FindOnPage}" Foreground="#8E92A4" FontSize="11.5"
+                           VerticalAlignment="Center" Margin="0 0 10 0" />
+                <TextBox x:Name="FindTextBox" Width="230" Height="28"
+                         Background="#1A1226" Foreground="White" BorderThickness="0"
+                         Padding="8 0" VerticalContentAlignment="Center" FontSize="12"
+                         CaretBrush="#8B00FF"
+                         TextChanged="FindTextBox_TextChanged"
+                         KeyDown="FindTextBox_KeyDown" />
+                <TextBlock x:Name="FindMatchText" Text="0/0" Width="52" TextAlignment="Center"
+                           Foreground="#8E92A4" FontSize="11" VerticalAlignment="Center" Margin="4 0" />
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="{loc:Loc FindPrevious}" Click="FindPrev_Click">
+                    <TextBlock Text="↑" FontSize="13" Foreground="#C9CCD8" />
+                </Button>
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="{loc:Loc FindNext}" Click="FindNext_Click">
+                    <TextBlock Text="↓" FontSize="13" Foreground="#C9CCD8" />
+                </Button>
+                <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
+                        ToolTip="{loc:Loc FindClose}" Click="FindClose_Click">
+                    <TextBlock Text="✕" FontSize="11" Foreground="#8E92A4" />
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- ROW 3: WEB CONTENT -->
+        <Grid Grid.Row="3" Background="#09060D" x:Name="WebContainer" />
     </Grid>
 </Window>

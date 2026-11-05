@@ -57,11 +57,15 @@ public class DownloadItem : INotifyPropertyChanged
     public string StatusText => Status switch
     {
         DownloadStatus.InProgress => $"{ReceivedBytes / 1024} KB / {(TotalBytes > 0 ? TotalBytes / 1024 + " KB" : "??")}",
-        DownloadStatus.Completed  => "Completed",
-        DownloadStatus.Failed     => "Failed",
-        DownloadStatus.Cancelled  => "Cancelled",
+        DownloadStatus.Completed  => LocalizationService.Instance.Get("DownloadCompleted"),
+        DownloadStatus.Failed     => LocalizationService.Instance.Get("DownloadFailed"),
+        DownloadStatus.Cancelled  => LocalizationService.Instance.Get("DownloadCancelled"),
         _                         => string.Empty
     };
+
+    /// <summary>Re-evaluates <see cref="StatusText"/> after a language change.</summary>
+    public void RefreshStatusText()
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
 
     public event PropertyChangedEventHandler? PropertyChanged;
     protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)
@@ -81,6 +85,16 @@ public class DownloadsService
     public static DownloadsService Instance => _instance ??= new DownloadsService();
 
     public ObservableCollection<DownloadItem> Downloads { get; } = new();
+
+    public DownloadsService()
+    {
+        // Refresh the localized status labels of existing entries when the UI language changes.
+        LocalizationService.Instance.LanguageChanged += () =>
+        {
+            foreach (var item in Downloads)
+                item.RefreshStatusText();
+        };
+    }
 
     public event Action? ActiveDownloadsChanged;
 

@@ -4,9 +4,10 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CrimsonBrowser"
+        xmlns:loc="clr-namespace:CrimsonBrowser.Services"
         xmlns:models="clr-namespace:CrimsonBrowser.Models"
         mc:Ignorable="d"
-        Title="Crimson Browser" Icon="crimson.ico" Height="780" Width="1200" MinHeight="500" MinWidth="700"
+        Title="{loc:Loc AppTitle}" Icon="crimson.ico" Height="780" Width="1200" MinHeight="500" MinWidth="700"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource CrimsonBgDarkBrush}"
         Foreground="{StaticResource TextWhiteBrush}">
@@ -98,11 +99,11 @@
                                             MouseUp="Tab_MouseUp">
                                         <Border.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Duplicate tab" Click="TabContext_Duplicate" />
-                                                <MenuItem Header="Copy address" Click="TabContext_CopyUrl" />
+                                                <MenuItem Header="{loc:Loc TabDuplicate}" Click="TabContext_Duplicate" />
+                                                <MenuItem Header="{loc:Loc TabCopyAddress}" Click="TabContext_CopyUrl" />
                                                 <Separator />
-                                                <MenuItem Header="Close tab" Click="TabContext_Close" />
-                                                <MenuItem Header="Close other tabs" Click="TabContext_CloseOthers" />
+                                                <MenuItem Header="{loc:Loc TabClose}" Click="TabContext_Close" />
+                                                <MenuItem Header="{loc:Loc TabCloseOthers}" Click="TabContext_CloseOthers" />
                                             </ContextMenu>
                                         </Border.ContextMenu>
                                         <Grid Margin="10 0 8 0">
@@ -141,7 +142,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="30" Height="30"
-                                Margin="4 0 4 4" VerticalAlignment="Center" ToolTip="New Tab (Ctrl+T)"
+                                Margin="4 0 4 4" VerticalAlignment="Center" ToolTip="{loc:Loc NewTabTooltip}"
                                 Click="NewTab_Click">
                             <TextBlock Text="+" FontSize="16" FontWeight="SemiBold" Margin="0 -2 0 0" />
                         </Button>
@@ -151,16 +152,16 @@
                 <!-- Window Controls -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Style="{StaticResource CrimsonChromeBtnStyle}" Click="MinimizeBtn_Click" ToolTip="Minimize">
+                    <Button Style="{StaticResource CrimsonChromeBtnStyle}" Click="MinimizeBtn_Click" ToolTip="{loc:Loc MinimizeTooltip}">
                         <Path Width="10" Height="2" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M0 0 L10 0 L10 2 L0 2 Z" />
                     </Button>
-                    <Button x:Name="MaximizeBtn" Style="{StaticResource CrimsonChromeBtnStyle}" Click="MaximizeBtn_Click" ToolTip="Maximize">
+                    <Button x:Name="MaximizeBtn" Style="{StaticResource CrimsonChromeBtnStyle}" Click="MaximizeBtn_Click" ToolTip="{loc:Loc MaximizeTooltip}">
                         <Path x:Name="MaximizeIcon" Width="10" Height="10"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.2" Data="M1 1 L9 1 L9 9 L1 9 Z" />
                     </Button>
-                    <Button Style="{StaticResource CrimsonCloseBtnStyle}" Click="CloseBtn_Click" ToolTip="Close">
+                    <Button Style="{StaticResource CrimsonCloseBtnStyle}" Click="CloseBtn_Click" ToolTip="{loc:Loc CloseTooltip}">
                         <Path Width="10" Height="10"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5" Data="M1 1 L9 9 M9 1 L1 9" />
@@ -184,23 +185,23 @@
                 <!-- Nav Buttons -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0 0 10 0">
                     <Button x:Name="BackBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Back (Alt+Left)" Click="BackBtn_Click">
+                            ToolTip="{loc:Loc BackTooltip}" Click="BackBtn_Click">
                         <Path Width="14" Height="14" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M12 7 L4 7 L8 3 L7 2 L1 8 L7 14 L8 13 L4 9 L12 9 Z" />
                     </Button>
                     <Button x:Name="ForwardBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Forward (Alt+Right)" Click="ForwardBtn_Click">
+                            ToolTip="{loc:Loc ForwardTooltip}" Click="ForwardBtn_Click">
                         <Path Width="14" Height="14" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M2 7 L10 7 L6 3 L7 2 L13 8 L7 14 L6 13 L10 9 L2 9 Z" />
                     </Button>
                     <Button x:Name="ReloadBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Reload (Ctrl+R / F5)" Click="ReloadBtn_Click">
+                            ToolTip="{loc:Loc ReloadTooltip}" Click="ReloadBtn_Click">
                         <Path x:Name="ReloadIcon" Width="14" Height="14"
                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               StrokeThickness="1.5" Data="M7 1 A6 6 0 1 1 2 7 M7 1 L4 4 M7 1 L10 4" />
                     </Button>
                     <Button Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 3 0"
-                            ToolTip="Crimson Home Page" Click="HomeBtn_Click">
+                            ToolTip="{loc:Loc HomeTooltip}" Click="HomeBtn_Click">
                         <Path Width="14" Height="14" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                               Data="M7 1 L1 6 L2 7 L3 7 L3 13 L6 13 L6 9 L8 9 L8 13 L11 13 L11 7 L12 7 L13 6 Z" />
                     </Button>
@@ -231,13 +232,13 @@
                                  LostFocus="OmniboxTextBox_LostFocus" />
 
                         <!-- Placeholder -->
-                        <TextBlock Grid.Column="1" x:Name="OmniboxPlaceholder" Text="Search with Google or enter web address..."
+                        <TextBlock Grid.Column="1" x:Name="OmniboxPlaceholder" Text="{loc:Loc OmniboxPlaceholder}"
                                    Foreground="#686C7E" FontSize="12.5" VerticalAlignment="Center"
                                    IsHitTestVisible="False" Margin="2 0 0 0" />
 
                         <!-- Bookmark Star Button -->
                         <Button Grid.Column="2" x:Name="BookmarkStarBtn" Style="{StaticResource CrimsonNavButtonStyle}"
-                                Width="26" Height="26" ToolTip="Bookmark this page (Ctrl+D)"
+                                Width="26" Height="26" ToolTip="{loc:Loc BookmarkTooltip}"
                                 Click="BookmarkStar_Click">
                             <TextBlock x:Name="BookmarkStarText" Text="☆" FontSize="14"
                                        Foreground="#686C7E" VerticalAlignment="Center" />
@@ -245,7 +246,7 @@
 
                         <!-- Go / Navigate Button -->
                         <Button Grid.Column="3" Style="{StaticResource CrimsonNavButtonStyle}" Width="26" Height="26"
-                                ToolTip="Navigate" Click="GoBtn_Click">
+                                ToolTip="{loc:Loc NavigateTooltip}" Click="GoBtn_Click">
                             <Path Width="10" Height="10" Fill="{StaticResource CrimsonRedGlowBrush}"
                                   Data="M1 5 L7 5 L5 2 L6 1 L10 5 L6 9 L5 8 L7 5 Z" />
                         </Button>
@@ -257,7 +258,7 @@
                     <!-- Crimson Shields Button -->
                     <Border x:Name="ShieldsBtnBorder" Background="#251219" BorderBrush="{StaticResource CrimsonDarkRedBrush}"
                             BorderThickness="1" CornerRadius="15" Height="30" Padding="8 0 10 0"
-                            Cursor="Hand" ToolTip="Crimson Shields (Privacy &amp; Ad Blocking)"
+                            Cursor="Hand" ToolTip="{loc:Loc ShieldsTooltip}"
                             MouseLeftButtonUp="ShieldsBtn_Click">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path x:Name="ShieldBtnIcon" Width="12" Height="12" Fill="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 6 0"
@@ -269,7 +270,7 @@
 
                     <!-- Downloads Button -->
                     <Button x:Name="DownloadsBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="8 0 2 0"
-                            ToolTip="Downloads" Click="DownloadsBtn_Click">
+                            ToolTip="{loc:Loc DownloadsTooltip}" Click="DownloadsBtn_Click">
                         <Grid>
                             <TextBlock Text="⬇" FontSize="13" Foreground="#8E92A4" />
                             <Border x:Name="DownloadsBadge" Background="{StaticResource CrimsonRedBrush}"
@@ -284,13 +285,13 @@
 
                     <!-- DevTools Button -->
                     <Button Style="{StaticResource CrimsonNavButtonStyle}" Margin="2 0 2 0"
-                            ToolTip="Developer Tools (F12)" Click="OpenDevTools_Click">
+                            ToolTip="{loc:Loc DevToolsTooltip}" Click="OpenDevTools_Click">
                         <TextBlock Text="&lt;/&gt;" FontSize="11" FontWeight="Bold" Foreground="#8E92A4" />
                     </Button>
 
                     <!-- Menu Button (⋮) -->
                     <Button x:Name="MenuBtn" Style="{StaticResource CrimsonNavButtonStyle}" Margin="2 0 0 0"
-                            ToolTip="Crimson Menu" Click="MenuBtn_Click">
+                            ToolTip="{loc:Loc MenuTooltip}" Click="MenuBtn_Click">
                         <TextBlock Text="⋮" FontSize="16" FontWeight="Bold" Foreground="#8E92A4" />
                     </Button>
                 </StackPanel>
@@ -350,8 +351,8 @@
                             <Path x:Name="PopupShieldIcon" Width="22" Height="22" Fill="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 10 0"
                                   Data="M10 0 L20 4 C20 13 15 18 10 20 C5 18 0 13 0 4 Z" />
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Crimson Shields" FontWeight="Bold" FontSize="14.5" Foreground="White" />
-                                <TextBlock x:Name="ShieldsStatusSubtext" Text="Protection active on this site" FontSize="11"
+                                <TextBlock Text="{loc:Loc ShieldsTitle}" FontWeight="Bold" FontSize="14.5" Foreground="White" />
+                                <TextBlock x:Name="ShieldsStatusSubtext" Text="{loc:Loc ShieldsActive}" FontSize="11"
                                            Foreground="{StaticResource CrimsonRedGlowBrush}" />
                             </StackPanel>
                         </StackPanel>
@@ -369,11 +370,11 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="🛡️" FontSize="13" Margin="0 0 6 0" />
-                                <TextBlock x:Name="BlockedStatsText" Text="0 items blocked" FontSize="12"
+                                <TextBlock x:Name="BlockedStatsText" Text="0" FontSize="12"
                                            FontWeight="SemiBold" Foreground="#FF5577" VerticalAlignment="Center" />
                             </StackPanel>
                             <Button Grid.Column="1" Style="{StaticResource CrimsonNavButtonStyle}" Width="22" Height="22"
-                                    ToolTip="Reset counter" Click="ResetBlockedStats_Click">
+                                    ToolTip="{loc:Loc ResetStatsTooltip}" Click="ResetBlockedStats_Click">
                                 <TextBlock Text="↺" FontSize="12" Foreground="#8E92A4" />
                             </Button>
                         </Grid>
@@ -387,8 +388,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0 0 10 0">
-                                <TextBlock Text="Block Ads &amp; Trackers" FontSize="12" FontWeight="SemiBold" Foreground="White" />
-                                <TextBlock Text="Block advertisements and tracking scripts" FontSize="10" Foreground="#8E92A4" />
+                                <TextBlock Text="{loc:Loc BlockAdsTitle}" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                <TextBlock Text="{loc:Loc BlockAdsDesc}" FontSize="10" Foreground="#8E92A4" />
                             </StackPanel>
                             <ToggleButton Grid.Column="1" x:Name="ToggleAds" Style="{StaticResource CrimsonToggleStyle}"
                                           VerticalAlignment="Center" Click="ToggleAds_Click" />
@@ -400,8 +401,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0 0 10 0">
-                                <TextBlock Text="Low-RAM Memory Saver" FontSize="12" FontWeight="SemiBold" Foreground="White" />
-                                <TextBlock Text="Suspend inactive background tabs" FontSize="10" Foreground="#8E92A4" />
+                                <TextBlock Text="{loc:Loc LowRamTitle}" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                <TextBlock Text="{loc:Loc LowRamDesc}" FontSize="10" Foreground="#8E92A4" />
                             </StackPanel>
                             <ToggleButton Grid.Column="1" x:Name="ToggleLowRam" Style="{StaticResource CrimsonToggleStyle}"
                                           VerticalAlignment="Center" Click="ToggleLowRam_Click" />
@@ -413,8 +414,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0 0 10 0">
-                                <TextBlock Text="Enforce HTTPS Connections" FontSize="12" FontWeight="SemiBold" Foreground="White" />
-                                <TextBlock Text="Automatically upgrade traffic to secure HTTPS" FontSize="10" Foreground="#8E92A4" />
+                                <TextBlock Text="{loc:Loc HttpsTitle}" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                <TextBlock Text="{loc:Loc HttpsDesc}" FontSize="10" Foreground="#8E92A4" />
                             </StackPanel>
                             <ToggleButton Grid.Column="1" x:Name="ToggleHttps" Style="{StaticResource CrimsonToggleStyle}"
                                           VerticalAlignment="Center" Click="ToggleHttps_Click" />
@@ -426,8 +427,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0 0 10 0">
-                                <TextBlock Text="Block Spam Pop-ups" FontSize="12" FontWeight="SemiBold" Foreground="White" />
-                                <TextBlock Text="Prevent unwanted third-party windows" FontSize="10" Foreground="#8E92A4" />
+                                <TextBlock Text="{loc:Loc PopupsTitle}" FontSize="12" FontWeight="SemiBold" Foreground="White" />
+                                <TextBlock Text="{loc:Loc PopupsDesc}" FontSize="10" Foreground="#8E92A4" />
                             </StackPanel>
                             <ToggleButton Grid.Column="1" x:Name="TogglePopups" Style="{StaticResource CrimsonToggleStyle}"
                                           VerticalAlignment="Center" Click="TogglePopups_Click" />
@@ -454,10 +455,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="⬇ Downloads" FontWeight="Bold" FontSize="13" Foreground="White" />
+                        <TextBlock Grid.Column="0" Text="{loc:Loc DownloadsHeader}" FontWeight="Bold" FontSize="13" Foreground="White" />
                         <Button Grid.Column="1" Style="{StaticResource CrimsonNavButtonStyle}" Height="24" Padding="8 0"
                                 FontSize="11" Click="ClearCompletedDownloads_Click">
-                            <TextBlock Text="Clear completed" Foreground="#8E92A4" />
+                            <TextBlock Text="{loc:Loc DownloadsClearCompleted}" Foreground="#8E92A4" />
                         </Button>
                     </Grid>
 
@@ -491,7 +492,7 @@
                     </ScrollViewer>
 
                     <!-- Empty state -->
-                    <TextBlock x:Name="NoDownloadsText" Text="No downloads yet" Foreground="#545870"
+                    <TextBlock x:Name="NoDownloadsText" Text="{loc:Loc NoDownloads}" Foreground="#545870"
                                FontSize="12" HorizontalAlignment="Center" Margin="0 10" />
                 </StackPanel>
             </Border>
@@ -515,7 +516,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="New Tab" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuNewTab}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+T" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -527,7 +528,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="New Window" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuNewWindow}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+N" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -541,7 +542,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Text="🕶️" Margin="0 0 6 0" FontSize="12" />
-                                <TextBlock Text="New Incognito Window" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Loc MenuIncognito}" VerticalAlignment="Center" />
                             </StackPanel>
                             <TextBlock Grid.Column="1" Text="Ctrl+Shift+N" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
@@ -554,7 +555,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Reopen Closed Tab" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuReopenTab}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+Shift+T" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -562,13 +563,13 @@
                     <Separator Background="#262838" Margin="4 6" />
 
                     <!-- History -->
-                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuHistory_Click">
+                    <Button x:Name="MenuHistoryBtn" Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuHistory_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="History" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuHistory}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+H" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -580,7 +581,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Find on page" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuFind}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+F" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -592,7 +593,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Fullscreen" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuFullscreen}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="F11" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
@@ -604,14 +605,14 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Bookmarks Bar" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuBookmarksBar}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="Ctrl+Shift+B" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
 
                     <!-- Downloads -->
                     <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuDownloads_Click">
-                        <TextBlock Text="Downloads" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Loc MenuDownloads}" VerticalAlignment="Center" />
                     </Button>
 
                     <Separator Background="#262838" Margin="4 6" />
@@ -623,16 +624,16 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Zoom" Foreground="#D8DBE5" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuZoom}" Foreground="#D8DBE5" VerticalAlignment="Center" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="26" Height="26"
-                                        ToolTip="Zoom out" Click="MenuZoomOut_Click">
+                                        ToolTip="{loc:Loc ZoomOut}" Click="MenuZoomOut_Click">
                                     <TextBlock Text="-" FontSize="14" FontWeight="Bold" />
                                 </Button>
                                 <TextBlock x:Name="MenuZoomText" Text="100%" Width="46" TextAlignment="Center"
                                            FontSize="11.5" Foreground="White" VerticalAlignment="Center" />
                                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="26" Height="26"
-                                        ToolTip="Zoom in" Click="MenuZoomIn_Click">
+                                        ToolTip="{loc:Loc ZoomIn}" Click="MenuZoomIn_Click">
                                     <TextBlock Text="+" FontSize="14" FontWeight="Bold" />
                                 </Button>
                             </StackPanel>
@@ -648,51 +649,51 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Developer Tools" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" Text="{loc:Loc MenuDevTools}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="F12" Foreground="#777B8E" FontSize="11" VerticalAlignment="Center" />
                         </Grid>
                     </Button>
 
                     <!-- Clear Data -->
                     <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuClearData_Click">
-                        <TextBlock x:Name="MenuClearDataText" Text="Clear Browsing Data &amp; Cache" VerticalAlignment="Center" />
+                        <TextBlock x:Name="MenuClearDataText" Text="{loc:Loc MenuClearData}" VerticalAlignment="Center" />
                     </Button>
 
                     <Separator Background="#262838" Margin="4 6" />
 
                     <!-- Settings -->
-                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuSettings_Click">
+                    <Button x:Name="MenuSettingsBtn" Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuSettings_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" x:Name="MenuSettingsText" Text="Settings" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" x:Name="MenuSettingsText" Text="{loc:Loc MenuSettings}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="⚙️" FontSize="12" VerticalAlignment="Center" Margin="10 0 0 0" />
                         </Grid>
                     </Button>
 
                     <!-- Set as default browser -->
-                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuDefaultBrowser_Click">
+                    <Button x:Name="MenuDefaultBrowserBtn" Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuDefaultBrowser_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" x:Name="MenuDefaultBrowserText" Text="Set as default browser" VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="1" x:Name="MenuDefaultBrowserHint" Text="Windows" Foreground="#777B8E"
+                            <TextBlock Grid.Column="0" x:Name="MenuDefaultBrowserText" Text="{loc:Loc MenuDefaultBrowser}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" x:Name="MenuDefaultBrowserHint" Text="{loc:Loc MenuDefaultBrowserHint}" Foreground="#777B8E"
                                        FontSize="11" VerticalAlignment="Center" Margin="10 0 0 0" />
                         </Grid>
                     </Button>
 
                     <!-- About -->
-                    <Button Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuAbout_Click">
+                    <Button x:Name="MenuAboutBtn" Style="{StaticResource CrimsonMenuItemStyle}" Click="MenuAbout_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" x:Name="MenuAboutText" Text="About Crimson Browser" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="0" x:Name="MenuAboutText" Text="{loc:Loc MenuAbout}" VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1" Text="v1.0" Foreground="{StaticResource CrimsonRedGlowBrush}"
                                        FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10 0 0 0" />
                         </Grid>
@@ -708,7 +709,7 @@
                 Background="#13141B" BorderBrush="#1C1D26" BorderThickness="0 0 0 1"
                 Padding="12 5">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBlock Text="Find on page" Foreground="#8E92A4" FontSize="11.5"
+                <TextBlock Text="{loc:Loc FindOnPage}" Foreground="#8E92A4" FontSize="11.5"
                            VerticalAlignment="Center" Margin="0 0 10 0" />
                 <TextBox x:Name="FindTextBox" Width="230" Height="28"
                          Background="#1A1C25" Foreground="White" BorderThickness="0"
@@ -719,15 +720,15 @@
                 <TextBlock x:Name="FindMatchText" Text="0/0" Width="52" TextAlignment="Center"
                            Foreground="#8E92A4" FontSize="11" VerticalAlignment="Center" Margin="4 0" />
                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
-                        ToolTip="Previous match (Shift+Enter)" Click="FindPrev_Click">
+                        ToolTip="{loc:Loc FindPrevious}" Click="FindPrev_Click">
                     <TextBlock Text="↑" FontSize="13" Foreground="#C9CCD8" />
                 </Button>
                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
-                        ToolTip="Next match (Enter)" Click="FindNext_Click">
+                        ToolTip="{loc:Loc FindNext}" Click="FindNext_Click">
                     <TextBlock Text="↓" FontSize="13" Foreground="#C9CCD8" />
                 </Button>
                 <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="28" Height="28"
-                        ToolTip="Close (Esc)" Click="FindClose_Click">
+                        ToolTip="{loc:Loc FindClose}" Click="FindClose_Click">
                     <TextBlock Text="✕" FontSize="11" Foreground="#8E92A4" />
                 </Button>
             </StackPanel>

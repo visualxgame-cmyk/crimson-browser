@@ -3,8 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:loc="clr-namespace:CrimsonBrowser.Services"
         mc:Ignorable="d"
-        Title="Crimson Browser — History" Height="560" Width="720"
+        Title="{loc:Loc HistoryWindowTitle}" Height="560" Width="720"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False">
@@ -38,11 +39,11 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="🕐" FontSize="16" Margin="0 0 10 0" VerticalAlignment="Center" />
-                        <TextBlock Text="Browsing History" FontSize="15" FontWeight="Bold" Foreground="White"
+                        <TextBlock Text="{loc:Loc HistoryTitle}" FontSize="15" FontWeight="Bold" Foreground="White"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                     <Button Grid.Column="1" Style="{StaticResource CrimsonNavButtonStyle}" Width="30" Height="30"
-                            Click="Close_Click" ToolTip="Close">
+                            Click="Close_Click" ToolTip="{loc:Loc CloseTooltip}">
                         <TextBlock Text="✕" FontSize="13" Foreground="#8E92A4" />
                     </Button>
                 </Grid>
@@ -62,14 +63,14 @@
                                      Foreground="White" FontSize="12" VerticalAlignment="Center"
                                      CaretBrush="{StaticResource CrimsonRedGlowBrush}"
                                      TextChanged="SearchBox_TextChanged" />
-                            <TextBlock x:Name="SearchPlaceholder" Text="Search history..." Foreground="#686C7E"
+                            <TextBlock x:Name="SearchPlaceholder" Text="{loc:Loc HistorySearch}" Foreground="#686C7E"
                                        FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False" Margin="2 0 0 0" />
                         </Grid>
                     </Border>
                     <Button Grid.Column="1" Style="{StaticResource CrimsonNavButtonStyle}" Margin="8 0 0 0"
                             Height="34" Padding="12 0" Click="ClearAll_Click"
                             Background="#251219" BorderBrush="{StaticResource CrimsonDarkRedBrush}" BorderThickness="1">
-                        <TextBlock Text="Clear All" Foreground="{StaticResource CrimsonRedGlowBrush}" FontSize="11.5" FontWeight="SemiBold" />
+                        <TextBlock Text="{loc:Loc HistoryClearAll}" Foreground="{StaticResource CrimsonRedGlowBrush}" FontSize="11.5" FontWeight="SemiBold" />
                     </Button>
                 </Grid>
             </Border>
@@ -120,7 +121,7 @@
                                VerticalAlignment="Center" Margin="0 0 16 0" />
                     <Button Style="{StaticResource CrimsonNavButtonStyle}" Width="110" Height="34"
                             Background="#E61937" Click="Close_Click">
-                        <TextBlock Text="Close" FontWeight="Bold" Foreground="White" />
+                        <TextBlock Text="{loc:Loc HistoryClose}" FontWeight="Bold" Foreground="White" />
                     </Button>
                 </StackPanel>
             </Border>

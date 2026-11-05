@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using CrimsonBrowser.Services;
 
 namespace CrimsonBrowser;
 
@@ -13,11 +14,13 @@ public partial class CrimsonPermissionDialog : Window
     {
         InitializeComponent();
 
-        OriginText.Text  = origin;
-        RequestText.Text = $"wants to use your {permission}.";
+        var loc = LocalizationService.Instance;
 
-        if (!canPersist)
-            RememberCheck.Content = "Remember this decision for this Incognito session";
+        OriginText.Text  = origin;
+        RequestText.Text = loc.Format("PermissionWants", permission);
+        RememberCheck.Content = loc.Get(canPersist
+            ? "PermissionRemember"
+            : "PermissionRememberIncognito");
     }
 
     public static PermissionDecision Show(Window? owner, string origin, string permission, bool canPersist)

@@ -88,7 +88,7 @@ public partial class SettingsWindow : Window
     {
         var dlg = new Microsoft.Win32.OpenFileDialog
         {
-            Filter = "Images (*.jpg;*.jpeg;*.png;*.webp;*.bmp)|*.jpg;*.jpeg;*.png;*.webp;*.bmp",
+            Filter = LocalizationService.Instance.Get("ImagesFilter"),
             Title = LocalizationService.Instance.Get("ChooseImageBtn")
         };
 
@@ -109,36 +109,14 @@ public partial class SettingsWindow : Window
 
     private void UpdateWallpaperStatusText()
     {
-        bool hasCustom = SettingsService.Instance.HasCustomWallpaper;
-        bool isEn = LocalizationService.Instance.CurrentLanguage == "en";
-
-        TxtWallpaperStatus.Text = hasCustom 
-            ? (isEn ? "Custom Wallpaper: Active" : "Fundal personalizat: Activ")
-            : (isEn ? "Default Crimson Stealth Background" : "Fundal implicit Crimson Stealth");
+        var loc = LocalizationService.Instance;
+        TxtWallpaperStatus.Text = loc.Get(
+            SettingsService.Instance.HasCustomWallpaper ? "WallpaperCustomActive" : "DefaultBackground");
     }
 
     private void ApplyLocalization()
     {
-        var loc = LocalizationService.Instance;
-
-        TxtSettingsTitle.Text = loc.Get("SettingsTitle");
-        TxtNavGeneral.Text = "🌐 " + loc.Get("GeneralTab");
-        TxtNavAppearance.Text = "🎨 " + loc.Get("AppearanceTab");
-        TxtNavShields.Text = "🛡️ " + loc.Get("PrivacyTab");
-        TxtNavAbout.Text = "ℹ️ " + loc.Get("MenuAbout");
-
-        TxtLangTitle.Text = loc.Get("LanguageSetting");
-        TxtLangDesc.Text = loc.Get("LanguageSettingDesc");
-
-        TxtBgTitle.Text = loc.Get("BackgroundSetting");
-        TxtBgDesc.Text = loc.Get("BackgroundSettingDesc");
-        TxtChooseImgBtn.Text = loc.Get("ChooseImageBtn");
-        TxtResetImgBtn.Text = loc.Get("ResetBackgroundBtn");
-
-        TxtShieldsTitle.Text = loc.Get("PrivacyTab");
-
-        TxtCloseBtn.Text = loc.Get("CloseSettings");
-
+        // Static labels are bound with {loc:Loc ...}; only computed values need a refresh.
         UpdateWallpaperStatusText();
     }
 
