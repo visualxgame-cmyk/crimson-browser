@@ -404,7 +404,111 @@ public class BrowserTab : INotifyPropertyChanged
                 if (window.__crimsonAdShield) return;
                 window.__crimsonAdShield = true;
 
-                var cosmeticRules = [
+                function isYouTube() {
+                    var host = (location.hostname || '').toLowerCase();
+                    return host === 'youtube.com' ||
+                           host.endsWith('.youtube.com') ||
+                           host.endsWith('.youtube-nocookie.com');
+                }
+
+                // YouTube embeds its ad schedule in the initial page data and in youtubei/v1/player
+                // responses. Removing that metadata before the player reads it prevents any ad
+                // break from being scheduled at all, so content starts immediately. The CSS hiding
+                // below stays as a fallback for ads that slip through in the future.
+                if (isYouTube()) {
+                    var adKeys = [
+                        'adPlacements',
+                        'playerAds',
+                        'adSlots',
+                        'adBreakHeartbeatParams',
+                        'adParams',
+                        'playerAdParams'
+                    ];
+
+                    function stripAds(root) {
+                        if (!root || typeof root !== 'object') return;
+                        var queue = [root];
+                        var seen = new WeakSet();
+                        var visited = 0;
+
+                        while (queue.length && visited < 20000) {
+                            visited++;
+                            var node = queue.pop();
+                            if (!node || typeof node !== 'object' || seen.has(node)) continue;
+                            seen.add(node);
+
+                            if (!Array.isArray(node)) {
+                                for (var i = 0; i < adKeys.length; i++) {
+                                    var key = adKeys[i];
+                                    if (!(key in node)) continue;
+
+                                    if (key === 'adBreakHeartbeatParams' ||
+                                        key === 'adParams' ||
+                                        key === 'playerAdParams') {
+                                        try { delete node[key]; } catch (e) { }
+                                    } else if (Array.isArray(node[key])) {
+                                        node[key] = [];
+                                    } else {
+                                        try { node[key] = undefined; } catch (e) { }
+                                    }
+                                }
+                            }
+
+                            for (var k in node) {
+                                if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
+                                var value = node[k];
+                                if (value && typeof value === 'object') queue.push(value);
+                            }
+                        }
+                    }
+
+                    // The first player response is assigned to a global instead of being parsed
+                    // by JSON.parse, so intercept the assignment as well.
+                    function guardInitialData(name) {
+                        var current;
+                        try {
+                            Object.defineProperty(window, name, {
+                                configurable: true,
+                                enumerable: true,
+                                get: function () { return current; },
+                                set: function (value) {
+                                    try { stripAds(value); } catch (e) { }
+                                    current = value;
+                                }
+                            });
+                        } catch (e) { }
+                    }
+
+                    ['ytInitialPlayerResponse', 'ytInitialData', 'ytInitialGuideData',
+                     'ytInitialReelWatchSequenceResponse', 'ytInitialPlayerResponsePromise']
+                        .forEach(guardInitialData);
+
+                    try {
+                        var nativeJsonParse = JSON.parse;
+                        JSON.parse = function (text, reviver) {
+                            var result = nativeJsonParse(text, reviver);
+                            if (typeof text === 'string' &&
+                                (text.indexOf('adPlacements') !== -1 ||
+                                 text.indexOf('playerAds') !== -1 ||
+                                 text.indexOf('adSlots') !== -1 ||
+                                 text.indexOf('adBreakHeartbeatParams') !== -1)) {
+                                try { stripAds(result); } catch (e) { }
+                            }
+                            return result;
+                        };
+                    } catch (e) { }
+                }
+
+                // Ads share the same <video> element as real content, so hiding it only while the
+                // player carries the ad-showing class keeps the ad from ever being painted while
+                // letting the content frame reappear instantly when the class is removed.
+                var videoHideCss =
+                    '#movie_player.ad-showing video,' +
+                    '.html5-video-player.ad-showing video.html5-main-video,' +
+                    '#movie_player.ad-showing .video-ads' +
+                    '{ visibility: hidden !important; opacity: 0 !important; }';
+
+                var cosmeticCss = [
                     'ins.adsbygoogle',
                     '.adsbygoogle',
                     '[id^="google_ads"]',
@@ -427,25 +531,27 @@ public class BrowserTab : INotifyPropertyChanged
                     'ytd-player-legacy-desktop-watch-ads-renderer',
                     '.ytp-ad-module',
                     '.ytp-ad-overlay-container',
+                    '.ytp-ad-overlay-slot',
                     '.ytp-ad-player-overlay',
+                    '.ytp-ad-player-overlay-layout',
                     '.ytp-ad-image-overlay',
+                    '.ytp-ad-text-overlay',
+                    '.ytp-ad-preview-container',
+                    '.ytp-ad-badge',
+                    '.ytp-ad-progress-list',
+                    '.ytp-ad-survey',
                     '.video-ads'
                 ].join(',') + '{ display: none !important; }';
 
-                function injectCosmeticCss() {
-                    if (!document.documentElement) return;
-                    if (document.getElementById('crimson-ad-blocker-css')) return;
+                function injectCss() {
+                    var parent = document.head || document.documentElement;
+                    if (!parent) return false;
+                    if (document.getElementById('crimson-ad-blocker-css')) return true;
                     var style = document.createElement('style');
                     style.id = 'crimson-ad-blocker-css';
-                    style.textContent = cosmeticRules;
-                    (document.head || document.documentElement).appendChild(style);
-                }
-
-                function isYouTube() {
-                    var host = (location.hostname || '').toLowerCase();
-                    return host === 'youtube.com' ||
-                           host.endsWith('.youtube.com') ||
-                           host.endsWith('.youtube-nocookie.com');
+                    style.textContent = videoHideCss + cosmeticCss;
+                    parent.appendChild(style);
+                    return true;
                 }
 
                 function clickFirst(selectors) {
@@ -458,10 +564,71 @@ public class BrowserTab : INotifyPropertyChanged
                     return false;
                 }
 
-                function skipYouTubeAd() {
+                function player() {
+                    return document.getElementById('movie_player');
+                }
+
+                function adShowing() {
+                    var current = player();
+                    if (current && current.classList.contains('ad-showing')) return true;
+                    return !!document.querySelector('.html5-video-player.ad-showing');
+                }
+
+                function videoElement() {
+                    return document.querySelector('#movie_player video.html5-main-video') ||
+                           document.querySelector('video.html5-main-video') ||
+                           document.querySelector('video');
+                }
+
+                // Save the user's media state once per ad break so mute/volume/speed survive it.
+                function stashMediaState(video) {
+                    if (video.__crimsonAdState) return;
+                    video.__crimsonAdState = {
+                        muted: video.muted,
+                        volume: video.volume,
+                        rate: video.playbackRate
+                    };
+                }
+
+                function restoreMediaState(video) {
+                    var state = video.__crimsonAdState;
+                    if (!state) return;
+                    delete video.__crimsonAdState;
+                    try { video.muted = state.muted; } catch (e) { }
+                    try { video.volume = state.volume; } catch (e) { }
+                    try { video.playbackRate = state.rate; } catch (e) { }
+                }
+
+                function skipAd() {
+                    injectCss();
+
                     if (!isYouTube()) return;
 
-                    // 1. Dismiss any skip/close button that YouTube has already rendered.
+                    var video = videoElement();
+                    var showing = adShowing();
+
+                    if (!showing) {
+                        if (video) restoreMediaState(video);
+                        return;
+                    }
+
+                    if (video) {
+                        stashMediaState(video);
+                        try { video.muted = true; } catch (e) { }
+
+                        // Seekable ads end immediately. Unskippable ones cannot be seeked past,
+                        // but they run muted and invisibly at 16x, so the wait is imperceptible.
+                        try { if (video.playbackRate < 16) video.playbackRate = 16; } catch (e) { }
+                        try {
+                            var duration = video.duration;
+                            if (isFinite(duration) && duration > 0) {
+                                var target = Math.max(0, duration - 0.1);
+                                if (video.currentTime < target) video.currentTime = target;
+                            }
+                        } catch (e) { }
+                    }
+
+                    // Dismiss any skip/close button that YouTube has already rendered.
                     clickFirst([
                         '.ytp-ad-skip-button',
                         '.ytp-ad-skip-button-modern',
@@ -471,72 +638,69 @@ public class BrowserTab : INotifyPropertyChanged
                         '.ytp-ad-survey-answer-button',
                         '.ytp-ad-overlay-close-button'
                     ]);
+                }
 
-                    var player = document.getElementById('movie_player');
-                    if (!player || !player.classList.contains('ad-showing')) {
-                        var anyVideo = document.querySelector('video.html5-main-video') ||
-                                       document.querySelector('video');
-                        if (anyVideo && anyVideo.__crimsonAdMuted !== undefined) {
-                            try { anyVideo.muted = anyVideo.__crimsonAdMuted; } catch (e) { }
-                            delete anyVideo.__crimsonAdMuted;
-                        }
-                        return;
-                    }
+                var rafId = 0;
+                function watchAdFrames() {
+                    rafId = 0;
+                    skipAd();
+                    if (adShowing()) rafId = window.requestAnimationFrame(watchAdFrames);
+                }
 
-                    var video = document.querySelector('video.html5-main-video') ||
-                                document.querySelector('video');
-                    if (!video) return;
+                function kick() {
+                    skipAd();
+                    if (!rafId && adShowing()) rafId = window.requestAnimationFrame(watchAdFrames);
+                }
 
-                    // Mute the ad (restored automatically when the ad ends) and jump to its end.
-                    if (video.__crimsonAdMuted === undefined) {
-                        video.__crimsonAdMuted = video.muted;
-                    }
-                    try { video.muted = true; } catch (e) { }
-
+                // The player class flips between content and ad mode; react to the flip at once.
+                var observedPlayer = null;
+                function observePlayer() {
+                    var current = player();
+                    if (!current || current === observedPlayer) return;
+                    observedPlayer = current;
                     try {
-                        if (isFinite(video.duration) && video.duration > 0) {
-                            video.currentTime = video.duration;
-                        }
+                        new MutationObserver(kick).observe(current, {
+                            attributes: true,
+                            attributeFilter: ['class']
+                        });
                     } catch (e) { }
-
-                    // Some ads expose their own skip button only after a short delay.
-                    clickFirst([
-                        '.ytp-ad-skip-button',
-                        '.ytp-ad-skip-button-modern',
-                        '.ytp-skip-ad-button',
-                        '.ytp-ad-skip-button-container button'
-                    ]);
                 }
 
-                function runShield() {
-                    injectCosmeticCss();
-                    skipYouTubeAd();
-                }
+                // Media events fire before a new ad frame is painted, so handle them synchronously.
+                ['loadstart', 'loadedmetadata', 'durationchange', 'play', 'playing',
+                 'timeupdate', 'ratechange', 'volumechange', 'emptied'].forEach(function (name) {
+                    document.addEventListener(name, function (event) {
+                        var target = event.target;
+                        if (target && target.tagName === 'VIDEO') kick();
+                    }, true);
+                });
 
-                var scheduled = false;
-                function scheduleShield() {
-                    if (scheduled) return;
-                    scheduled = true;
-                    window.setTimeout(function () {
-                        scheduled = false;
-                        runShield();
-                    }, 200);
-                }
+                document.addEventListener('yt-navigate-finish', function () {
+                    observePlayer();
+                    kick();
+                }, true);
+                document.addEventListener('yt-page-data-updated', function () {
+                    observePlayer();
+                    kick();
+                }, true);
 
-                injectCosmeticCss();
-                runShield();
+                injectCss();
+                observePlayer();
+                kick();
 
                 try {
-                    new MutationObserver(scheduleShield).observe(document.documentElement, {
-                        childList: true,
-                        subtree: true,
-                        attributes: true,
-                        attributeFilter: ['class']
-                    });
+                    new MutationObserver(function () {
+                        injectCss();
+                        observePlayer();
+                    }).observe(document.documentElement, { childList: true, subtree: true });
                 } catch (e) { }
 
-                document.addEventListener('yt-navigate-finish', runShield, true);
-                window.setInterval(runShield, 1000);
+                // Safety net for pages that create or replace the player after load.
+                window.setInterval(function () {
+                    injectCss();
+                    observePlayer();
+                    kick();
+                }, 250);
             })();
             """;
 

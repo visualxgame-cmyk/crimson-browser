@@ -28,6 +28,7 @@
   - Pagină locală integrată cu căutare rapidă, comenzi rapide (YouTube, Google, GitHub, Reddit) și status de sistem.
 - **Pregătit pentru Extensii & Shields**:
   - Buton dedicat **Crimson Shields** cu meniu flyout pentru monitorizarea intimității și a consumului.
+  - Blocare ad/tracker și eliminarea reclamelor YouTube înainte de programare, fără flash vizual.
   - Instrumente de dezvoltator integrate (**DevTools** prin `F12`).
   - Curățare instantanee de cache și date de navigare din meniu.
 

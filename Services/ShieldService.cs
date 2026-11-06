@@ -136,6 +136,8 @@ public class ShieldService : INotifyPropertyChanged
         "youtube.com/pagead/",
         "youtube.com/ptracking",
         "youtube.com/youtubei/v1/ads",
+        "youtube.com/youtubei/v1/log_event",
+        "youtube.com/youtubei/v1/att/get",
         "google.com/pagead/",
         "googletagservices.com/tag/js/gpt.js",
         "/gampad/ads",
@@ -147,7 +149,9 @@ public class ShieldService : INotifyPropertyChanged
         "/advertisement.",
         "/advertisement/",
         "ad_type=",
-        "adformat=",
+        // "adformat=" is intentionally not blocked: cancelling the ad's media stream leaves
+        // YouTube stuck in ad mode (black player) until its timeout, which is much slower
+        // than letting the hidden ad load and seeking straight to its end.
         "adslot=",
         "ad_slot=",
         "/telemetry?",
