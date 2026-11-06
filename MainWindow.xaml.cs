@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using CrimsonBrowser.Models;
 using CrimsonBrowser.Services;
@@ -35,6 +36,9 @@ public partial class MainWindow : Window
     private Point _tabDragStart;
     private BrowserTab? _tabDragSource;
     private bool _isTabDragging;
+    private readonly List<(FrameworkElement Container, TranslateTransform Transform, double Left)> _tabDragSlots = new();
+    private int _tabDragFrom;
+    private int _tabDragTo;
 
     // ── Memory saver ──
     private readonly DispatcherTimer _memorySaverTimer;
@@ -701,13 +705,18 @@ public partial class MainWindow : Window
 
     private void Tab_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // The close button owns its click; it must not initiate a drag.
+        for (DependencyObject? node = e.OriginalSource as DependencyObject; node is not null && node != sender;
+             node = VisualTreeHelper.GetParent(node))
+            if (node is Button) return;
+
         if (sender is FrameworkElement el && el.DataContext is BrowserTab tab)
         {
             SetActiveTab(tab);
 
             if (e.ChangedButton == MouseButton.Left)
             {
-                _tabDragStart  = e.GetPosition(this);
+                _tabDragStart  = e.GetPosition(TabsItemsControl);
                 _tabDragSource = tab;
                 _isTabDragging = false;
             }
@@ -716,46 +725,99 @@ public partial class MainWindow : Window
 
     private void Tab_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _tabDragSource is null)
+        if (_tabDragSource is null)
             return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            FinishTabDrag(commit: false);
+            return;
+        }
 
         if (!_isTabDragging)
         {
-            Point position = e.GetPosition(this);
+            Point position = e.GetPosition(TabsItemsControl);
             if (Math.Abs(position.X - _tabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
                 Math.Abs(position.Y - _tabDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
             {
                 return;
             }
 
+            _tabDragFrom = Tabs.IndexOf(_tabDragSource);
+            _tabDragTo = _tabDragFrom;
+            for (int index = 0; index < Tabs.Count; index++)
+            {
+                if (TabsItemsControl.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement container)
+                {
+                    FinishTabDrag(commit: false);
+                    return;
+                }
+                double left = container.TranslatePoint(new Point(), TabsItemsControl).X;
+                var transform = new TranslateTransform();
+                container.RenderTransform = transform;
+                _tabDragSlots.Add((container, transform, left));
+            }
+            if (_tabDragFrom < 0 || _tabDragSlots.Count == 0) return;
+            Panel.SetZIndex(_tabDragSlots[_tabDragFrom].Container, 10);
             _isTabDragging = true;
-            (sender as UIElement)?.CaptureMouse();
+            if (sender is not UIElement dragElement || !dragElement.CaptureMouse())
+            {
+                FinishTabDrag(commit: false);
+                return;
+            }
         }
 
-        // Live reorder: the dragged tab follows the cursor across the tab strip.
-        Border? targetBorder = FindTabBorder(
-            VisualTreeHelper.HitTest(TabsItemsControl, e.GetPosition(TabsItemsControl))?.VisualHit);
-
-        if (targetBorder?.DataContext is not BrowserTab target ||
-            ReferenceEquals(target, _tabDragSource))
+        if (Tabs.Count != _tabDragSlots.Count || Tabs.IndexOf(_tabDragSource) != _tabDragFrom)
         {
+            FinishTabDrag(commit: false);
             return;
         }
 
-        int from = Tabs.IndexOf(_tabDragSource);
-        int targetIndex = Tabs.IndexOf(target);
-        if (from < 0 || targetIndex < 0)
-            return;
+        var source = _tabDragSlots[_tabDragFrom];
+        double leftPosition = Math.Clamp(source.Left + e.GetPosition(TabsItemsControl).X - _tabDragStart.X,
+            _tabDragSlots[0].Left, _tabDragSlots[^1].Left);
+        source.Transform.X = leftPosition - source.Left;
+        int targetIndex = 0;
+        for (int i = 1; i < _tabDragSlots.Count; i++)
+            if (leftPosition >= (_tabDragSlots[i - 1].Left + _tabDragSlots[i].Left) / 2) targetIndex = i;
 
-        bool insertAfter = e.GetPosition(targetBorder).X > targetBorder.ActualWidth / 2;
-        int insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+        if (targetIndex != _tabDragTo)
+        {
+            _tabDragTo = targetIndex;
+            for (int i = 0; i < _tabDragSlots.Count; i++)
+            {
+                if (i == _tabDragFrom) continue;
+                int destination = i;
+                if (i > _tabDragFrom && i <= _tabDragTo) destination--;
+                else if (i < _tabDragFrom && i >= _tabDragTo) destination++;
+                var slot = _tabDragSlots[i];
+                slot.Transform.BeginAnimation(TranslateTransform.XProperty,
+                    new DoubleAnimation(_tabDragSlots[destination].Left - slot.Left, TimeSpan.FromMilliseconds(120))
+                    { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            }
+        }
+        e.Handled = true;
+    }
 
-        // Removing the dragged tab first shifts every later index down by one.
-        if (from < insertIndex) insertIndex--;
+    private void Tab_LostMouseCapture(object sender, MouseEventArgs e) => FinishTabDrag(commit: false);
 
-        insertIndex = Math.Clamp(insertIndex, 0, Tabs.Count - 1);
-        if (insertIndex != from)
-            Tabs.Move(from, insertIndex);
+    private void FinishTabDrag(bool commit)
+    {
+        BrowserTab? source = _tabDragSource;
+        int target = _tabDragTo;
+        bool move = commit && _isTabDragging && source is not null && Tabs.Count == _tabDragSlots.Count;
+        _tabDragSource = null;
+        _isTabDragging = false;
+        foreach (var slot in _tabDragSlots)
+        {
+            slot.Transform.BeginAnimation(TranslateTransform.XProperty, null);
+            slot.Container.RenderTransform = Transform.Identity;
+            Panel.SetZIndex(slot.Container, 0);
+        }
+        _tabDragSlots.Clear();
+        if (Mouse.Captured is DependencyObject captured && FindTabBorder(captured) is { } border)
+            border.ReleaseMouseCapture();
+        if (move && Tabs.IndexOf(source!) is int from && from >= 0 && from != target)
+            Tabs.Move(from, target);
     }
 
     private static Border? FindTabBorder(DependencyObject? hit)
@@ -780,11 +842,7 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
         {
-            if (sender is UIElement element && element.IsMouseCaptured)
-                element.ReleaseMouseCapture();
-
-            _tabDragSource = null;
-            _isTabDragging = false;
+            FinishTabDrag(commit: true);
         }
 
         if (e.ChangedButton == MouseButton.Middle &&

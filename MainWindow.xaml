@@ -97,6 +97,7 @@
                                             Background="#14151C" BorderBrush="#222430" BorderThickness="1 1 1 0"
                                             MouseLeftButtonDown="Tab_MouseLeftButtonDown"
                                             MouseMove="Tab_MouseMove"
+                                            LostMouseCapture="Tab_LostMouseCapture"
                                             MouseUp="Tab_MouseUp">
                                         <Border.ContextMenu>
                                             <ContextMenu>
