@@ -229,6 +229,10 @@
                         <TextBox Grid.Column="1" x:Name="OmniboxTextBox" Background="Transparent" BorderThickness="0"
                                  Foreground="White" FontSize="12.5" VerticalAlignment="Center"
                                  CaretBrush="{StaticResource CrimsonRedGlowBrush}"
+                                 PreviewTextInput="Omnibox_PreviewTextInput"
+                                 PreviewKeyDown="Omnibox_PreviewKeyDown"
+                                 TextChanged="Omnibox_TextChanged"
+                                 DataObject.Pasting="Omnibox_Pasting"
                                  KeyDown="OmniboxTextBox_KeyDown"
                                  GotFocus="OmniboxTextBox_GotFocus"
                                  LostFocus="OmniboxTextBox_LostFocus" />
@@ -336,6 +340,52 @@
         <!-- ============================================================ -->
         <!-- FLOATING: CRIMSON SHIELDS POPUP                             -->
         <!-- ============================================================ -->
+        <Popup x:Name="OmniboxSuggestionsPopup" StaysOpen="True" Placement="Bottom" AllowsTransparency="True"
+               PlacementTarget="{Binding ElementName=OmniboxBorder}" VerticalOffset="5" Focusable="False">
+            <Border Background="#181A22" BorderBrush="#38303C" BorderThickness="1" CornerRadius="10" Padding="5"
+                    Width="{Binding ActualWidth, ElementName=OmniboxBorder}">
+                <ListBox x:Name="OmniboxSuggestionsList" Background="Transparent" BorderThickness="0"
+                         Focusable="False" MaxHeight="360" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         PreviewMouseDown="OmniboxSuggestion_MouseDown">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Focusable" Value="False" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Row" Padding="12 9" CornerRadius="6" Background="Transparent">
+                                            <ContentPresenter />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="#29232E" /></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#39232D" /></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Address}" Foreground="#F1F2F6" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Title}" Foreground="#9296A7" FontSize="11" Margin="0 3 0 0" TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasDistinctTitle}" Value="False"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
+
         <Popup x:Name="ShieldsPopup" StaysOpen="False" Placement="Bottom" AllowsTransparency="True">
             <Border Background="#161720" BorderBrush="{StaticResource CrimsonDarkRedBrush}"
                     BorderThickness="1.5" CornerRadius="14" Padding="18" Width="330" Margin="0 10 0 0">

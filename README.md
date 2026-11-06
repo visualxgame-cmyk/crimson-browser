@@ -20,10 +20,11 @@ Installerul și checksum-ul SHA-256 apar în `dist`. Aplicația completă este �
 ## Funcții
 
 - Taburi, reordonare prin tragere, sesiune, linkuri externe în tab nou.
+- Bara de adrese completează domeniile vizitate și afișează până la șase sugestii locale din istoric, fără cereri de rețea.
 - Favorite, istoric, căutare în pagină, zoom, fullscreen și DevTools.
 - Setări în română/engleză, motor de căutare și fundal personalizat.
 - Crimson Shields: filtrarea domeniilor cunoscute de reclame/tracking, script de filtrare și upgrade HTTPS.
-- Taburile ascunse sunt limitate de CEF. Modul Low RAM descarcă documentele inactive după 10 minute; taburile cu formulare modificate, media detectată, permisiuni media acordate sau descărcări active sunt protejate.
+- Sesiunea încarcă paginile restaurate doar la selectare. Taburile ascunse sunt limitate de CEF. După trei minute, modul Low RAM poate elibera complet motorul și suprafața unui tab inactiv, restaurându-l la selectare. Taburile cu formulare modificate, media în redare, permisiuni media acordate, descărcări active sau istoric Înapoi/Înainte sunt protejate; CEF nu poate importa acel istoric într-un motor nou. Ferestrele închise își dezabonează evenimentele globale.
 - Incognito folosește un context CEF fără cache pe disc, separat pentru fiecare fereastră; istoricul și permisiunile sale nu sunt persistate.
 - Descărcări cu alegerea destinației și progres în interfața Crimson.
 - Actualizări prin GitHub Releases cu verificarea checksum-ului și repornire după instalare.

@@ -109,6 +109,11 @@ public partial class IncognitoWindow : Window
         tab.RequestShortcut += (senderTab, action) => Dispatcher.Invoke(() => HandleShortcut(senderTab, action));
         tab.FullscreenChanged += isFullscreen => Dispatcher.Invoke(() => SetFullscreen(isFullscreen));
         tab.PropertyChanged += Tab_PropertyChanged;
+        tab.WebViewChanged += (senderTab, previous, current) =>
+        {
+            if (previous != null) WebContainer.Children.Remove(previous);
+            if (current != null) WebContainer.Children.Add(current);
+        };
 
         Tabs.Add(tab);
         WebContainer.Children.Add(tab.WebView);

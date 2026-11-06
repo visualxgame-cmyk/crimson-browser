@@ -17,7 +17,7 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
     }
     protected override bool DoClose(IWebBrowser control, IBrowser browser)
     {
-        if (!browser.IsPopup) tab.CloseRequested();
+        if (!browser.IsPopup) tab.Ui(control, tab.CloseRequested);
         return false;
     }
 }
@@ -25,11 +25,11 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
 internal sealed class TabDisplayHandler(BrowserTab tab) : DisplayHandler
 {
     protected override void OnAddressChanged(IWebBrowser control, AddressChangedEventArgs args)
-        => tab.Ui(() => tab.AddressChanged(args.Address));
+        => tab.Ui(control, () => tab.AddressChanged(args.Address));
     protected override void OnTitleChanged(IWebBrowser control, TitleChangedEventArgs args)
-        => tab.Ui(() => { if (!tab.IsDiscarded && !tab.IsStartPage) tab.Title = args.Title; });
+        => tab.Ui(control, () => { if (!tab.IsDiscarded && !tab.IsStartPage) tab.Title = args.Title; });
     protected override void OnFaviconUrlChange(IWebBrowser control, IBrowser browser, IList<string> urls)
-        => tab.Ui(() => tab.FaviconUrl = urls.FirstOrDefault());
+        => tab.Ui(control, () => tab.FaviconUrl = urls.FirstOrDefault());
     protected override void OnFullscreenModeChange(IWebBrowser control, IBrowser browser, bool fullscreen)
         => tab.SetFullscreen(fullscreen);
 }
@@ -38,14 +38,14 @@ internal sealed class TabRequestHandler(BrowserTab tab) : RequestHandler
 {
     protected override void OnRenderProcessTerminated(IWebBrowser control, IBrowser browser,
         CefTerminationStatus status, int errorCode, string errorMessage)
-        => tab.EngineFailed($"{status} ({errorCode}): {errorMessage}");
+        => tab.Ui(control, () => tab.EngineFailed($"{status} ({errorCode}): {errorMessage}"));
     protected override bool OnBeforeBrowse(IWebBrowser control, IBrowser browser, IFrame frame,
         IRequest request, bool gesture, bool redirect)
     {
         if (frame.IsMain && ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.EnforceHttps &&
             Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && !uri.IsLoopback)
         {
-            tab.Ui(() => tab.Navigate(new UriBuilder(uri) { Scheme = "https", Port = uri.IsDefaultPort ? -1 : uri.Port }.Uri.AbsoluteUri));
+            tab.Ui(control, () => tab.Navigate(new UriBuilder(uri) { Scheme = "https", Port = uri.IsDefaultPort ? -1 : uri.Port }.Uri.AbsoluteUri));
             return true;
         }
         return false;
@@ -154,7 +154,7 @@ internal sealed class TabKeyboardHandler(BrowserTab tab) : KeyboardHandler
         if (type != KeyType.RawKeyDown) return false;
         bool ctrl = modifiers.HasFlag(CefEventFlags.ControlDown), shift = modifiers.HasFlag(CefEventFlags.ShiftDown);
         if (modifiers.HasFlag(CefEventFlags.AltDown)) return false;
-        if (key == 123) { tab.Ui(tab.ShowDevTools); return true; }
+        if (key == 123) { tab.Ui(control, tab.ShowDevTools); return true; }
         string? action = key switch { 122 => "fullscreen", 116 => "reload", 27 => "escape", _ => null };
         if (ctrl && key is 187 or 107) action = "zoom-in";
         if (ctrl && key is 189 or 109) action = "zoom-out";
@@ -176,21 +176,30 @@ internal sealed class TabFindHandler(BrowserTab tab) : FindHandler
     protected override void OnFindResult(IWebBrowser control, IBrowser browser, int id, int count,
         CefSharp.Structs.Rect selection, int activeMatchOrdinal, bool finalUpdate)
     {
-        if (finalUpdate) tab.Ui(() => tab.FindResult(activeMatchOrdinal, count));
+        if (finalUpdate) tab.Ui(control, () => tab.FindResult(activeMatchOrdinal, count));
     }
 }
 
-internal sealed class TabRenderHandler : IRenderProcessMessageHandler
+internal sealed class TabRenderHandler(BrowserTab tab) : IRenderProcessMessageHandler
 {
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _mediaTokens = new();
     public void OnContextCreated(IWebBrowser control, IBrowser browser, IFrame frame)
     {
         if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers)
             frame.ExecuteJavaScriptAsync(BrowserScripts.AdBlock);
-        frame.ExecuteJavaScriptAsync("document.addEventListener('play',()=>CefSharp.PostMessage('crimson-media-active'),true);" +
-            "document.addEventListener('input',()=>CefSharp.PostMessage('crimson-form-dirty'),{once:true,capture:true});");
+        string token = Guid.NewGuid().ToString("N");
+        _mediaTokens[frame.Identifier.ToString()] = token;
+        frame.ExecuteJavaScriptAsync("(()=>{const report=()=>CefSharp.PostMessage('crimson-media:" + token +
+            ":'+(Array.from(document.querySelectorAll('audio,video')).some(m=>!m.paused&&!m.ended)?'1':'0'));" +
+            "['play','pause','ended','emptied'].forEach(name=>document.addEventListener(name,report,true));" +
+            "document.addEventListener('input',()=>CefSharp.PostMessage('crimson-form-dirty'),{once:true,capture:true});report();})();");
     }
     // No managed per-context resources are retained; callback ownership belongs to CEF.
-    public void OnContextReleased(IWebBrowser control, IBrowser browser, IFrame frame) { }
+    public void OnContextReleased(IWebBrowser control, IBrowser browser, IFrame frame)
+    {
+        if (_mediaTokens.TryRemove(frame.Identifier.ToString(), out var token))
+            tab.Ui(control, () => tab.SetMediaFrame(token, false));
+    }
     public void OnFocusedNodeChanged(IWebBrowser control, IBrowser browser, IFrame frame, IDomNode node) { }
     public void OnUncaughtException(IWebBrowser control, IBrowser browser, IFrame frame, JavascriptException exception)
         => System.Diagnostics.Debug.WriteLine("CEF JavaScript: " + exception.Message);

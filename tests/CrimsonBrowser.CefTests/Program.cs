@@ -1,6 +1,12 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Documents;
+using System.Windows.Threading;
+using System.Windows.Markup;
+using System.Xml.Linq;
 using CefSharp;
 using CefSharp.SchemeHandler;
 using CrimsonBrowser.Models;
@@ -13,6 +19,12 @@ internal static class Program
         string root = Path.Combine(Path.GetTempPath(), "CrimsonCefTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        // Load the production theme without running production startup or accessing its profile.
+        var source = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "CrimsonThemeSource.xaml")).Root!;
+        var theme = new XElement(source.Name.Namespace + "ResourceDictionary",
+            source.Attributes().Where(attribute => attribute.IsNamespaceDeclaration),
+            source.Element(source.Name.Namespace + "Application.Resources")!.Elements());
+        app.Resources = (ResourceDictionary)XamlReader.Parse(theme.ToString());
         app.Startup += async (_, _) =>
         {
             BrowserTab? tab = null;
@@ -35,14 +47,25 @@ internal static class Program
                 context.RegisterSchemeHandlerFactory("https", "start.crimson",
                     new FolderSchemeHandlerFactory(Path.Combine(AppContext.BaseDirectory, "Resources"), schemeName: "https", hostName: "start.crimson", defaultPage: "startpage.html"));
                 File.WriteAllText(Path.Combine(root, "one.html"), "<!doctype html><title>CEF Test One</title><body>Crimson needle needle<input id='form'><a id='popup' href='https://smoke.crimson/two.html' target='_blank' style='position:absolute;left:20px;top:100px;width:200px;height:40px'>New tab</a></body>");
-                File.WriteAllText(Path.Combine(root, "two.html"), "<!doctype html><title>CEF Test Two</title><body>Second page</body>");
+                File.WriteAllText(Path.Combine(root, "two.html"), "<!doctype html><title>CEF Test Two</title><body>Second page<audio id='media' src='silence.wav' loop preload='auto'></audio></body>");
+                using (var wave = new BinaryWriter(File.Create(Path.Combine(root, "silence.wav"))))
+                {
+                    wave.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wave.Write(8036);
+                    wave.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt ")); wave.Write(16);
+                    wave.Write((short)1); wave.Write((short)1); wave.Write(8000); wave.Write(8000);
+                    wave.Write((short)1); wave.Write((short)8);
+                    wave.Write(System.Text.Encoding.ASCII.GetBytes("data")); wave.Write(8000);
+                    wave.Write(Enumerable.Repeat((byte)128, 8000).ToArray());
+                }
                 context.RegisterSchemeHandlerFactory("https", "smoke.crimson", new FolderSchemeHandlerFactory(root, schemeName: "https", hostName: "smoke.crimson"));
                 // Incognito prevents tests from writing real Crimson history.
                 tab = new BrowserTab(context, isIncognito: true) { IsActive = true };
                 window = new Window { Title = "Crimson CEF integration checks", Width = 1000, Height = 700, Content = tab.WebView };
+                tab.WebViewChanged += (_, previous, current) => window.Content = current;
                 window.Show();
                 await Until(() => tab.WebView.IsBrowserInitialized && !tab.IsLoading && tab.Title != "", "browser initialized");
-                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("typeof openSettings")).Result as string == "function", "bundled new tab rendered");
+                await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                    (await tab.WebView.EvaluateScriptAsync("typeof openSettings")).Result as string == "function", "bundled new tab rendered");
                 int settingsRequests = 0;
                 tab.RequestOpenSettings += () => settingsRequests++;
                 await tab.WebView.EvaluateScriptAsync("openSettings()");
@@ -100,9 +123,79 @@ internal static class Program
                 await Until(() => tab.Title == "CEF Test Two" && !tab.IsLoading, "discard test document loads");
                 tab.IsActive = false;
                 tab.Discard();
+                Check(!tab.IsDiscarded, "tabs with navigation history retain Back and Forward state");
+                tab.Dispose();
+                window.Content = null;
+                tab = new BrowserTab(context, isIncognito: true);
+                tab.WebViewChanged += (_, previous, current) => window.Content = current;
+                tab.Navigate("https://smoke.crimson/two.html");
+                window.Content = tab.WebView;
+                tab.IsActive = true;
+                await Until(() => tab.Title == "CEF Test Two" && !tab.IsLoading, "single-entry tab loads without eager start page");
+                var mediaHost = tab.WebView.GetBrowser().GetHost();
+                mediaHost.SetAudioMuted(true);
+                await Cef.UIThreadTaskFactory.StartNew(() => mediaHost.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                    "{\"expression\":\"document.getElementById('media').play()\",\"userGesture\":true}"));
+                await Until(() => tab.IsDocumentPlayingAudio, "playing media protects a tab");
+                tab.IsActive = false;
+                tab.Discard();
+                Check(!tab.IsDiscarded, "playing background media remains alive");
+                tab.WebView.ExecuteScriptAsync("document.getElementById('media').pause()");
+                await Until(() => !tab.IsDocumentPlayingAudio, "paused media releases its memory-saver exemption");
+                var releasedView = tab.WebView;
+                tab.Discard();
                 Check(tab.IsDiscarded, "idle tab document discarded");
+                Check(releasedView.IsDisposed, "discard releases native browser and surface");
                 tab.IsActive = true;
                 await Until(() => !tab.IsDiscarded && tab.Title == "CEF Test Two" && !tab.IsLoading, "discarded tab restores");
+                var formMessage = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                tab.WebView.JavascriptMessageReceived += (_, message) =>
+                {
+                    if (message.Message as string == "crimson-form-dirty") formMessage.TrySetResult();
+                };
+                tab.WebView.ExecuteScriptAsync("const draft=document.createElement('input');document.body.append(draft);" +
+                    "draft.value='unsaved';draft.dispatchEvent(new Event('input',{bubbles:true}));history.replaceState(null,'','#draft');");
+                await formMessage.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                tab.IsActive = false;
+                tab.Discard();
+                Check(!tab.IsDiscarded, "unsaved form input survives same-document URL changes and memory saving");
+                var fixture = new[] { new CrimsonBrowser.Services.HistoryEntry("Conversation", "https://chatgpt.com/c/example", DateTime.Now) };
+                var main = new CrimsonBrowser.MainWindow(addressSuggestions: query => CrimsonBrowser.Services.OmniboxSuggestions.Search(fixture, query));
+                main.Show();
+                try
+                {
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    var address = (TextBox)main.FindName("OmniboxTextBox");
+                    var addressPopup = (Popup)main.FindName("OmniboxSuggestionsPopup");
+                    main.Activate();
+                    Keyboard.Focus(address);
+                    TextCompositionManager.StartComposition(new TextComposition(InputManager.Current, address, "chat"));
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(address.Text == "chatgpt.com" && address.SelectionStart == 4 && address.SelectionLength == 7,
+                        "address bar completes typed domain with selected suffix");
+                    Check(addressPopup.IsOpen, "address suggestions open below the bar");
+                    Check(Math.Abs(((FrameworkElement)addressPopup.Child).ActualWidth -
+                        ((FrameworkElement)main.FindName("OmniboxBorder")).ActualWidth) < 2,
+                        "suggestion panel matches the address bar width");
+                    TextCompositionManager.StartComposition(new TextComposition(InputManager.Current, address, "g"));
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(address.Text == "chatgpt.com" && address.SelectionStart == 5 && address.SelectionLength == 6,
+                        "continued typing replaces the selected completion");
+                    address.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(main), 0, Key.Back)
+                        { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+                    EditingCommands.Backspace.Execute(null, address);
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(address.Text == "chatg", "Backspace removes completion without reinserting it");
+                    address.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(main), 0, Key.Escape)
+                        { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+                    Check(!addressPopup.IsOpen, "Escape dismisses address suggestions");
+                    main.AddNewTab("https://smoke.crimson/two.html", activate: false);
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(!main.Tabs[^1].WebView.IsBrowserInitialized,
+                        "background session tabs do not initialize native renderers before selection");
+                }
+                finally { main.Close(); }
                 Console.WriteLine("PASS: CEF integration");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); exitCode = 1; }

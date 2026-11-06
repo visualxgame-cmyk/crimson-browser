@@ -43,7 +43,7 @@ public partial class MainWindow : Window
 
     // ── Memory saver ──
     private readonly DispatcherTimer _memorySaverTimer;
-    private static readonly TimeSpan TabDiscardAfter = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan TabDiscardAfter = TimeSpan.FromMinutes(3);
 
     // ── Commands ──
     public ICommand NewTabCommand            { get; }
@@ -65,9 +65,11 @@ public partial class MainWindow : Window
     public ICommand ZoomInCommand            { get; }
     public ICommand ZoomOutCommand           { get; }
 
-    public MainWindow(bool restoreSession = false)
+    public MainWindow(bool restoreSession = false,
+        Func<string, IReadOnlyList<OmniboxSuggestion>>? addressSuggestions = null)
     {
         _restoreSession = restoreSession;
+        _addressSuggestions = addressSuggestions ?? (query => OmniboxSuggestions.Search(HistoryService.Instance.Entries, query));
 
         InitializeComponent();
 
@@ -98,10 +100,10 @@ public partial class MainWindow : Window
 
         // Listen for downloads changes to update badge
         DownloadsService.Instance.ActiveDownloadsChanged += UpdateDownloadsBadge;
-        DownloadsService.Instance.Downloads.CollectionChanged += (_, __) => UpdateDownloadsBadge();
+        DownloadsService.Instance.Downloads.CollectionChanged += Downloads_CollectionChanged;
 
         // Listen for bookmark changes to update star icon
-        BookmarksService.Instance.BookmarksChanged += () => Dispatcher.Invoke(UpdateBookmarkStar);
+        BookmarksService.Instance.BookmarksChanged += Bookmarks_Changed;
 
         InitializeShieldsUi();
         ApplyLocalizationToAllUi();
@@ -113,6 +115,9 @@ public partial class MainWindow : Window
         StateChanged += MainWindow_StateChanged;
         Closing      += MainWindow_Closing;
         PreviewKeyDown += Window_PreviewKeyDown;
+        Deactivated += (_, _) => CloseAddressSuggestions();
+        LocationChanged += (_, _) => CloseAddressSuggestions();
+        SizeChanged += (_, _) => CloseAddressSuggestions();
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -120,7 +125,7 @@ public partial class MainWindow : Window
         InitializeBrowserEnvironment();
         _memorySaverTimer.Start();
         ApplyMemorySaverPolicy();
-        _ = CheckForUpdatesAutomaticallyAsync();
+        if (_restoreSession) _ = CheckForUpdatesAutomaticallyAsync();
     }
 
     private void InitializeBrowserEnvironment()
@@ -147,7 +152,7 @@ public partial class MainWindow : Window
             else if (session is not null && session.Urls.Count > 0)
             {
                 foreach (string url in session.Urls)
-                    AddNewTab(url);
+                    AddNewTab(url, activate: false);
 
                 int activeIndex = Math.Clamp(session.ActiveIndex, 0, Tabs.Count - 1);
                 SetActiveTab(Tabs[activeIndex]);
@@ -177,7 +182,7 @@ public partial class MainWindow : Window
     // TAB MANAGEMENT
     // ─────────────────────────────────────────────────────────────────────────
 
-    public void AddNewTab(string? initialUrl = null)
+    public void AddNewTab(string? initialUrl = null, bool activate = true)
     {
         if (_webViewEnvironment == null) return;
 
@@ -189,7 +194,7 @@ public partial class MainWindow : Window
 
         tab.StartPageReady += readyTab => Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (readyTab == _activeTab) FocusOmnibox();
+            if (readyTab == _activeTab) FocusOmnibox(preserveEdits: true);
         }), DispatcherPriority.Input);
 
         tab.RequestNewTab += (senderTab, targetUrl) =>
@@ -220,20 +225,29 @@ public partial class MainWindow : Window
         });
 
         tab.PropertyChanged += Tab_PropertyChanged;
+        tab.WebViewChanged += Tab_WebViewChanged;
 
         Tabs.Add(tab);
         WebContainer.Children.Add(tab.WebView);
-        SetActiveTab(tab);
+        if (activate) SetActiveTab(tab);
 
         if (!string.IsNullOrWhiteSpace(initialUrl))
             tab.Navigate(initialUrl);
-        else
+        else if (activate)
             FocusOmnibox();
     }
 
-    /// <summary>Focus the address bar so a new tab can be typed into immediately.</summary>
-    private void FocusOmnibox()
+    private void Tab_WebViewChanged(BrowserTab tab, CefBrowserView? previous, CefBrowserView? current)
     {
+        if (previous != null) WebContainer.Children.Remove(previous);
+        if (current != null) WebContainer.Children.Add(current);
+    }
+
+    /// <summary>Focus the address bar without overwriting edits made while a new tab loads.</summary>
+    private void FocusOmnibox(bool preserveEdits = false)
+    {
+        if (preserveEdits && _editingAddress) return;
+        CloseAddressSuggestions();
         // The web engine often claims focus shortly after a document finishes navigating.
         // Try immediately, at idle, and once more shortly afterwards so the omnibox wins.
         Dispatcher.BeginInvoke(new Action(() => ApplyOmniboxFocus(selectAll: true)),
@@ -252,7 +266,7 @@ public partial class MainWindow : Window
 
     private void ApplyOmniboxFocus(bool selectAll)
     {
-        if (!IsVisible) return;
+        if (!IsVisible || _editingAddress) return;
 
         if (!OmniboxTextBox.IsKeyboardFocusWithin)
             OmniboxTextBox.Focus();
@@ -354,6 +368,10 @@ public partial class MainWindow : Window
         _webViewEnvironment?.Dispose();
         _webViewEnvironment = null;
         DownloadsService.Instance.ActiveDownloadsChanged -= UpdateDownloadsBadge;
+        DownloadsService.Instance.Downloads.CollectionChanged -= Downloads_CollectionChanged;
+        BookmarksService.Instance.BookmarksChanged -= Bookmarks_Changed;
+        ShieldService.Instance.PropertyChanged -= Shield_PropertyChanged;
+        _activeTab = null;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -509,6 +527,12 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && OmniboxSuggestionsPopup.IsOpen)
+        {
+            CloseAddressSuggestions();
+            e.Handled = true;
+            return;
+        }
         // WPF routes preview keys through the window before CEF. Handle each
         // application gesture here so the native handler cannot execute it twice.
         foreach (InputBinding binding in InputBindings)
@@ -638,14 +662,15 @@ public partial class MainWindow : Window
 
     private void UpdateOmniboxText(string url)
     {
+        CloseAddressSuggestions();
         if (_activeTab == null || _activeTab.IsStartPage || string.IsNullOrWhiteSpace(url))
         {
-            OmniboxTextBox.Text = string.Empty;
+            SetAddressText(string.Empty);
             OmniboxPlaceholder.Visibility = Visibility.Visible;
         }
         else
         {
-            OmniboxTextBox.Text = url;
+            SetAddressText(url);
             OmniboxPlaceholder.Visibility = Visibility.Collapsed;
         }
     }
@@ -941,7 +966,8 @@ public partial class MainWindow : Window
 
     private void NavigateActiveTab()
     {
-        string query = OmniboxTextBox.Text.Trim();
+        CloseAddressSuggestions();
+        string query = AddressDestination();
         if (string.IsNullOrEmpty(query)) return;
         _activeTab?.Navigate(query);
     }
@@ -955,6 +981,7 @@ public partial class MainWindow : Window
 
     private void OmniboxTextBox_LostFocus(object sender, RoutedEventArgs e)
     {
+        CloseAddressSuggestions();
         _isOmniboxFocused = false;
         OmniboxBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(44, 47, 62));
         if (string.IsNullOrWhiteSpace(OmniboxTextBox.Text))
@@ -1047,18 +1074,22 @@ public partial class MainWindow : Window
         UpdateBlockedStats();
         UpdateShieldsUi();
 
-        ShieldService.Instance.PropertyChanged += (s, e) =>
+        ShieldService.Instance.PropertyChanged += Shield_PropertyChanged;
+    }
+
+    private void Downloads_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => UpdateDownloadsBadge();
+
+    private void Bookmarks_Changed() => Dispatcher.Invoke(UpdateBookmarkStar);
+
+    private void Shield_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        Dispatcher.Invoke(() =>
         {
-            Dispatcher.Invoke(() =>
-            {
-                if (e.PropertyName == nameof(ShieldService.BlockedCount))
-                    UpdateBlockedStats();
-                else if (e.PropertyName == nameof(ShieldService.IsShieldsEnabled))
-                    UpdateShieldsUi();
-                else if (e.PropertyName == nameof(ShieldService.LowRamMode))
-                    ApplyMemorySaverPolicy();
-            });
-        };
+            if (e.PropertyName == nameof(ShieldService.BlockedCount)) UpdateBlockedStats();
+            else if (e.PropertyName == nameof(ShieldService.IsShieldsEnabled)) UpdateShieldsUi();
+            else if (e.PropertyName == nameof(ShieldService.LowRamMode)) ApplyMemorySaverPolicy();
+        });
     }
 
     /// <summary>
@@ -1086,7 +1117,7 @@ public partial class MainWindow : Window
 
             if (tab.IsDiscarded) continue;
 
-            if (enabled && !tab.IsLoading && !tab.IsStartPage &&
+            if (enabled && !tab.IsLoading &&
                 DateTime.UtcNow - tab.LastActivityUtc >= TabDiscardAfter)
             {
                 tab.Discard();

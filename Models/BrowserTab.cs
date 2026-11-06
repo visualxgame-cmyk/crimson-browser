@@ -14,19 +14,23 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
     private string _title = "New Tab", _url = "crimson://start";
     private string? _faviconUrl, _discardedUrl, _discardedTitle;
     private bool _isLoading, _isActive, _canGoBack, _canGoForward, _isDiscarded;
-    private bool _navigationComplete, _mediaActive, _mediaPermission;
+    private bool _navigationComplete, _mediaPermission;
+    private readonly HashSet<string> _activeMediaFrames = new();
     private bool _formDirty;
+    private double _savedZoomLevel;
     private readonly ConcurrentDictionary<BrowserPermissionRequest, byte> _permissions = new();
     private string _findTerm = "";
     private TaskCompletionSource<(int, int)>? _findCompletion;
     public string Id { get; } = Guid.NewGuid().ToString("N");
     public bool IsIncognito { get; }
     public bool IsDisposed { get; private set; }
-    public CefBrowserView WebView { get; }
+    private readonly IRequestContext _context;
+    public CefBrowserView WebView { get; private set; } = null!;
+    public event Action<BrowserTab, CefBrowserView?, CefBrowserView?>? WebViewChanged;
     public bool FocusOmniboxOnStartPage { get; set; }
     public DateTime LastActivityUtc { get; private set; } = DateTime.UtcNow;
     public bool IsDiscarded => _isDiscarded;
-    public bool IsDocumentPlayingAudio => _mediaActive || _mediaPermission;
+    public bool IsDocumentPlayingAudio => _activeMediaFrames.Count > 0 || _mediaPermission;
     public bool IsStartPage => _url == "crimson://start" || IsStartAddress(_url);
     public string Title { get => _title; set => SetField(ref _title, value); }
     public string Url { get => _url; set => SetField(ref _url, IsStartAddress(value) ? "crimson://start" : value); }
@@ -40,8 +44,8 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
         set
         {
             if (!SetField(ref _isActive, value)) return;
-            WebView.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
             if (value) { NoteActivity(); RestoreFromDiscard(); }
+            WebView.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
             ApplyMemoryPolicy(value);
         }
     }
@@ -58,26 +62,40 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
     public BrowserTab(IRequestContext context, bool isIncognito = false)
     {
         IsIncognito = isIncognito;
-        WebView = new CefBrowserView { RequestContext = context, Visibility = Visibility.Collapsed };
-        WebView.LifeSpanHandler = new TabLifeSpanHandler(this);
-        WebView.DisplayHandler = new TabDisplayHandler(this);
-        WebView.RequestHandler = new TabRequestHandler(this);
-        WebView.PermissionHandler = new TabPermissionHandler(this);
-        WebView.DownloadHandler = new TabDownloadHandler(this);
-        WebView.KeyboardHandler = new TabKeyboardHandler(this);
-        WebView.FindHandler = new TabFindHandler(this);
-        WebView.RenderProcessMessageHandler = new TabRenderHandler();
-        WebView.LoadingStateChanged += (_, args) => Ui(() =>
+        _context = context;
+        WebView = CreateWebView();
+    }
+
+    private CefBrowserView CreateWebView()
+    {
+        var view = new CefBrowserView { RequestContext = _context, Visibility = Visibility.Collapsed, ZoomLevel = _savedZoomLevel };
+        view.LifeSpanHandler = new TabLifeSpanHandler(this);
+        view.DisplayHandler = new TabDisplayHandler(this);
+        view.RequestHandler = new TabRequestHandler(this);
+        view.PermissionHandler = new TabPermissionHandler(this);
+        view.DownloadHandler = new TabDownloadHandler(this);
+        view.KeyboardHandler = new TabKeyboardHandler(this);
+        view.FindHandler = new TabFindHandler(this);
+        view.RenderProcessMessageHandler = new TabRenderHandler(this);
+        view.FrameLoadStart += (_, args) =>
+        {
+            if (args.Frame.IsMain) Ui(view, () =>
+            {
+                _activeMediaFrames.Clear();
+                _mediaPermission = _formDirty = _navigationComplete = false;
+            });
+        };
+        view.LoadingStateChanged += (_, args) => Ui(view, () =>
         {
             IsLoading = args.IsLoading;
             CanGoBack = args.CanGoBack;
             CanGoForward = args.CanGoForward;
             if (!args.IsLoading) ApplyMemoryPolicy(IsActive);
         });
-        WebView.FrameLoadEnd += (_, args) =>
+        view.FrameLoadEnd += (_, args) =>
         {
             if (!args.Frame.IsMain) return;
-            Ui(() =>
+            Ui(view, () =>
             {
                 if (_isDiscarded) return;
                 _navigationComplete = true;
@@ -90,23 +108,26 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
                 else if (!IsIncognito) HistoryService.Instance.AddEntry(Title, Url);
             });
         };
-        WebView.LoadError += (_, args) =>
+        view.LoadError += (_, args) =>
         {
             if (args.Frame.IsMain && args.ErrorCode != CefErrorCode.Aborted)
-                Ui(() => IsLoading = false);
+                Ui(view, () => IsLoading = false);
         };
-        WebView.JavascriptMessageReceived += (_, args) =>
+        view.JavascriptMessageReceived += (_, args) =>
         {
             string? message = args.Message as string;
             if (message is null) return;
             // Message frame wrappers have callback scope. Read WPF state on its dispatcher.
             // The bundled start page permits no frames or third-party scripts (CSP).
             if (message == "open-settings")
-                Ui(() => { if (IsStartAddress(WebView.Address)) RequestOpenSettings?.Invoke(); });
-            if (message == "crimson-media-active") Ui(() => _mediaActive = true);
-            if (message == "crimson-form-dirty") Ui(() => _formDirty = true);
+                Ui(view, () => { if (IsStartAddress(view.Address)) RequestOpenSettings?.Invoke(); });
+            if (message.StartsWith("crimson-media:", StringComparison.Ordinal) && message.Length == 48 &&
+                Guid.TryParseExact(message.Substring(14, 32), "N", out var mediaToken))
+                Ui(view, () => SetMediaFrame(message.Substring(14, 32), message[^1] == '1'));
+            if (message == "crimson-form-dirty") Ui(view, () => _formDirty = true);
         };
-        WebView.Address = "https://start.crimson/startpage.html";
+        view.Address = "https://start.crimson/startpage.html";
+        return view;
     }
 
     internal void Ui(Action action)
@@ -114,17 +135,19 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
         if (IsDisposed || WebView.Dispatcher.HasShutdownStarted) return;
         WebView.Dispatcher.BeginInvoke(new Action(() => { if (!IsDisposed) action(); }));
     }
+    internal void Ui(IWebBrowser source, Action action) => Ui(() =>
+    {
+        if (!_isDiscarded && ReferenceEquals(source, WebView)) action();
+    });
+
     internal void AddressChanged(string address)
     {
         if (_isDiscarded) return;
         Url = address;
-        _mediaActive = _mediaPermission = false;
-        _formDirty = false;
-        _navigationComplete = false;
         if (IsStartPage) Title = LocalizationService.Instance.Get("NewTab");
     }
     internal void OpenPopup(string url) => Ui(() => RequestNewTab?.Invoke(this, url));
-    internal void CloseRequested() => Ui(() => RequestClose?.Invoke(this));
+    internal void CloseRequested() => Ui(() => { if (!_isDiscarded) RequestClose?.Invoke(this); });
     internal void Shortcut(string action) => Ui(() => RequestShortcut?.Invoke(this, action));
     internal void SetFullscreen(bool value) => Ui(() => FullscreenChanged?.Invoke(value));
     internal void EngineFailed(string message) => Ui(() => InitializationFailed?.Invoke(this, message));
@@ -142,6 +165,11 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
         }));
     }
     internal void MarkMediaPermission() => Ui(() => _mediaPermission = true);
+    internal void SetMediaFrame(string frameToken, bool active)
+    {
+        if (active) _activeMediaFrames.Add(frameToken);
+        else _activeMediaFrames.Remove(frameToken);
+    }
     internal void FindResult(int index, int count)
     {
         var completion = _findCompletion;
@@ -151,36 +179,51 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
     public void NoteActivity() => LastActivityUtc = DateTime.UtcNow;
     public void ApplyMemoryPolicy(bool active)
     {
-        if (IsDisposed || !WebView.IsBrowserInitialized) return;
+        if (IsDisposed || _isDiscarded || !WebView.IsBrowserInitialized) return;
         // CEF throttles invisible OSR browsers. Keep media and forms intact until idle discard.
         WebView.GetBrowser().GetHost().WasHidden(!active);
     }
     public void SetWindowMinimized(bool minimized)
     {
-        if (!IsDisposed && IsActive && WebView.IsBrowserInitialized)
+        if (!IsDisposed && !_isDiscarded && IsActive && WebView.IsBrowserInitialized)
             WebView.GetBrowser().GetHost().WasHidden(minimized);
     }
     public void Discard()
     {
-        if (IsActive || _isDiscarded || IsStartPage || !_navigationComplete || IsDocumentPlayingAudio ||
+        if (IsDisposed || IsActive || _isDiscarded || !WebView.IsBrowserInitialized || !_navigationComplete || IsDocumentPlayingAudio ||
             _formDirty || DownloadsService.Instance.ActiveCount > 0) return;
+        // CEF cannot import navigation entries into a newly created browser. Keep
+        // tabs with Back/Forward history alive rather than silently losing that history.
+        if (CanGoBack || CanGoForward || WebView.CanGoBack || WebView.CanGoForward) return;
+        _savedZoomLevel = WebView.ZoomLevel;
         _discardedUrl = Url;
         _discardedTitle = Title;
         _isDiscarded = true;
-        WebView.Address = "about:blank";
+        WebViewChanged?.Invoke(this, WebView, null);
+        ReleaseNativeBrowser();
     }
     private void RestoreFromDiscard()
     {
         if (!_isDiscarded) return;
         string target = _discardedUrl ?? "crimson://start";
-        _isDiscarded = false;
+        RestoreBrowserControl();
         _discardedUrl = _discardedTitle = null;
+        IsLoading = true;
         Navigate(target);
     }
+    private void RestoreBrowserControl()
+    {
+        if (!_isDiscarded) return;
+        WebView = CreateWebView();
+        _isDiscarded = false;
+        _navigationComplete = false;
+        WebViewChanged?.Invoke(this, null, WebView);
+    }
+
     public void Navigate(string target)
     {
         if (IsDisposed) return;
-        _isDiscarded = false;
+        RestoreBrowserControl();
         if (string.IsNullOrWhiteSpace(target) || target == "crimson://start") { LoadStartPage(); return; }
         string address = target.Trim().Trim('"');
         if (File.Exists(address)) address = new Uri(address).AbsoluteUri;
@@ -191,29 +234,35 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
         // Hidden CEF controls initialize lazily. Session saving must retain their
         // requested URLs even before their first native AddressChanged callback.
         Url = address;
+        if (!WebView.IsBrowserInitialized && Uri.TryCreate(address, UriKind.Absolute, out var pendingUri) &&
+            pendingUri.Scheme is "https" or "http") Title = pendingUri.Host;
         _navigationComplete = false;
         WebView.Address = address;
     }
-    public void LoadStartPage() { Url = "crimson://start"; WebView.Address = "https://start.crimson/startpage.html"; }
-    public void GoBack() { if (WebView.CanGoBack) WebView.Back(); }
-    public void GoForward() { if (WebView.CanGoForward) WebView.Forward(); }
-    public void Reload() { if (_isDiscarded) RestoreFromDiscard(); else WebView.Reload(); }
-    public void Stop() => WebView.Stop();
-    public void UpdateHistoryState() { CanGoBack = WebView.CanGoBack; CanGoForward = WebView.CanGoForward; }
+    public void LoadStartPage() { RestoreBrowserControl(); Url = "crimson://start"; WebView.Address = "https://start.crimson/startpage.html"; }
+    public void GoBack() { if (WebView.IsBrowserInitialized && WebView.CanGoBack) WebView.Back(); }
+    public void GoForward() { if (WebView.IsBrowserInitialized && WebView.CanGoForward) WebView.Forward(); }
+    public void Reload() { if (_isDiscarded) RestoreFromDiscard(); else if (WebView.IsBrowserInitialized) WebView.Reload(); }
+    public void Stop() { if (WebView.IsBrowserInitialized) WebView.Stop(); }
+    public void UpdateHistoryState()
+    {
+        CanGoBack = WebView.IsBrowserInitialized && WebView.CanGoBack;
+        CanGoForward = WebView.IsBrowserInitialized && WebView.CanGoForward;
+    }
     public void ShowDevTools() { if (WebView.IsBrowserInitialized) WebView.ShowDevTools(); }
     public void ExitDocumentFullscreen()
     {
-        if (WebView.IsBrowserInitialized)
+        if (WebView.IsBrowserInitialized && WebView.CanExecuteJavascriptInMainFrame)
             WebView.ExecuteScriptAsync("if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});");
     }
     public void UpdateStartPageLanguage(string lang)
     {
-        if (IsStartPage && WebView.IsBrowserInitialized)
+        if (IsStartPage && WebView.IsBrowserInitialized && WebView.CanExecuteJavascriptInMainFrame)
             WebView.ExecuteScriptAsync("if(window.applyLanguage) applyLanguage(" + JsonSerializer.Serialize(lang) + ");");
     }
     public void RefreshStartPageWallpaper()
     {
-        if (IsStartPage && WebView.IsBrowserInitialized) WebView.ExecuteScriptAsync("if(window.checkWallpaper) checkWallpaper();");
+        if (IsStartPage && WebView.IsBrowserInitialized && WebView.CanExecuteJavascriptInMainFrame) WebView.ExecuteScriptAsync("if(window.checkWallpaper) checkWallpaper();");
     }
     public async Task<(int Index, int Count)> FindAsync(string term, bool backward = false)
     {
@@ -246,6 +295,10 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
     {
         if (IsDisposed) return;
         IsDisposed = true;
+        ReleaseNativeBrowser();
+    }
+    private void ReleaseNativeBrowser()
+    {
         _findCompletion?.TrySetResult((0, 0));
         foreach (var request in _permissions.Keys) request.Complete(false);
         _permissions.Clear();

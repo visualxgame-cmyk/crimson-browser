@@ -10,5 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../CrimsonBrowser.csproj" />
+    <Content Include="../../App.xaml" Link="CrimsonThemeSource.xaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
