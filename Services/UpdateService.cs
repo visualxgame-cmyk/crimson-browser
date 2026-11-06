@@ -133,13 +133,23 @@ internal static class UpdateService
             // Dispose also flushes buffered writes before the installer is launched.
             await output.DisposeAsync();
             File.Move(temporaryPath, installerPath, overwrite: true);
-            // /CRIMSONRESTART tells the installer to launch the updated browser after a silent update.
-            Process.Start(new ProcessStartInfo(
-                installerPath,
-                "/SILENT /SUPPRESSMSGBOXES /CRIMSONRESTART")
+            // The independent helper waits for this process to exit before setup touches
+            // installed files. Keep the helper outside the directory being updated.
+            string helperPath = Path.Combine(folder, "Install-Update.ps1");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Resources", "Install-Update.ps1"), helperPath, true);
+            string powershellPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            var startInfo = new ProcessStartInfo(powershellPath)
             {
-                UseShellExecute = true
-            });
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                         "-File", helperPath, "-BrowserProcessId", Environment.ProcessId.ToString(),
+                         "-InstallerPath", installerPath, "-InstallDirectory", AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar) })
+                startInfo.ArgumentList.Add(argument);
+            using Process helper = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("Could not start the update installer helper.");
             Application.Current.Shutdown();
         }
         finally
