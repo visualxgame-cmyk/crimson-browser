@@ -129,6 +129,9 @@ internal static class UpdateService
                 throw new InvalidDataException("The downloaded update did not match its published SHA-256 checksum.");
             }
 
+            // Windows cannot rename or execute the download while FileShare.None holds it open.
+            // Dispose also flushes buffered writes before the installer is launched.
+            await output.DisposeAsync();
             File.Move(temporaryPath, installerPath, overwrite: true);
             // /CRIMSONRESTART tells the installer to launch the updated browser after a silent update.
             Process.Start(new ProcessStartInfo(
