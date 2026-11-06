@@ -15,6 +15,8 @@ namespace CrimsonBrowser;
 public partial class MainWindow : Window
 {
     private CoreWebView2Environment? _webViewEnvironment;
+    private readonly Queue<string> _pendingExternalUrls = new();
+    private bool _browserInitialized;
     public ObservableCollection<BrowserTab> Tabs { get; } = new();
     private BrowserTab? _activeTab;
     private bool _isOmniboxFocused;
@@ -159,6 +161,10 @@ public partial class MainWindow : Window
             {
                 AddNewTab();
             }
+
+            _browserInitialized = true;
+            while (_pendingExternalUrls.TryDequeue(out string? externalUrl))
+                AddNewTab(externalUrl);
         }
         catch (Exception ex)
         {
@@ -1346,7 +1352,18 @@ public partial class MainWindow : Window
     public void OpenExternalUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
-        NavigateOrAddTab(url.Trim().Trim('"'));
+        string target = url.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(target)) return;
+
+        // External launches must preserve the page the user is currently working on.
+        // Environment creation is asynchronous, so retain early requests until startup completes.
+        if (!_browserInitialized)
+        {
+            _pendingExternalUrls.Enqueue(target);
+            return;
+        }
+
+        AddNewTab(target);
     }
 
     public void RefreshAllStartPages()

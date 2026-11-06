@@ -10,7 +10,7 @@ public partial class App : Application
 {
     private SingleInstanceService? _singleInstance;
     private MainWindow? _mainWindow;
-    private string? _pendingMessage;
+    private readonly Queue<string> _pendingMessages = new();
 
     internal static string? PendingStartupUrl { get; private set; }
 
@@ -45,10 +45,8 @@ public partial class App : Application
         MainWindow = _mainWindow;
         _mainWindow.Show();
 
-        if (_pendingMessage is not null)
+        while (_pendingMessages.TryDequeue(out string? message))
         {
-            var message = _pendingMessage;
-            _pendingMessage = null;
             OnExternalMessage(message);
         }
     }
@@ -85,7 +83,7 @@ public partial class App : Application
         {
             if (_mainWindow is null)
             {
-                _pendingMessage = message;
+                _pendingMessages.Enqueue(message);
                 return;
             }
 
