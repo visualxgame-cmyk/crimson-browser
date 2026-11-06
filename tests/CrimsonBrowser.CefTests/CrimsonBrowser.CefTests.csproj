@@ -11,5 +11,6 @@
   <ItemGroup>
     <ProjectReference Include="../../CrimsonBrowser.csproj" />
     <Content Include="../../App.xaml" Link="CrimsonThemeSource.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../Services/BrowserScripts.cs" Link="BrowserScripts.cs" />
   </ItemGroup>
 </Project>

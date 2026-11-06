@@ -185,7 +185,8 @@ internal sealed class TabRenderHandler(BrowserTab tab) : IRenderProcessMessageHa
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _mediaTokens = new();
     public void OnContextCreated(IWebBrowser control, IBrowser browser, IFrame frame)
     {
-        if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers)
+        if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers &&
+            !ShieldRequestPolicy.IsAuthenticationPage(frame.Url))
             frame.ExecuteJavaScriptAsync(BrowserScripts.AdBlock);
         string token = Guid.NewGuid().ToString("N");
         _mediaTokens[frame.Identifier.ToString()] = token;

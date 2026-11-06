@@ -33,6 +33,18 @@ try
     var www = OmniboxSuggestions.Search(new[] { new HistoryEntry("Site", "https://www.example.test/page", DateTime.Now) }, "exam")[0];
     Assert(www.Completion == "example.test" && www.Url == "https://www.example.test/", "display completion retains the actual www destination");
     Console.WriteLine("PASS: Local address suggestions");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://pagead2.googlesyndication.com/ads"), "advertising hosts remain blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://www.youtube.com/pagead/example"), "YouTube advertising endpoints remain blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://www.youtube.com/youtubei/v1/att/get?prettyPrint=false"), "YouTube attestation is not classified as advertising");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fdoubleclick.net%2F&state=adslot%3D123"),
+        "authentication redirect parameters are not mistaken for a tracker request");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/article?next=https://youtube.com/pagead/"), "nested URL values do not cause unrelated requests to be blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://notdoubleclick.net/article"), "domain matching respects hostname boundaries");
+    Assert(ShieldRequestPolicy.IsAuthenticationPage("https://accounts.youtube.com/accounts/SetSID"), "YouTube account transfer is protected from script injection");
+    Assert(ShieldRequestPolicy.IsAuthenticationPage("https://www.youtube.com/signin?action_handle_signin=true"), "same-tab sign-in handoff is protected from script injection");
+    Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://www.youtube.com/watch?v=example"), "normal YouTube content keeps ad filtering");
+    Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://accounts.google.com.evil.test/"), "authentication origins are exact");
+    Console.WriteLine("PASS: Authentication-safe Shields request matching");
     return 0;
 }
 finally

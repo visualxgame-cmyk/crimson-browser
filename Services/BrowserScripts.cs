@@ -4,6 +4,10 @@ internal static class BrowserScripts
 {
     public const string AdBlock = """
             (function () {
+                var authHost = (location.hostname || '').toLowerCase();
+                if (authHost === 'accounts.google.com' || authHost === 'accounts.youtube.com' ||
+                    ((authHost === 'youtube.com' || authHost.endsWith('.youtube.com')) &&
+                     location.pathname.toLowerCase().startsWith('/signin'))) return;
                 if (window.__crimsonAdShield) return;
                 window.__crimsonAdShield = true;
 
@@ -70,6 +74,12 @@ internal static class BrowserScripts
                     function guardInitialData(name) {
                         var current;
                         try {
+                            // CEF's context notification can arrive after page scripts. Preserve
+                            // already initialized data and any accessors owned by the site.
+                            current = window[name];
+                            var descriptor = Object.getOwnPropertyDescriptor(window, name);
+                            stripAds(current);
+                            if (descriptor && (!descriptor.configurable || descriptor.get || descriptor.set)) return;
                             Object.defineProperty(window, name, {
                                 configurable: true,
                                 enumerable: true,

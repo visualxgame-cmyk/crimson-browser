@@ -21,7 +21,9 @@ public static class OmniboxSuggestions
                 uri.Scheme is not ("https" or "http") || uri.UserInfo.Length != 0) continue;
             string root = uri.GetLeftPart(UriPartial.Authority);
             string address = Display(root);
-            string completion = query.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? root : address;
+            bool typedScheme = query.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                query.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+            string completion = typedScheme ? root : address;
             bool prefix = completion.StartsWith(query, StringComparison.OrdinalIgnoreCase);
             if (prefix && domains.Add(address))
             {

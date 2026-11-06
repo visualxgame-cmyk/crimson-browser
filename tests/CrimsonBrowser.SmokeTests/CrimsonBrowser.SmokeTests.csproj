@@ -9,5 +9,6 @@
     <Compile Include="..\..\Services\AtomicFileStore.cs" Link="AtomicFileStore.cs" />
     <Compile Include="..\..\Services\HistoryService.cs" Link="HistoryService.cs" />
     <Compile Include="..\..\Services\OmniboxSuggestions.cs" Link="OmniboxSuggestions.cs" />
+    <Compile Include="..\..\Services\ShieldRequestPolicy.cs" Link="ShieldRequestPolicy.cs" />
   </ItemGroup>
 </Project>

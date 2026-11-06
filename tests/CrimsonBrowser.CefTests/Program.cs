@@ -58,6 +58,11 @@ internal static class Program
                     wave.Write(Enumerable.Repeat((byte)128, 8000).ToArray());
                 }
                 context.RegisterSchemeHandlerFactory("https", "smoke.crimson", new FolderSchemeHandlerFactory(root, schemeName: "https", hostName: "smoke.crimson"));
+                // These origin mappings are local to this temporary test context, with no account/network traffic.
+                context.RegisterSchemeHandlerFactory("https", "www.youtube.com", new FolderSchemeHandlerFactory(root, schemeName: "https", hostName: "www.youtube.com"));
+                context.RegisterSchemeHandlerFactory("https", "accounts.google.com", new FolderSchemeHandlerFactory(root, schemeName: "https", hostName: "accounts.google.com"));
+                File.WriteAllText(Path.Combine(root, "youtube-fixture.html"), "<!doctype html><title>YouTube script fixture</title><body>Local integration fixture</body>");
+                File.WriteAllText(Path.Combine(root, "auth-fixture.html"), "<!doctype html><title>Authentication script fixture</title><body>Local integration fixture</body>");
                 // Incognito prevents tests from writing real Crimson history.
                 tab = new BrowserTab(context, isIncognito: true) { IsActive = true };
                 window = new Window { Title = "Crimson CEF integration checks", Width = 1000, Height = 700, Content = tab.WebView };
@@ -160,6 +165,22 @@ internal static class Program
                 tab.IsActive = false;
                 tab.Discard();
                 Check(!tab.IsDiscarded, "unsaved form input survives same-document URL changes and memory saving");
+                tab.IsActive = true;
+                tab.Navigate("https://www.youtube.com/youtube-fixture.html");
+                await Until(() => tab.Title == "YouTube script fixture" && !tab.IsLoading, "local YouTube-origin fixture loads");
+                await tab.WebView.EvaluateScriptAsync("delete window.__crimsonAdShield;" +
+                    "Object.defineProperty(window,'ytInitialData',{configurable:true,writable:true,value:{marker:'keep-existing',adSlots:[1]}});" +
+                    "window.testAccessor=function(){return {marker:'keep-accessor'}};" +
+                    "Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true,get:window.testAccessor});");
+                await tab.WebView.EvaluateScriptAsync(CrimsonBrowser.Services.BrowserScripts.AdBlock);
+                var initialData = await tab.WebView.EvaluateScriptAsync("ytInitialData.marker==='keep-existing' && ytInitialData.adSlots.length===0 && " +
+                    "Object.getOwnPropertyDescriptor(window,'ytInitialPlayerResponse').get===window.testAccessor");
+                Check(initialData.Result is true, "late ad-block injection preserves existing YouTube data and accessors");
+                tab.Navigate("https://accounts.google.com/auth-fixture.html");
+                await Until(() => tab.Title == "Authentication script fixture" && !tab.IsLoading, "local authentication-origin fixture loads");
+                await tab.WebView.EvaluateScriptAsync(CrimsonBrowser.Services.BrowserScripts.AdBlock);
+                Check((await tab.WebView.EvaluateScriptAsync("Boolean(window.__crimsonAdShield)")).Result is false,
+                    "credential pages are not modified by the ad-block script");
                 var fixture = new[] { new CrimsonBrowser.Services.HistoryEntry("Conversation", "https://chatgpt.com/c/example", DateTime.Now) };
                 var main = new CrimsonBrowser.MainWindow(addressSuggestions: query => CrimsonBrowser.Services.OmniboxSuggestions.Search(fixture, query));
                 main.Show();

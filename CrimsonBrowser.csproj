@@ -22,7 +22,7 @@
     <Description>A fast, low-memory Chromium browser with Crimson Shields privacy protection.</Description>
     <Copyright>Copyright © 2026 VisualX Studio</Copyright>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;dist\**;publish\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**;dist\**;publish\**;tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
