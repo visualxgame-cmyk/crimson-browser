@@ -923,6 +923,14 @@ public partial class MainWindow : Window
         UpdateDownloadsBadge();
     }
 
+    private void ReviewDownloadWarnings_Click(object sender, RoutedEventArgs e)
+    {
+        // Close the WPF popup before showing Chromium's security decisions, so it cannot
+        // cover the native download controls. SmartScreen retains authority over the file.
+        DownloadsPopup.IsOpen = false;
+        _activeTab?.WebView.CoreWebView2?.OpenDefaultDownloadDialog();
+    }
+
     private void OpenDownloadedFile_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: DownloadItem item } && item.IsCompleted)
