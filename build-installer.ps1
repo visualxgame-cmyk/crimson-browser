@@ -8,11 +8,13 @@
 #   * Inno Setup 6 or 7 (free, https://jrsoftware.org/isdl.php)
 #
 # Output:
-#   dist\CrimsonBrowser-Setup-1.0.0.exe
+#   dist\CrimsonBrowser-Setup-<version>.exe
+#   dist\CrimsonBrowser-Setup-<version>.exe.sha256
 #   dist\publish\ (the raw application folder, useful for debugging)
 
 param(
-    [switch]$SkipPublish
+    [switch]$SkipPublish,
+    [string]$Version
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +24,17 @@ Set-Location $root
 $csproj = Join-Path $root "CrimsonBrowser.csproj"
 $publishDir = Join-Path $root "dist\publish"
 $iss = Join-Path $root "installer\CrimsonBrowser.iss"
+
+# Keep the installer version and asset name in sync with the project version.
+# Release builds pass -Version (for example 1.0.1) so the tag, executable and installer match.
+if ($Version) {
+    $version = $Version.TrimStart('v', 'V')
+}
+else {
+    [xml]$project = Get-Content $csproj
+    $version = ($project.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+    if (-not $version) { $version = "1.0.0" }
+}
 
 function Find-Iscc {
     $candidates = @(
@@ -82,6 +95,7 @@ if (-not $SkipPublish) {
         -c Release `
         -r win-x64 `
         --self-contained true `
+        -p:Version=$version `
         -p:PublishReadyToRun=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
@@ -96,19 +110,26 @@ if (-not (Test-Path (Join-Path $publishDir "CrimsonBrowser.exe"))) {
 Write-Host "Building the installer with Inno Setup..."
 Push-Location (Split-Path -Parent $iss)
 try {
-    & $iscc (Split-Path -Leaf $iss)
+    & $iscc "/DMyAppVersion=$version" (Split-Path -Leaf $iss)
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed." }
 }
 finally {
     Pop-Location
 }
 
-$setup = Join-Path $root "dist\CrimsonBrowser-Setup-1.0.0.exe"
+$setup = Join-Path $root "dist\CrimsonBrowser-Setup-$version.exe"
 if (-not (Test-Path $setup)) {
     throw "The installer was not produced at $setup"
 }
 
+# GitHub auto-updates verify this published SHA-256 checksum before running the installer.
+$checksumPath = "$setup.sha256"
+$hash = (Get-FileHash -Algorithm SHA256 -Path $setup).Hash.ToLowerInvariant()
+Set-Content -Path $checksumPath -Value "$hash  $(Split-Path -Leaf $setup)" -Encoding ascii
+
 $sizeMb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
 Write-Host ""
 Write-Host "Installer ready: $setup ($sizeMb MB)" -ForegroundColor Green
+Write-Host "Checksum ready:  $checksumPath" -ForegroundColor Green
 Write-Host "The installer is unsigned; Windows SmartScreen may show a warning on first run."
+exit 0

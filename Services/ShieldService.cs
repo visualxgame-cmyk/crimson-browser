@@ -126,6 +126,34 @@ public class ShieldService : INotifyPropertyChanged
         "adcolony.com"
     };
 
+    // URLs that are ad/tracking endpoints but live on domains we cannot block wholesale.
+    // YouTube serves ads from youtube.com itself, so these must be filtered individually.
+    private static readonly string[] BlockedUrlFragments = new[]
+    {
+        "youtube.com/api/stats/ads",
+        "youtube.com/api/stats/atr",
+        "youtube.com/get_midroll_info",
+        "youtube.com/pagead/",
+        "youtube.com/ptracking",
+        "youtube.com/youtubei/v1/ads",
+        "google.com/pagead/",
+        "googletagservices.com/tag/js/gpt.js",
+        "/gampad/ads",
+        "/pubads/",
+        "/adsbygoogle",
+        "adsbygoogle.js",
+        "/pagead/",
+        "/adserver/",
+        "/advertisement.",
+        "/advertisement/",
+        "ad_type=",
+        "adformat=",
+        "adslot=",
+        "ad_slot=",
+        "/telemetry?",
+        "/tracker?"
+    };
+
     public bool ShouldBlockUrl(string url)
     {
         if (!IsShieldsEnabled || !BlockAdsAndTrackers)
@@ -144,14 +172,12 @@ public class ShieldService : INotifyPropertyChanged
             }
         }
 
-        // Additional heuristic patterns for tracking and ads
-        if (lowerUrl.Contains("/ads/") || 
-            lowerUrl.Contains("/adserver/") || 
-            lowerUrl.Contains("pagead2.") ||
-            lowerUrl.Contains("/telemetry?") ||
-            lowerUrl.Contains("/tracker?"))
+        for (int i = 0; i < BlockedUrlFragments.Length; i++)
         {
-            return true;
+            if (lowerUrl.Contains(BlockedUrlFragments[i]))
+            {
+                return true;
+            }
         }
 
         return false;

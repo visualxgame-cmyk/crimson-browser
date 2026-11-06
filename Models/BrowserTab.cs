@@ -117,6 +117,12 @@ public class BrowserTab : INotifyPropertyChanged
     public event Action<BrowserTab, CoreWebView2PermissionRequestedEventArgs>? PermissionRequested;
     public event Action<BrowserTab, string>? InitializationFailed;
 
+    /// <summary>Raised after the Crimson start page has finished loading.</summary>
+    public event Action<BrowserTab>? StartPageReady;
+
+    /// <summary>When true, the host should focus the omnibox once the start page is ready.</summary>
+    public bool FocusOmniboxOnStartPage { get; set; }
+
     private string _findTerm = string.Empty;
     private string? _pendingUrl;
 
@@ -186,6 +192,7 @@ public class BrowserTab : INotifyPropertyChanged
                 WebView.CoreWebView2.FrameCreated          += CoreWebView2_FrameCreated;
                 WebView.CoreWebView2.ContainsFullScreenElementChanged += CoreWebView2_ContainsFullScreenElementChanged;
 
+                await InstallAdBlockScriptAsync();
                 await InstallKeyboardBridgeAsync();
 
                 if (!string.IsNullOrWhiteSpace(_pendingUrl))
@@ -245,7 +252,7 @@ public class BrowserTab : INotifyPropertyChanged
         UpdateHistoryState();
     }
 
-    private async void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         IsLoading = false;
         UpdateHistoryState();
@@ -262,6 +269,12 @@ public class BrowserTab : INotifyPropertyChanged
                 _ = WebView.CoreWebView2?.ExecuteScriptAsync($"applyLanguage('{lang}'); checkWallpaper();");
             }
             catch { }
+
+            if (FocusOmniboxOnStartPage)
+            {
+                FocusOmniboxOnStartPage = false;
+                StartPageReady?.Invoke(this);
+            }
         }
         else if (WebView.CoreWebView2 != null)
         {
@@ -272,30 +285,6 @@ public class BrowserTab : INotifyPropertyChanged
             // ── Record navigation in browsing history (never in Incognito) ──
             if (!IsIncognito)
                 HistoryService.Instance.AddEntry(Title, _url);
-
-            // ── Cosmetic Ad Blocker: hide empty ad slots ──
-            if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers)
-            {
-                try
-                {
-                    await WebView.CoreWebView2.ExecuteScriptAsync(
-                        "(function() {" +
-                        "  var el = document.getElementById('crimson-ad-blocker-css');" +
-                        "  if (!el) {" +
-                        "    el = document.createElement('style');" +
-                        "    el.id = 'crimson-ad-blocker-css';" +
-                        "    el.innerHTML = 'ins.adsbygoogle,[id*=\"google_ads\"],[class*=\"banner-ad\"]," +
-                        "[class*=\"ad-container\"],.ad-slot,.ad-banner,.adsbygoogle," +
-                        "#player-ads,.ytp-ad-module,.ytp-ad-overlay-container," +
-                        ".ytp-ad-player-overlay,.video-ads { display:none!important; }';" +
-                        "    (document.head||document.documentElement).appendChild(el);" +
-                        "  }" +
-                        "})();"
-                    );
-                }
-                catch { }
-
-            }
         }
     }
 
@@ -402,6 +391,161 @@ public class BrowserTab : INotifyPropertyChanged
 
         // No host is listening: fail closed instead of leaving Chromium's default UI.
         try { args.State = CoreWebView2PermissionState.Deny; } catch { }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CRIMSON SHIELDS: injected cosmetic filtering + YouTube ad skipping
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task InstallAdBlockScriptAsync()
+    {
+        const string script = """
+            (function () {
+                if (window.__crimsonAdShield) return;
+                window.__crimsonAdShield = true;
+
+                var cosmeticRules = [
+                    'ins.adsbygoogle',
+                    '.adsbygoogle',
+                    '[id^="google_ads"]',
+                    '[id^="div-gpt-ad"]',
+                    '[class*="banner-ad"]',
+                    '[class*="ad-container"]',
+                    '[class*="ad-slot"]',
+                    '[class*="ad-banner"]',
+                    '[class*="sponsored"]',
+                    '.ad-slot',
+                    '.ad-banner',
+                    '#player-ads',
+                    '#masthead-ad',
+                    'ytd-ad-slot-renderer',
+                    'ytd-in-feed-ad-layout-renderer',
+                    'ytd-display-ad-renderer',
+                    'ytd-promoted-sparkles-web-renderer',
+                    'ytd-action-companion-ad-renderer',
+                    'ytd-companion-slot-renderer',
+                    'ytd-player-legacy-desktop-watch-ads-renderer',
+                    '.ytp-ad-module',
+                    '.ytp-ad-overlay-container',
+                    '.ytp-ad-player-overlay',
+                    '.ytp-ad-image-overlay',
+                    '.video-ads'
+                ].join(',') + '{ display: none !important; }';
+
+                function injectCosmeticCss() {
+                    if (!document.documentElement) return;
+                    if (document.getElementById('crimson-ad-blocker-css')) return;
+                    var style = document.createElement('style');
+                    style.id = 'crimson-ad-blocker-css';
+                    style.textContent = cosmeticRules;
+                    (document.head || document.documentElement).appendChild(style);
+                }
+
+                function isYouTube() {
+                    var host = (location.hostname || '').toLowerCase();
+                    return host === 'youtube.com' ||
+                           host.endsWith('.youtube.com') ||
+                           host.endsWith('.youtube-nocookie.com');
+                }
+
+                function clickFirst(selectors) {
+                    for (var i = 0; i < selectors.length; i++) {
+                        var button = document.querySelector(selectors[i]);
+                        if (button) {
+                            try { button.click(); return true; } catch (e) { }
+                        }
+                    }
+                    return false;
+                }
+
+                function skipYouTubeAd() {
+                    if (!isYouTube()) return;
+
+                    // 1. Dismiss any skip/close button that YouTube has already rendered.
+                    clickFirst([
+                        '.ytp-ad-skip-button',
+                        '.ytp-ad-skip-button-modern',
+                        '.ytp-skip-ad-button',
+                        '.ytp-ad-skip-button-container button',
+                        'button.ytp-ad-skip-button',
+                        '.ytp-ad-survey-answer-button',
+                        '.ytp-ad-overlay-close-button'
+                    ]);
+
+                    var player = document.getElementById('movie_player');
+                    if (!player || !player.classList.contains('ad-showing')) {
+                        var anyVideo = document.querySelector('video.html5-main-video') ||
+                                       document.querySelector('video');
+                        if (anyVideo && anyVideo.__crimsonAdMuted !== undefined) {
+                            try { anyVideo.muted = anyVideo.__crimsonAdMuted; } catch (e) { }
+                            delete anyVideo.__crimsonAdMuted;
+                        }
+                        return;
+                    }
+
+                    var video = document.querySelector('video.html5-main-video') ||
+                                document.querySelector('video');
+                    if (!video) return;
+
+                    // Mute the ad (restored automatically when the ad ends) and jump to its end.
+                    if (video.__crimsonAdMuted === undefined) {
+                        video.__crimsonAdMuted = video.muted;
+                    }
+                    try { video.muted = true; } catch (e) { }
+
+                    try {
+                        if (isFinite(video.duration) && video.duration > 0) {
+                            video.currentTime = video.duration;
+                        }
+                    } catch (e) { }
+
+                    // Some ads expose their own skip button only after a short delay.
+                    clickFirst([
+                        '.ytp-ad-skip-button',
+                        '.ytp-ad-skip-button-modern',
+                        '.ytp-skip-ad-button',
+                        '.ytp-ad-skip-button-container button'
+                    ]);
+                }
+
+                function runShield() {
+                    injectCosmeticCss();
+                    skipYouTubeAd();
+                }
+
+                var scheduled = false;
+                function scheduleShield() {
+                    if (scheduled) return;
+                    scheduled = true;
+                    window.setTimeout(function () {
+                        scheduled = false;
+                        runShield();
+                    }, 200);
+                }
+
+                injectCosmeticCss();
+                runShield();
+
+                try {
+                    new MutationObserver(scheduleShield).observe(document.documentElement, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['class']
+                    });
+                } catch (e) { }
+
+                document.addEventListener('yt-navigate-finish', runShield, true);
+                window.setInterval(runShield, 1000);
+            })();
+            """;
+
+        try
+        {
+            if (WebView.CoreWebView2 != null)
+                await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+        }
+        catch { }
     }
 
     /// <summary>

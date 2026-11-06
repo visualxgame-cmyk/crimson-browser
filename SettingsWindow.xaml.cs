@@ -33,8 +33,16 @@ public partial class SettingsWindow : Window
             default:           RadioGoogle.IsChecked = true; break;
         }
 
+        AutoUpdateCheck.IsChecked = SettingsService.Instance.AutoCheckUpdates;
+
         UpdateWallpaperStatusText();
         ApplyLocalization();
+    }
+
+    private void AutoUpdate_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || AutoUpdateCheck == null) return;
+        SettingsService.Instance.AutoCheckUpdates = AutoUpdateCheck.IsChecked == true;
     }
 
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -117,6 +125,8 @@ public partial class SettingsWindow : Window
     private void ApplyLocalization()
     {
         // Static labels are bound with {loc:Loc ...}; only computed values need a refresh.
+        VersionText.Text = LocalizationService.Instance.Format(
+            "SettingsVersion", UpdateService.CurrentVersion);
         UpdateWallpaperStatusText();
     }
 

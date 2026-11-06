@@ -60,3 +60,41 @@ Poți lansa browserul în 2 moduri simple:
 - **WPF (Windows Presentation Foundation)** cu `WindowChrome`
 - **Microsoft.Web.WebView2** (Chromium Evergreen)
 - **HTML5, CSS3 & JavaScript** (Pagină locală Crimson Start)
+
+---
+
+## 📦 Instalare (Windows)
+
+Construiește instalatorul cu:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
+```
+
+Rezultatul apare în `dist\CrimsonBrowser-Setup-<versiune>.exe` (împreună cu fișierul
+`.sha256` folosit de actualizările automate). Instalarea este per-utilizator, nu necesită
+drepturi de administrator și poate instala automat Microsoft Edge WebView2 dacă lipsește.
+
+> Instalatorul este nesemnat, deci Windows SmartScreen poate afișa un avertisment la prima rulare.
+
+---
+
+## 🔄 Auto-update prin GitHub Releases
+
+Crimson Browser verifică GitHub Releases la pornire (după câteva secunde) și, dacă există o
+versiune mai nouă, cere confirmarea. După acceptare descarcă instalatorul, verifică SHA-256,
+îl rulează silențios și repornește browserul. Verificarea automată poate fi dezactivată din
+**Setări › Despre**, iar verificarea manuală rămâne disponibilă în același loc.
+
+Pentru a publica o versiune nouă:
+
+1. Crește `<Version>` din `CrimsonBrowser.csproj` (de exemplu `1.0.1`).
+2. Comite modificarea și creează un tag: `git tag v1.0.1`.
+3. Trimite tag-ul: `git push origin v1.0.1`.
+
+Workflow-ul `.github/workflows/release.yml` construiește automat instalatorul, generează
+checksum-ul SHA-256 și publică ambele fișiere în GitHub Releases. Browserul va detecta
+release-ul la următoarea pornire.
+
+Repository-ul folosit este configurat în `Services/UpdateService.cs`
+(`visualxgame-cmyk/crimson-browser`).

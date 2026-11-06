@@ -18,11 +18,12 @@ internal sealed record UpdateInfo(
 internal enum UpdateCheckStatus { NoPublishedRelease, Current, UpdateAvailable }
 internal sealed record UpdateCheckResult(UpdateCheckStatus Status, UpdateInfo? Update = null);
 
-/// <summary>Checks GitHub Releases only on an explicit user request; no startup polling.</summary>
+/// <summary>Checks GitHub Releases, downloads and verifies updates, and launches the installer.</summary>
 internal static class UpdateService
 {
     private const string Repository = "visualxgame-cmyk/crimson-browser";
-    private static readonly HttpClient Client = CreateClient();
+    private static readonly HttpClient Client = CreateClient(TimeSpan.FromSeconds(12));
+    private static readonly HttpClient DownloadClient = CreateClient(TimeSpan.FromMinutes(10));
 
     public static Version CurrentVersion =>
         Assembly.GetEntryAssembly()?.GetName().Version is { } version
@@ -102,7 +103,7 @@ internal static class UpdateService
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, update.InstallerUrl);
-            using HttpResponseMessage response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using HttpResponseMessage response = await DownloadClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
             long? total = response.Content.Headers.ContentLength;
 
@@ -129,7 +130,13 @@ internal static class UpdateService
             }
 
             File.Move(temporaryPath, installerPath, overwrite: true);
-            Process.Start(new ProcessStartInfo(installerPath, "/SILENT /SUPPRESSMSGBOXES") { UseShellExecute = true });
+            // /CRIMSONRESTART tells the installer to launch the updated browser after a silent update.
+            Process.Start(new ProcessStartInfo(
+                installerPath,
+                "/SILENT /SUPPRESSMSGBOXES /CRIMSONRESTART")
+            {
+                UseShellExecute = true
+            });
             Application.Current.Shutdown();
         }
         finally
@@ -141,7 +148,7 @@ internal static class UpdateService
     private static async Task<string> DownloadExpectedHashAsync(string checksumUrl, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, checksumUrl);
-        using HttpResponseMessage response = await Client.SendAsync(request, cancellationToken);
+        using HttpResponseMessage response = await DownloadClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
         string text = await response.Content.ReadAsStringAsync(cancellationToken);
         Match match = Regex.Match(text, @"\b[a-fA-F0-9]{64}\b");
@@ -149,9 +156,9 @@ internal static class UpdateService
         return match.Value.ToUpperInvariant();
     }
 
-    private static HttpClient CreateClient()
+    private static HttpClient CreateClient(TimeSpan timeout)
     {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        var client = new HttpClient { Timeout = timeout };
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"CrimsonBrowser/{CurrentVersion}");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return client;

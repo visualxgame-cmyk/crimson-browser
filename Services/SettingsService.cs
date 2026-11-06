@@ -17,6 +17,11 @@ public class SettingsData
     public bool LowRamMode { get; set; } = true;
     public bool EnforceHttps { get; set; } = true;
     public bool BlockPopups { get; set; } = true;
+
+    // Update preferences. A skipped version is remembered so "Later" does not nag
+    // on every launch; it resets automatically when a newer release appears.
+    public bool AutoCheckUpdates { get; set; } = true;
+    public string? SkippedUpdateVersion { get; set; }
 }
 
 public class SettingsService : INotifyPropertyChanged
@@ -131,6 +136,24 @@ public class SettingsService : INotifyPropertyChanged
     {
         get => _data.BlockPopups;
         set => SetShield(nameof(BlockPopups), _data.BlockPopups, value, v => _data.BlockPopups = v);
+    }
+
+    public bool AutoCheckUpdates
+    {
+        get => _data.AutoCheckUpdates;
+        set => SetShield(nameof(AutoCheckUpdates), _data.AutoCheckUpdates, value, v => _data.AutoCheckUpdates = v);
+    }
+
+    public string? SkippedUpdateVersion
+    {
+        get => _data.SkippedUpdateVersion;
+        set
+        {
+            if (_data.SkippedUpdateVersion == value) return;
+            _data.SkippedUpdateVersion = value;
+            OnPropertyChanged();
+            Save();
+        }
     }
 
 

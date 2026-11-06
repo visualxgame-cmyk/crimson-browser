@@ -11,8 +11,6 @@
     <RootNamespace>CrimsonBrowser</RootNamespace>
     <ApplicationIcon>crimson.ico</ApplicationIcon>
     <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
     <Product>Crimson Browser</Product>
     <AssemblyTitle>Crimson Browser</AssemblyTitle>
     <Company>VisualX Studio</Company>

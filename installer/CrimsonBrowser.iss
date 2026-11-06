@@ -4,7 +4,9 @@
 ; (build-installer.ps1 does this automatically).
 
 #define MyAppName "Crimson Browser"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "1.0.0"
+#endif
 #define MyAppPublisher "VisualX Studio"
 #define MyAppExeName "CrimsonBrowser.exe"
 #define MyAppId "{{63B6F537-ADAB-40C0-A6CB-D42BE3873E59}"
@@ -51,8 +53,16 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; Silent updates pass /CRIMSONRESTART so the updated browser starts again automatically.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: ShouldRestartAfterSilentInstall
 
 [Code]
+function ShouldRestartAfterSilentInstall: Boolean;
+begin
+  Result := WizardSilent and
+    (Pos('/crimsonrestart', LowerCase(GetCmdTail)) > 0);
+end;
+
 const
   WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
 

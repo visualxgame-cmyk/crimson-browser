@@ -201,7 +201,7 @@
                             <!-- PANE 5: ABOUT -->
                             <StackPanel x:Name="PaneAbout" Visibility="Collapsed">
                                 <TextBlock Text="{loc:Loc SettingsAbout}" FontSize="14.5" FontWeight="Bold" Foreground="White" Margin="0 0 0 4" />
-                                <TextBlock Text="{loc:Loc SettingsVersion}" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
+                                <TextBlock x:Name="VersionText" Text="{loc:Loc SettingsVersion}" FontSize="11" Foreground="#8E92A4" Margin="0 0 0 16" />
                                 <Border Background="#1C1D27" BorderBrush="#2A2C3C" BorderThickness="1" CornerRadius="10" Padding="14">
                                     <StackPanel>
                                         <TextBlock Text="🔴 CRIMSON BROWSER" FontWeight="Bold" Foreground="{StaticResource CrimsonRedGlowBrush}" Margin="0 0 0 6" />
@@ -217,6 +217,11 @@
                                                  Click="CheckUpdates_Click">
                                              <TextBlock Text="{loc:Loc CheckUpdates}" FontWeight="SemiBold" Foreground="{StaticResource CrimsonRedGlowBrush}" />
                                          </Button>
+                                         <CheckBox x:Name="AutoUpdateCheck" Margin="2 14 0 0" Cursor="Hand"
+                                                   Foreground="#D1D4DC" FontSize="11.5"
+                                                   Checked="AutoUpdate_Changed" Unchecked="AutoUpdate_Changed">
+                                             <TextBlock Text="{loc:Loc AutoCheckUpdates}" Foreground="#D1D4DC" />
+                                         </CheckBox>
                                          <TextBlock x:Name="UpdateStatusText" Foreground="#8E92A4" FontSize="11" Margin="0 8 0 0" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>

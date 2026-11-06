@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CrimsonBrowser.Models;
 using CrimsonBrowser.Services;
 using Microsoft.Web.WebView2.Core;
@@ -59,7 +60,7 @@ public partial class MainWindow : Window
         NewTabCommand            = new RelayCommand(_ => AddNewTab());
         CloseCurrentTabCommand   = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
         RefreshCommand           = new RelayCommand(_ => _activeTab?.Reload());
-        FocusOmniboxCommand      = new RelayCommand(_ => { OmniboxTextBox.Focus(); OmniboxTextBox.SelectAll(); });
+        FocusOmniboxCommand      = new RelayCommand(_ => FocusOmnibox());
         OpenDevToolsCommand      = new RelayCommand(_ => _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow());
         OpenHistoryCommand       = new RelayCommand(_ => OpenHistory());
         OpenIncognitoCommand     = new RelayCommand(_ => OpenIncognito());
@@ -98,6 +99,7 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         await InitializeBrowserEnvironmentAsync();
+        _ = CheckForUpdatesAutomaticallyAsync();
     }
 
     private async Task InitializeBrowserEnvironmentAsync()
@@ -164,7 +166,16 @@ public partial class MainWindow : Window
     {
         if (_webViewEnvironment == null) return;
 
-        var tab = new BrowserTab(_webViewEnvironment);
+        bool isBlankNewTab = string.IsNullOrWhiteSpace(initialUrl);
+        var tab = new BrowserTab(_webViewEnvironment)
+        {
+            FocusOmniboxOnStartPage = isBlankNewTab
+        };
+
+        tab.StartPageReady += readyTab => Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (readyTab == _activeTab) FocusOmnibox();
+        }), DispatcherPriority.Input);
 
         tab.RequestNewTab += (senderTab, targetUrl) =>
             Dispatcher.Invoke(() => AddNewTab(targetUrl));
@@ -201,6 +212,40 @@ public partial class MainWindow : Window
 
         if (!string.IsNullOrWhiteSpace(initialUrl))
             tab.Navigate(initialUrl);
+        else
+            FocusOmnibox();
+    }
+
+    /// <summary>Focus the address bar so a new tab can be typed into immediately.</summary>
+    private void FocusOmnibox()
+    {
+        // WebView2 often claims focus shortly after a document finishes navigating.
+        // Try immediately, at idle, and once more shortly afterwards so the omnibox wins.
+        Dispatcher.BeginInvoke(new Action(() => ApplyOmniboxFocus(selectAll: true)),
+            DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(new Action(() => ApplyOmniboxFocus(selectAll: false)),
+            DispatcherPriority.ApplicationIdle);
+
+        var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        retry.Tick += (_, _) =>
+        {
+            retry.Stop();
+            ApplyOmniboxFocus(selectAll: false);
+        };
+        retry.Start();
+    }
+
+    private void ApplyOmniboxFocus(bool selectAll)
+    {
+        if (!IsVisible) return;
+
+        if (!OmniboxTextBox.IsKeyboardFocusWithin)
+            OmniboxTextBox.Focus();
+
+        Keyboard.Focus(OmniboxTextBox);
+
+        if (selectAll)
+            OmniboxTextBox.SelectAll();
     }
 
     public void SetActiveTab(BrowserTab tab)
@@ -332,8 +377,7 @@ public partial class MainWindow : Window
             case "incognito":     OpenIncognito(); break;
             case "bookmarks-bar": ToggleBookmarksBar(); break;
             case "focus-omnibox":
-                OmniboxTextBox.Focus();
-                OmniboxTextBox.SelectAll();
+                FocusOmnibox();
                 break;
             case "bookmark": ToggleCurrentBookmark(); break;
             case "history":  OpenHistory(); break;
@@ -1015,7 +1059,7 @@ public partial class MainWindow : Window
         CrimsonDialog.Info(
             this,
             loc.Get("AboutTitle"),
-            loc.Get("AboutBody"));
+            loc.Format("AboutBody", UpdateService.CurrentVersion));
     }
 
     private void MenuSettings_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; OpenSettings(); }
@@ -1056,6 +1100,82 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────────
     // SETTINGS / HISTORY / INCOGNITO
     // ─────────────────────────────────────────────────────────────────────────
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // GITHUB AUTO-UPDATE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private async Task CheckForUpdatesAutomaticallyAsync()
+    {
+        if (!_restoreSession || !SettingsService.Instance.AutoCheckUpdates)
+            return;
+
+        try
+        {
+            // Give the first page time to load; the check itself never blocks the UI.
+            await Task.Delay(TimeSpan.FromSeconds(4));
+            if (!IsVisible || !IsEnabled) return;
+
+            UpdateCheckResult result = await UpdateService.CheckAsync();
+            if (result.Status != UpdateCheckStatus.UpdateAvailable || result.Update is null)
+                return;
+
+            string version = result.Update.Version.ToString();
+            if (string.Equals(SettingsService.Instance.SkippedUpdateVersion, version,
+                    StringComparison.OrdinalIgnoreCase))
+                return;
+
+            await Dispatcher.InvokeAsync(() => PromptForUpdate(result.Update));
+        }
+        catch
+        {
+            // Update checks are best-effort; offline or rate-limited clients stay silent.
+        }
+    }
+
+    private async void PromptForUpdate(UpdateInfo update)
+    {
+        var loc = LocalizationService.Instance;
+        string message =
+            loc.Format("UpdateAvailableMessage", update.ReleaseName, update.Version) +
+            Environment.NewLine + Environment.NewLine +
+            loc.Get("UpdateRestartNotice");
+
+        bool install = CrimsonDialog.Show(
+            this,
+            loc.Get("UpdateAvailableTitle"),
+            message,
+            loc.Get("DownloadAndInstall"),
+            loc.Get("UpdateLater"));
+
+        if (!install)
+        {
+            SettingsService.Instance.SkippedUpdateVersion = update.Version.ToString();
+            return;
+        }
+
+        SettingsService.Instance.SkippedUpdateVersion = null;
+        var progressDialog = new UpdateProgressDialog(this, update.Version);
+        progressDialog.Show();
+
+        try
+        {
+            var progress = new Progress<double>(progressDialog.SetProgress);
+            await UpdateService.DownloadAndInstallAsync(update, progress);
+        }
+        catch (OperationCanceledException)
+        {
+            progressDialog.Close();
+        }
+        catch (Exception ex)
+        {
+            progressDialog.Close();
+            CrimsonDialog.Info(
+                this,
+                loc.Get("UpdateInstallFailedTitle"),
+                loc.Format("UpdateInstallFailedMessage", ex.Message));
+        }
+    }
 
     public void OpenSettings()
     {
