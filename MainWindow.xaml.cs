@@ -9,13 +9,14 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using CrimsonBrowser.Models;
 using CrimsonBrowser.Services;
-using Microsoft.Web.WebView2.Core;
+using CefSharp;
+using DownloadItem = CrimsonBrowser.Services.DownloadItem;
 
 namespace CrimsonBrowser;
 
 public partial class MainWindow : Window
 {
-    private CoreWebView2Environment? _webViewEnvironment;
+    private IRequestContext? _webViewEnvironment;
     private readonly Queue<string> _pendingExternalUrls = new();
     private bool _browserInitialized;
     public ObservableCollection<BrowserTab> Tabs { get; } = new();
@@ -76,7 +77,7 @@ public partial class MainWindow : Window
         CloseCurrentTabCommand   = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
         RefreshCommand           = new RelayCommand(_ => _activeTab?.Reload());
         FocusOmniboxCommand      = new RelayCommand(_ => FocusOmnibox());
-        OpenDevToolsCommand      = new RelayCommand(_ => _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow());
+        OpenDevToolsCommand      = new RelayCommand(_ => _activeTab?.ShowDevTools());
         OpenHistoryCommand       = new RelayCommand(_ => OpenHistory());
         OpenIncognitoCommand     = new RelayCommand(_ => OpenIncognito());
         ReopenClosedTabCommand   = new RelayCommand(_ => ReopenLastTab());
@@ -114,29 +115,19 @@ public partial class MainWindow : Window
         PreviewKeyDown += Window_PreviewKeyDown;
     }
 
-    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        await InitializeBrowserEnvironmentAsync();
+        InitializeBrowserEnvironment();
         _memorySaverTimer.Start();
         ApplyMemorySaverPolicy();
         _ = CheckForUpdatesAutomaticallyAsync();
     }
 
-    private async Task InitializeBrowserEnvironmentAsync()
+    private void InitializeBrowserEnvironment()
     {
         try
         {
-            string userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CrimsonBrowser",
-                "UserData"
-            );
-
-            var options = new CoreWebView2EnvironmentOptions(
-                "--disable-features=Translate --enable-features=OverlayScrollbar"
-            );
-
-            _webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+            _webViewEnvironment = Cef.GetGlobalRequestContext();
 
             // A URL passed on the command line (or forwarded from a second launch) wins over
             // the previous session. Secondary windows never restore or save the session.
@@ -174,8 +165,8 @@ public partial class MainWindow : Window
         {
             var loc = LocalizationService.Instance;
             MessageBox.Show(
-                loc.Format("WebView2MissingMessage", ex.Message),
-                loc.Get("WebView2MissingTitle"),
+                loc.Format("EngineErrorMessage", ex.Message),
+                loc.Get("EngineErrorTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error
             );
@@ -224,8 +215,8 @@ public partial class MainWindow : Window
             if (!Tabs.Contains(failedTab)) return;
             CrimsonDialog.Info(
                 this,
-                LocalizationService.Instance.Get("WebView2MissingTitle"),
-                LocalizationService.Instance.Format("WebView2MissingMessage", message));
+                LocalizationService.Instance.Get("EngineErrorTitle"),
+                LocalizationService.Instance.Format("EngineErrorMessage", message));
         });
 
         tab.PropertyChanged += Tab_PropertyChanged;
@@ -243,7 +234,7 @@ public partial class MainWindow : Window
     /// <summary>Focus the address bar so a new tab can be typed into immediately.</summary>
     private void FocusOmnibox()
     {
-        // WebView2 often claims focus shortly after a document finishes navigating.
+        // The web engine often claims focus shortly after a document finishes navigating.
         // Try immediately, at idle, and once more shortly afterwards so the omnibox wins.
         Dispatcher.BeginInvoke(new Action(() => ApplyOmniboxFocus(selectAll: true)),
             DispatcherPriority.Input);
@@ -350,6 +341,27 @@ public partial class MainWindow : Window
         SaveSession();
     }
 
+    public void DisposeBrowsers()
+    {
+        _memorySaverTimer.Stop();
+        foreach (var tab in Tabs.ToArray())
+        {
+            tab.PropertyChanged -= Tab_PropertyChanged;
+            tab.Dispose();
+        }
+        WebContainer.Children.Clear();
+        Tabs.Clear();
+        _webViewEnvironment?.Dispose();
+        _webViewEnvironment = null;
+        DownloadsService.Instance.ActiveDownloadsChanged -= UpdateDownloadsBadge;
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        DisposeBrowsers();
+        base.OnClosed(e);
+    }
+
     private void SaveSession()
     {
         // Only the primary window owns the shared session file.
@@ -383,7 +395,7 @@ public partial class MainWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // SHORTCUTS (forwarded from the page because WebView2 swallows key input)
+    // SHORTCUTS (forwarded from the page because the web engine consumes key input)
     // ─────────────────────────────────────────────────────────────────────────
 
     private void HandleShortcut(BrowserTab tab, string action)
@@ -474,6 +486,7 @@ public partial class MainWindow : Window
         else
         {
             _isFullscreen = false;
+            _activeTab?.ExitDocumentFullscreen();
             FullscreenHelper.Exit(this);
 
             TopBarRow.Height = new GridLength(44);
@@ -496,6 +509,17 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // WPF routes preview keys through the window before CEF. Handle each
+        // application gesture here so the native handler cannot execute it twice.
+        foreach (InputBinding binding in InputBindings)
+        {
+            if (binding.Gesture?.Matches(this, e) == true && binding.Command?.CanExecute(binding.CommandParameter) == true)
+            {
+                binding.Command.Execute(binding.CommandParameter);
+                e.Handled = true;
+                return;
+            }
+        }
         if (e.Key != Key.Escape) return;
 
         if (FindBar.Visibility == Visibility.Visible)
@@ -982,14 +1006,6 @@ public partial class MainWindow : Window
         UpdateDownloadsBadge();
     }
 
-    private void ReviewDownloadWarnings_Click(object sender, RoutedEventArgs e)
-    {
-        // Close the WPF popup before showing Chromium's security decisions, so it cannot
-        // cover the native download controls. SmartScreen retains authority over the file.
-        DownloadsPopup.IsOpen = false;
-        _activeTab?.WebView.CoreWebView2?.OpenDefaultDownloadDialog();
-    }
-
     private void OpenDownloadedFile_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: DownloadItem item } && item.IsCompleted)
@@ -1061,11 +1077,7 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            bool playingAudio = false;
-            try { playingAudio = tab.WebView.CoreWebView2?.IsDocumentPlayingAudio == true; }
-            catch { }
-
-            if (playingAudio)
+            if (tab.IsDocumentPlayingAudio)
             {
                 // Never discard a tab that is still making sound; restart its idle timer.
                 tab.NoteActivity();
@@ -1145,7 +1157,7 @@ public partial class MainWindow : Window
     private void ToggleHttps_Click(object sender, RoutedEventArgs e)   => ShieldService.Instance.EnforceHttps        = ToggleHttps.IsChecked ?? true;
     private void TogglePopups_Click(object sender, RoutedEventArgs e)  => ShieldService.Instance.BlockPopups         = TogglePopups.IsChecked ?? true;
     private void ResetBlockedStats_Click(object sender, RoutedEventArgs e) => ShieldService.Instance.ResetCount();
-    private void OpenDevTools_Click(object sender, RoutedEventArgs e)  => _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow();
+    private void OpenDevTools_Click(object sender, RoutedEventArgs e)  => _activeTab?.ShowDevTools();
 
     // ─────────────────────────────────────────────────────────────────────────
     // MENU (3-DOTS)
@@ -1235,7 +1247,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void MenuDevTools_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow(); }
+    private void MenuDevTools_Click(object sender, RoutedEventArgs e)  { MenuPopup.IsOpen = false; _activeTab?.ShowDevTools(); }
 
     private async void MenuClearData_Click(object sender, RoutedEventArgs e)
     {
@@ -1252,9 +1264,10 @@ public partial class MainWindow : Window
 
         if (!confirmed) return;
 
-        if (_activeTab?.WebView.CoreWebView2 != null)
+        if (_activeTab != null)
         {
-            await _activeTab.WebView.CoreWebView2.Profile.ClearBrowsingDataAsync();
+            await _activeTab.ClearBrowsingDataAsync();
+            CefProfileData.RequestReset();
             HistoryService.Instance.Clear();
 
             CrimsonDialog.Info(

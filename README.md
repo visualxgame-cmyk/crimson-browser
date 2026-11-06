@@ -1,104 +1,64 @@
-# 🔴 CRIMSON BROWSER
+# Crimson Browser
 
-**Crimson Browser** este un browser web modern, ultra-rapid și cu consum redus de resurse, bazat pe motorul **Chromium (Blink & V8)** prin Microsoft WebView2 Evergreen, conceput cu o tematică stealth **Red & Black (Crimson)**. Creat de **VisualX Studio**.
+Crimson Browser, made by VisualX Studio, păstrează interfața WPF Crimson și folosește Chromium prin CEF / CefSharp. Motorul este inclus în aplicație; WebView2 nu mai este o dependență.
 
----
+## Build și verificare
 
-## ⚡ Caracteristici Principale (v1.0)
-
-- **Motor Chromium de ultimă generație**: Suport complet pentru standardele web moderne (HTML5, CSS Grid, ES2024, WebAssembly, decodare video 4K/60fps, WebGL).
-- **Consum minim de resurse (RAM & CPU)**: 
-  - Folosește runtime-ul nativ Chromium instalat în Windows, eliminând duplicarea proceselor greoaie.
-  - Executabilul are sub **1 MB**, pornind instantaneu.
-  - Tab-urile închise își eliberează complet memoria RAM asociată.
-- **Interfață Modernă Crimson (Roșu & Negru)**:
-  - Design stealth cyberpunk cu finisaje negru-antracit (`#0D0E12`) și accente roșu-crimson (`#E61937`).
-  - Bară de titlu personalizată fără margini generice Windows.
-  - Logo unic vectorial Crimson Shield.
-- **Sistem Multi-Tab Avansat**:
-  - Deschidere filă nouă (`+` sau `Ctrl+T`).
-  - Închidere filă (`✕` sau `Ctrl+W`).
-  - Indicator dinamic de încărcare pentru fiecare filă.
-  - Deschiderea link-urilor externe/popups direct în taburi noi în cadrul browserului.
-- **Bară de Navigare & Omnibox Inteligent**:
-  - Butoane: Înapoi (`Alt+Stânga`), Înainte (`Alt+Dreapta`), Reîmprospătare/Oprire (`Ctrl+R` / `F5`), Acasă.
-  - Căutare inteligentă: recunoaște dacă ai introdus un domeniu (ex: `youtube.com`) sau o căutare (redirecționează pe Google).
-  - Indicator de securitate SSL/HTTPS (lacăt verde/roșu).
-- **Pagină de Pornire Personalizată (Crimson Start)**:
-  - Pagină locală integrată cu căutare rapidă, comenzi rapide (YouTube, Google, GitHub, Reddit) și status de sistem.
-- **Pregătit pentru Extensii & Shields**:
-  - Buton dedicat **Crimson Shields** cu meniu flyout pentru monitorizarea intimității și a consumului.
-  - Blocare ad/tracker și eliminarea reclamelor YouTube înainte de programare, fără flash vizual.
-  - Modul **Low-RAM** suspendă tab-urile din fundal și eliberează memoria celor inactive după 10 minute, păstrând URL-ul pentru restaurare.
-  - Instrumente de dezvoltator integrate (**DevTools** prin `F12`).
-  - Curățare instantanee de cache și date de navigare din meniu.
-
----
-
-## ⌨️ Comenzi Rapide (Shortcuts)
-
-| Comandă | Acțiune |
-|---|---|
-| `Ctrl + T` | Deschide o filă nouă |
-| `Ctrl + W` | Închide fila curentă |
-| `Ctrl + R` / `F5` | Reîmprospătează pagina |
-| `Ctrl + L` | Selectează bara de adrese (Omnibox) |
-| `F12` | Deschide Chromium Developer Tools |
-
----
-
-## 🚀 Cum se pornește
-
-Poți lansa browserul în 2 moduri simple:
-1. Dublu-click pe fișierul **`run.bat`** din folderul `d:\Browser`.
-2. Sau direct executabilul:
-   `D:\Browser\bin\Debug\net10.0-windows\CrimsonBrowser.exe`
-
----
-
-## 🛠️ Tehnologii Utilizate
-
-- **C# / .NET 10**
-- **WPF (Windows Presentation Foundation)** cu `WindowChrome`
-- **Microsoft.Web.WebView2** (Chromium Evergreen)
-- **HTML5, CSS3 & JavaScript** (Pagină locală Crimson Start)
-
----
-
-## 📦 Instalare (Windows)
-
-Construiește instalatorul cu:
+Necesită Windows x64, .NET 10 SDK și Microsoft Visual C++ 2019 sau mai nou (x64). Pentru installer este necesar Inno Setup 6/7.
 
 ```powershell
+dotnet build CrimsonBrowser.csproj -c Release
+dotnet run --project tests/CrimsonBrowser.SmokeTests -c Release
+dotnet run --project tests/CrimsonBrowser.CefTests -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
 ```
 
-Rezultatul apare în `dist\CrimsonBrowser-Setup-<versiune>.exe` (împreună cu fișierul
-`.sha256` folosit de actualizările automate). Instalarea este per-utilizator, nu necesită
-drepturi de administrator și poate instala automat Microsoft Edge WebView2 dacă lipsește.
+Testele CEF folosesc un profil temporar și deschid o fereastră pentru verificarea motorului. Acoperă pagina locală, izolarea comenzii Setări, navigarea, căutarea nativă, zoom, popup-uri, scurtături și izolarea cookie-urilor. Nu autentifică utilizatori și nu modifică istoricul real.
 
-> Instalatorul este nesemnat, deci Windows SmartScreen poate afișa un avertisment la prima rulare.
+Installerul și checksum-ul SHA-256 apar în `dist`. Aplicația completă este în `dist\publish\CrimsonBrowser.exe`. Fișierele motorului și directoarele lui trebuie distribuite împreună cu executabilul. Installerul include runtime-ul .NET și CEF; dacă lipsește Visual C++ x64, instalează redistributabilul Microsoft semnat. Această dependență poate cere drepturi de administrator. Aplicația se instalează per utilizator.
 
----
+## Funcții
 
-## 🔄 Auto-update prin GitHub Releases
+- Taburi, reordonare prin tragere, sesiune, linkuri externe în tab nou.
+- Favorite, istoric, căutare în pagină, zoom, fullscreen și DevTools.
+- Setări în română/engleză, motor de căutare și fundal personalizat.
+- Crimson Shields: filtrarea domeniilor cunoscute de reclame/tracking, script de filtrare și upgrade HTTPS.
+- Taburile ascunse sunt limitate de CEF. Modul Low RAM descarcă documentele inactive după 10 minute; taburile cu formulare modificate, media detectată, permisiuni media acordate sau descărcări active sunt protejate.
+- Incognito folosește un context CEF fără cache pe disc, separat pentru fiecare fereastră; istoricul și permisiunile sale nu sunt persistate.
+- Descărcări cu alegerea destinației și progres în interfața Crimson.
+- Actualizări prin GitHub Releases cu verificarea checksum-ului și repornire după instalare.
 
-Crimson Browser verifică GitHub Releases la pornire (după câteva secunde) și, dacă există o
-versiune mai nouă, cere confirmarea. După acceptare descarcă instalatorul, verifică SHA-256,
-îl rulează silențios și repornește browserul. Verificarea automată poate fi dezactivată din
-**Setări › Despre**, iar verificarea manuală rămâne disponibilă în același loc.
+CEF păstrează arhitectura Chromium cu procese auxiliare. Folosim mecanismul oficial SelfHost: rendererul, GPU-ul și utilitarele rulează tot ca `CrimsonBrowser.exe`, fără WebView2 Manager sau un executabil CefSharp separat. Consumul depinde de site-uri, media și numărul de taburi și trebuie măsurat pe aceleași pagini.
 
-Pentru a publica o versiune nouă:
+## Profil și migrare
 
-1. Crește `<Version>` din `CrimsonBrowser.csproj` (de exemplu `1.0.1`).
-2. Comite modificările pe ramura `main`.
-3. Apasă **Push origin** în GitHub Desktop.
+Favoritele, istoricul, setările și sesiunea folosesc în continuare `%LOCALAPPDATA%\CrimsonBrowser`. Noul profil web se află în `CefData`. Profilul WebView2 anterior rămâne intact; cookie-urile și autentificările nu sunt importate. Va fi necesară o nouă conectare pe site-uri.
 
-Workflow-ul `.github/workflows/release.yml` construiește automat instalatorul, generează
-checksum-ul SHA-256 și publică ambele fișiere în GitHub Releases. Browserul va detecta
-release-ul la următoarea pornire. O versiune deja publicată nu este suprascrisă;
-pentru următorul update crește din nou versiunea (de exemplu `1.0.2`).
-Publicarea pornește și pentru tag-uri, dacă tag-ul corespunde versiunii proiectului.
+„Șterge datele de navigare” elimină imediat cache-ul HTTP, cookie-urile și istoricul. La următoarea pornire resetează întregul profil CEF și permisiunile sale; bazele de date deschise nu sunt șterse în timpul funcționării. Favoritele și setările Crimson se păstrează.
 
-Repository-ul folosit este configurat în `Services/UpdateService.cs`
-(`visualxgame-cmyk/crimson-browser`).
+Buildurile standard CEF nu includ toate codecurile proprietare sau DRM-ul disponibil în Chrome/Brave. Redarea H.264/AAC și serviciile DRM nu sunt garantate. Autentificarea Google, apelurile, descărcările și video fullscreen trebuie verificate și pe serviciile folosite efectiv înainte de o lansare publică. Nu sunt ocolite restricțiile impuse de site-uri.
+
+## Comenzi
+
+| Comandă | Acțiune |
+|---|---|
+| Ctrl+T / Ctrl+W | Tab nou / închidere tab |
+| Ctrl+Shift+T | Redeschide ultimul tab închis |
+| Ctrl+L | Bara de adrese |
+| Ctrl+R / F5 | Reîncarcă |
+| Ctrl+F | Caută în pagină |
+| Ctrl+Tab / Ctrl+Shift+Tab | Schimbă tabul |
+| Ctrl+N / Ctrl+Shift+N | Fereastră normală / incognito |
+| Ctrl+D / Ctrl+H | Favorit / istoric |
+| F11 / Escape | Fullscreen / ieșire |
+| F12 | DevTools |
+
+## GitHub Releases
+
+1. Crește `<Version>` din `CrimsonBrowser.csproj`.
+2. Comite și împinge versiunea verificată în `main`.
+3. Workflow-ul `.github/workflows/release.yml` construiește installerul și publică executabilul împreună cu `.sha256`.
+
+O versiune publicată nu se suprascrie. Actualizările CEF se distribuie împreună cu o versiune nouă a browserului; motorul nu se actualizează prin Edge. Repository: [visualxgame-cmyk/crimson-browser](https://github.com/visualxgame-cmyk/crimson-browser).
+
+Installerul este momentan nesemnat.

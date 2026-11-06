@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https://profile.crimson; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crimson Browser</title>
     <style>
@@ -443,8 +444,8 @@
         }
 
         function openSettings() {
-            if (window.chrome && window.chrome.webview) {
-                window.chrome.webview.postMessage('open-settings');
+            if (window.CefSharp) {
+                CefSharp.PostMessage('open-settings');
             }
         }
 
@@ -486,17 +487,7 @@
             }
         }
 
-        // Listen for messages from C# host
-        if (window.chrome && window.chrome.webview) {
-            window.chrome.webview.addEventListener('message', event => {
-                if (event.data && event.data.type === 'setLanguage') {
-                    applyLanguage(event.data.lang);
-                } else if (event.data && event.data.type === 'refreshWallpaper') {
-                    checkWallpaper();
-                }
-            });
-        }
-
+        // The CEF host invokes applyLanguage and checkWallpaper directly.
         // Initial check
         checkWallpaper();
     </script>

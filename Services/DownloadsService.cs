@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
-using Microsoft.Web.WebView2.Core;
+
 
 namespace CrimsonBrowser.Services;
 
@@ -21,9 +21,9 @@ public class DownloadItem : INotifyPropertyChanged
     private long     _totalBytes;
     private DownloadStatus _status = DownloadStatus.InProgress;
 
-    public string Filename   { get; init; } = string.Empty;
-    public string SavePath   { get; init; } = string.Empty;
-    public string Url        { get; init; } = string.Empty;
+    public string Filename   { get; set; } = string.Empty;
+    public string SavePath   { get; set; } = string.Empty;
+    public string Url        { get; set; } = string.Empty;
     public DateTime StartedAt { get; } = DateTime.Now;
 
     public long TotalBytes
@@ -66,6 +66,12 @@ public class DownloadItem : INotifyPropertyChanged
     };
 
     /// <summary>Re-evaluates <see cref="StatusText"/> after a language change.</summary>
+    public void RefreshDetails()
+    {
+        foreach (string name in new[] { nameof(Filename), nameof(SavePath), nameof(IsCompleted) })
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
     public void RefreshStatusText()
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StatusText)));
 
@@ -104,43 +110,29 @@ public class DownloadsService
 
     public int ActiveCount => Downloads.Count(d => d.Status == DownloadStatus.InProgress);
 
-    /// <summary>Wires up a CoreWebView2DownloadOperation to track progress.</summary>
-    public void Track(CoreWebView2DownloadOperation op)
+    private readonly Dictionary<string, DownloadItem> _tracked = new();
+    public void Update(string key, string path, string url, long total, long received, DownloadStatus status)
     {
-        string filename = Path.GetFileName(op.ResultFilePath);
-        var item = new DownloadItem
+        if (!_tracked.TryGetValue(key, out var item))
         {
-            Filename  = filename,
-            SavePath  = op.ResultFilePath,
-            Url       = op.Uri,
-            TotalBytes = (long)(op.TotalBytesToReceive ?? 0)
-        };
-
-        Downloads.Insert(0, item);
+            item = new DownloadItem();
+            _tracked.Add(key, item);
+            Downloads.Insert(0, item);
+        }
+        item.SavePath = path;
+        item.Filename = Path.GetFileName(path);
+        item.Url = url;
+        item.TotalBytes = Math.Max(total, 0);
+        item.ReceivedBytes = received;
+        item.Status = status;
+        item.RefreshDetails();
         ActiveDownloadsChanged?.Invoke();
-
-        op.BytesReceivedChanged += (s, e) =>
-        {
-            item.ReceivedBytes = op.BytesReceived;
-            if (op.TotalBytesToReceive.HasValue)
-                item.TotalBytes = (long)op.TotalBytesToReceive.Value;
-        };
-
-        op.StateChanged += (s, e) =>
-        {
-            item.Status = op.State switch
-            {
-                CoreWebView2DownloadState.Completed  => DownloadStatus.Completed,
-                CoreWebView2DownloadState.Interrupted => DownloadStatus.Failed,
-                _                                    => DownloadStatus.InProgress
-            };
-            ActiveDownloadsChanged?.Invoke();
-        };
     }
 
     public void ClearCompleted()
     {
         var done = Downloads.Where(d => d.Status != DownloadStatus.InProgress).ToList();
         foreach (var d in done) Downloads.Remove(d);
+        foreach (var key in _tracked.Where(pair => done.Contains(pair.Value)).Select(pair => pair.Key).ToArray()) _tracked.Remove(key);
     }
 }

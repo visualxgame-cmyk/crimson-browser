@@ -41,6 +41,14 @@ public partial class App : Application
 
         base.OnStartup(e);
 
+        try { CefRuntime.Initialize(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Crimson Browser — CEF", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
         _mainWindow = new MainWindow(restoreSession: true);
         MainWindow = _mainWindow;
         _mainWindow.Show();
@@ -100,6 +108,12 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        foreach (var window in Windows.OfType<MainWindow>().ToArray()) window.DisposeBrowsers();
+        if (CefSharp.Cef.IsInitialized == true)
+        {
+            CefSharp.Cef.WaitForBrowsersToClose();
+            CefSharp.Cef.Shutdown();
+        }
         _singleInstance?.Dispose();
         base.OnExit(e);
     }

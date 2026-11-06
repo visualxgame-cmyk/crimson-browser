@@ -66,31 +66,31 @@ if (-not $iscc) {
     throw "Inno Setup was not found. Install it (free) from https://jrsoftware.org/isdl.php and run this script again."
 }
 
-# The WebView2 Evergreen bootstrapper is bundled so the installer can set up the runtime
-# when it is missing. It is downloaded from Microsoft on demand and is not committed.
+# CEF is bundled with the app. Its native bridge requires the Microsoft C++ runtime.
 $redistDir = Join-Path $root "installer\redist"
-$webView2Bootstrapper = Join-Path $redistDir "MicrosoftEdgeWebView2Setup.exe"
-if (-not (Test-Path $webView2Bootstrapper)) {
-    Write-Host "Downloading the Microsoft Edge WebView2 bootstrapper..."
+$vcBootstrapper = Join-Path $redistDir "vc_redist.x64.exe"
+if (-not (Test-Path $vcBootstrapper)) {
     New-Item -ItemType Directory -Path $redistDir -Force | Out-Null
-    Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
-        -OutFile $webView2Bootstrapper -UseBasicParsing
-    if (-not (Test-Path $webView2Bootstrapper)) {
-        throw "Could not download the WebView2 bootstrapper from Microsoft."
-    }
+    Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcBootstrapper
+}
+$signature = Get-AuthenticodeSignature -LiteralPath $vcBootstrapper
+if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+    throw "The Microsoft Visual C++ bootstrapper signature is invalid."
 }
 
-# The running browser locks its own binaries.
+# Refuse to replace an output folder currently used by a running browser.
 $running = Get-Process CrimsonBrowser -ErrorAction SilentlyContinue
-if ($running) {
-    Write-Host "Stopping the running Crimson Browser..."
-    $running | Stop-Process -Force
-    Start-Sleep -Milliseconds 800
+if ($running | Where-Object { $_.Path -like "$publishDir\*" }) {
+    throw "Close the browser running from $publishDir before rebuilding the installer."
 }
 
 if (-not $SkipPublish) {
     Write-Host "Publishing Crimson Browser (self-contained, win-x64)..."
-    if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
+    if (Test-Path $publishDir) {
+        $resolvedPublish = (Resolve-Path -LiteralPath $publishDir).Path
+        if ($resolvedPublish -ne (Join-Path $root "dist\publish")) { throw "Unexpected publish directory." }
+        Remove-Item -LiteralPath $resolvedPublish -Recurse -Force
+    }
     & $dotnet publish $csproj `
         -c Release `
         -r win-x64 `
@@ -99,6 +99,7 @@ if (-not $SkipPublish) {
         -p:PublishReadyToRun=true `
         -p:DebugType=None `
         -p:DebugSymbols=false `
+        -p:OutputPath="$root\artifacts\installer-build\" `
         -o $publishDir
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 }

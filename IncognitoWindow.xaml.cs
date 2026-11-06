@@ -6,14 +6,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using CrimsonBrowser.Models;
 using CrimsonBrowser.Services;
-using Microsoft.Web.WebView2.Core;
+using CefSharp;
 
 namespace CrimsonBrowser;
 
-/// <summary>A fully isolated Incognito (InPrivate) browser window with a separate WebView2 profile.</summary>
+/// <summary>A fully isolated Incognito (InPrivate) browser window with an in-memory CEF request context.</summary>
 public partial class IncognitoWindow : Window
 {
-    private CoreWebView2Environment? _webViewEnvironment;
+    private IRequestContext? _webViewEnvironment;
     public ObservableCollection<BrowserTab> Tabs { get; } = new();
     private BrowserTab? _activeTab;
     private bool _isOmniboxFocused;
@@ -44,7 +44,7 @@ public partial class IncognitoWindow : Window
         CloseCurrentTabCommand = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
         RefreshCommand         = new RelayCommand(_ => _activeTab?.Reload());
         FocusOmniboxCommand    = new RelayCommand(_ => { OmniboxTextBox.Focus(); OmniboxTextBox.SelectAll(); });
-        OpenDevToolsCommand    = new RelayCommand(_ => _activeTab?.WebView.CoreWebView2?.OpenDevToolsWindow());
+        OpenDevToolsCommand    = new RelayCommand(_ => _activeTab?.ShowDevTools());
         ToggleFullscreenCommand = new RelayCommand(_ => ToggleFullscreen());
         NextTabCommand         = new RelayCommand(_ => SelectNextTab(1));
         PrevTabCommand         = new RelayCommand(_ => SelectNextTab(-1));
@@ -70,27 +70,17 @@ public partial class IncognitoWindow : Window
         });
     }
 
-    private async void IncognitoWindow_Loaded(object sender, RoutedEventArgs e)
+    private void IncognitoWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        await InitializeBrowserEnvironmentAsync();
+        InitializeBrowserEnvironment();
     }
 
-    private async Task InitializeBrowserEnvironmentAsync()
+    private void InitializeBrowserEnvironment()
     {
         try
         {
-            // Use a temporary folder in %TEMP% — deleted on window close
-            string tempFolder = Path.Combine(Path.GetTempPath(), "CrimsonIncognito_" + Guid.NewGuid().ToString("N").Substring(0, 8));
-            Directory.CreateDirectory(tempFolder);
-
-            // Incognito isolation comes from the throw-away user data folder; there is no
-            // "--inprivate" switch in the WebView2 environment options API.
-            var options = new CoreWebView2EnvironmentOptions(
-                "--disable-features=Translate --enable-features=OverlayScrollbar");
-            _webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, tempFolder, options);
-
-            // Store temp folder path for cleanup
-            _tempFolder = tempFolder;
+            _webViewEnvironment = new RequestContext(new RequestContextSettings { CachePath = "" });
+            CefRuntime.RegisterResources(_webViewEnvironment);
 
             AddNewTab();
         }
@@ -106,7 +96,6 @@ public partial class IncognitoWindow : Window
         }
     }
 
-    private string? _tempFolder;
 
     public void AddNewTab(string? initialUrl = null)
     {
@@ -273,7 +262,7 @@ public partial class IncognitoWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // SHORTCUTS (forwarded from the page because WebView2 swallows key input)
+    // SHORTCUTS (forwarded from the page because the web engine consumes key input)
     // ─────────────────────────────────────────────────────────────────────────
 
     private void HandleShortcut(BrowserTab tab, string action)
@@ -356,6 +345,7 @@ public partial class IncognitoWindow : Window
         else
         {
             _isFullscreen = false;
+            _activeTab?.ExitDocumentFullscreen();
             FullscreenHelper.Exit(this);
 
             TopBarRow.Height = new GridLength(44);
@@ -376,6 +366,15 @@ public partial class IncognitoWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        foreach (InputBinding binding in InputBindings)
+        {
+            if (binding.Gesture?.Matches(this, e) == true && binding.Command?.CanExecute(binding.CommandParameter) == true)
+            {
+                binding.Command.Execute(binding.CommandParameter);
+                e.Handled = true;
+                return;
+            }
+        }
         if (e.Key != Key.Escape) return;
 
         if (FindBar.Visibility == Visibility.Visible)
@@ -486,14 +485,11 @@ public partial class IncognitoWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         LocalizationService.Instance.LanguageChanged -= IncognitoWindow_LanguageChanged;
+        foreach (var tab in Tabs.ToArray()) tab.Dispose();
+        WebContainer.Children.Clear();
+        Tabs.Clear();
+        _webViewEnvironment?.Dispose();
+        _webViewEnvironment = null;
         base.OnClosed(e);
-        // Clean up temp profile directory
-        try
-        {
-            foreach (var tab in Tabs.ToList()) tab.Dispose();
-            if (_tempFolder != null && Directory.Exists(_tempFolder))
-                Directory.Delete(_tempFolder, true);
-        }
-        catch { }
     }
 }

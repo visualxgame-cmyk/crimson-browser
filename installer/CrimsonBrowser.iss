@@ -26,7 +26,7 @@ OutputBaseFilename=CrimsonBrowser-Setup-{#MyAppVersion}
 SetupIconFile=..\crimson.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
-Compression=lzma2/ultra64
+Compression=lzma2/fast
 SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
@@ -45,7 +45,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "redist\MicrosoftEdgeWebView2Setup.exe"; DestDir: "{tmp}"; Flags: dontcopy deleteafterinstall
+Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: dontcopy deleteafterinstall
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
@@ -63,15 +63,14 @@ begin
     (Pos('/crimsonrestart', LowerCase(GetCmdTail)) > 0);
 end;
 
-const
-  WebView2Client = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
-
-function WebView2Installed: Boolean;
+function VisualCppInstalled: Boolean;
+var
+  Installed, Minor: Cardinal;
 begin
-  Result :=
-    RegKeyExists(HKCU, 'Software\Microsoft\EdgeUpdate\Clients\' + WebView2Client) or
-    RegKeyExists(HKLM, 'Software\Microsoft\EdgeUpdate\Clients\' + WebView2Client) or
-    RegKeyExists(HKLM, 'Software\WOW6432Node\Microsoft\EdgeUpdate\Clients\' + WebView2Client);
+  Result := RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Installed', Installed)
+    and (Installed = 1)
+    and RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Minor', Minor)
+    and (Minor >= 29);
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -79,27 +78,14 @@ var
   ResultCode: Integer;
 begin
   Result := '';
-
-  if WebView2Installed then
-    Exit;
-
-  ExtractTemporaryFile('MicrosoftEdgeWebView2Setup.exe');
-
-  if (not Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebView2Setup.exe'),
-               '/silent /install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or
-     (ResultCode <> 0) then
-  begin
-    Result :=
-      'Microsoft Edge WebView2 Runtime could not be installed automatically.' + #13#10#13#10 +
-      'Crimson Browser needs the WebView2 Runtime to display web pages. ' +
-      'Install it from the link below, then run this installer again:' + #13#10 +
-      'https://go.microsoft.com/fwlink/p/?LinkId=2124703';
-    Exit;
-  end;
-
-  if not WebView2Installed then
-    Result :=
-      'Microsoft Edge WebView2 Runtime is still not available.' + #13#10#13#10 +
-      'Install it from the link below, then run this installer again:' + #13#10 +
-      'https://go.microsoft.com/fwlink/p/?LinkId=2124703';
+  if VisualCppInstalled then Exit;
+  ExtractTemporaryFile('vc_redist.x64.exe');
+  if not Exec(ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Result := 'Could not start the Microsoft Visual C++ x64 Runtime installer.'
+  else if (ResultCode <> 0) and (ResultCode <> 1638) and (ResultCode <> 3010) then
+    Result := 'Microsoft Visual C++ x64 Runtime installation failed (' + IntToStr(ResultCode) + ').'
+  else if not VisualCppInstalled then
+    Result := 'Microsoft Visual C++ 2019 or newer (x64) is required to run Crimson Browser.';
+  if ResultCode = 3010 then NeedsRestart := True;
 end;
