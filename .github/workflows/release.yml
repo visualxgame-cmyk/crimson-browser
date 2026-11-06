@@ -2,8 +2,15 @@ name: Publish GitHub release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: crimson-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -14,23 +21,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine release version
+        id: version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [xml]$project = Get-Content CrimsonBrowser.csproj
+          $version = [string]($project.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Project version must use major.minor.patch.' }
+          $tag = "v$version"
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne $tag) {
+            throw 'Release tag must match the project version.'
+          }
+          # A normal push only publishes a version once. Never replace an existing release.
+          $releasesJson = gh api --paginate --slurp "repos/${{ github.repository }}/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not query existing releases.' }
+          $existing = @($releasesJson | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { $_.tag_name -eq $tag })
+          "publish=$($existing.Count -eq 0)".ToLowerInvariant() >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - uses: actions/setup-dotnet@v4
+        if: steps.version.outputs.publish == 'true'
         with:
           dotnet-version: 10.0.x
 
       - name: Install Inno Setup
+        if: steps.version.outputs.publish == 'true'
         run: choco install innosetup --yes --no-progress
 
       - name: Build installer
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v', 'V')
+          dotnet build CrimsonBrowser.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+          dotnet run --project tests/CrimsonBrowser.SmokeTests/CrimsonBrowser.SmokeTests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Release smoke tests failed.' }
+          $version = "${{ steps.version.outputs.version }}"
           .\build-installer.ps1 -Version $version
 
       - name: Create release
+        if: steps.version.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: Crimson Browser ${{ github.ref_name }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Crimson Browser ${{ steps.version.outputs.tag }}
+          fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
             dist/CrimsonBrowser-Setup-*.exe

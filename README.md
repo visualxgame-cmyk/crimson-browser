@@ -91,12 +91,14 @@ versiune mai nouă, cere confirmarea. După acceptare descarcă instalatorul, ve
 Pentru a publica o versiune nouă:
 
 1. Crește `<Version>` din `CrimsonBrowser.csproj` (de exemplu `1.0.1`).
-2. Comite modificarea și creează un tag: `git tag v1.0.1`.
-3. Trimite tag-ul: `git push origin v1.0.1`.
+2. Comite modificările pe ramura `main`.
+3. Apasă **Push origin** în GitHub Desktop.
 
 Workflow-ul `.github/workflows/release.yml` construiește automat instalatorul, generează
 checksum-ul SHA-256 și publică ambele fișiere în GitHub Releases. Browserul va detecta
-release-ul la următoarea pornire.
+release-ul la următoarea pornire. O versiune deja publicată nu este suprascrisă;
+pentru următorul update crește din nou versiunea (de exemplu `1.0.2`).
+Publicarea pornește și pentru tag-uri, dacă tag-ul corespunde versiunii proiectului.
 
 Repository-ul folosit este configurat în `Services/UpdateService.cs`
 (`visualxgame-cmyk/crimson-browser`).
