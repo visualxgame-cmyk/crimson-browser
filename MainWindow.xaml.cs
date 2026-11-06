@@ -281,6 +281,7 @@ public partial class MainWindow : Window
 
         _activeTab = tab;
         _activeTab.IsActive = true;
+        _activeTab.SetWindowMinimized(WindowState == WindowState.Minimized);
         UpdateUiForActiveTab();
     }
 
@@ -1084,6 +1085,7 @@ public partial class MainWindow : Window
         }
 
         _activeTab?.ApplyMemoryPolicy(true);
+        _activeTab?.SetWindowMinimized(WindowState == WindowState.Minimized);
     }
 
     private void UpdateBlockedStats()
@@ -1476,6 +1478,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
+        _activeTab?.SetWindowMinimized(WindowState == WindowState.Minimized);
         MaximizeIcon.Data = WindowState == WindowState.Maximized
             ? Geometry.Parse("M2 1 L9 1 L9 8 M1 3 L8 3 L8 10 L1 10 Z")
             : Geometry.Parse("M1 1 L9 1 L9 9 L1 9 Z");

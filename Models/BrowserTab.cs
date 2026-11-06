@@ -139,10 +139,18 @@ public class BrowserTab : INotifyPropertyChanged
         catch { }
     }
 
-    /// <summary>
-    /// Chrome-style tab discard: unload the page but remember its URL and title so the session
-    /// file still restores the right page. The tab reloads when the user activates it again.
-    /// </summary>
+    /// <summary>Reduces the active page's memory target while the host window is minimized.</summary>
+    public void SetWindowMinimized(bool minimized)
+    {
+        var core = WebView.CoreWebView2;
+        if (core is null || core.IsSuspended || !IsActive) return;
+        // Lower the memory target while invisible without stopping audio or scripts.
+        core.MemoryUsageTargetLevel = minimized && ShieldService.Instance.LowRamMode
+            ? CoreWebView2MemoryUsageTargetLevel.Low
+            : CoreWebView2MemoryUsageTargetLevel.Normal;
+    }
+
+    /// <summary>Unloads an idle page while retaining its URL and title for restoration.</summary>
     public void Discard()
     {
         if (IsActive || _isDiscarded || IsStartPage || !_hasCompletedNavigation) return;
