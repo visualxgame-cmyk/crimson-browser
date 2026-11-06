@@ -96,6 +96,7 @@
                                             CornerRadius="8 8 0 0" Cursor="Hand"
                                             Background="#14151C" BorderBrush="#222430" BorderThickness="1 1 1 0"
                                             MouseLeftButtonDown="Tab_MouseLeftButtonDown"
+                                            MouseMove="Tab_MouseMove"
                                             MouseUp="Tab_MouseUp">
                                         <Border.ContextMenu>
                                             <ContextMenu>

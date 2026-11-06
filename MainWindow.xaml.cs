@@ -29,6 +29,11 @@ public partial class MainWindow : Window
     // Stack for Ctrl+Shift+T — reopen last closed tab
     private readonly Stack<(string url, string title)> _closedTabStack = new();
 
+    // Tab drag-to-reorder state.
+    private Point _tabDragStart;
+    private BrowserTab? _tabDragSource;
+    private bool _isTabDragging;
+
     // ── Commands ──
     public ICommand NewTabCommand            { get; }
     public ICommand CloseCurrentTabCommand   { get; }
@@ -677,7 +682,74 @@ public partial class MainWindow : Window
 
     private void Tab_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement el && el.DataContext is BrowserTab tab) SetActiveTab(tab);
+        if (sender is FrameworkElement el && el.DataContext is BrowserTab tab)
+        {
+            SetActiveTab(tab);
+
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                _tabDragStart  = e.GetPosition(this);
+                _tabDragSource = tab;
+                _isTabDragging = false;
+            }
+        }
+    }
+
+    private void Tab_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _tabDragSource is null)
+            return;
+
+        if (!_isTabDragging)
+        {
+            Point position = e.GetPosition(this);
+            if (Math.Abs(position.X - _tabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(position.Y - _tabDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            {
+                return;
+            }
+
+            _isTabDragging = true;
+            (sender as UIElement)?.CaptureMouse();
+        }
+
+        // Live reorder: the dragged tab follows the cursor across the tab strip.
+        Border? targetBorder = FindTabBorder(
+            VisualTreeHelper.HitTest(TabsItemsControl, e.GetPosition(TabsItemsControl))?.VisualHit);
+
+        if (targetBorder?.DataContext is not BrowserTab target ||
+            ReferenceEquals(target, _tabDragSource))
+        {
+            return;
+        }
+
+        int from = Tabs.IndexOf(_tabDragSource);
+        int targetIndex = Tabs.IndexOf(target);
+        if (from < 0 || targetIndex < 0)
+            return;
+
+        bool insertAfter = e.GetPosition(targetBorder).X > targetBorder.ActualWidth / 2;
+        int insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+
+        // Removing the dragged tab first shifts every later index down by one.
+        if (from < insertIndex) insertIndex--;
+
+        insertIndex = Math.Clamp(insertIndex, 0, Tabs.Count - 1);
+        if (insertIndex != from)
+            Tabs.Move(from, insertIndex);
+    }
+
+    private static Border? FindTabBorder(DependencyObject? hit)
+    {
+        while (hit is not null)
+        {
+            if (hit is Border border && border.DataContext is BrowserTab)
+                return border;
+
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+
+        return null;
     }
 
     private void CloseTab_Click(object sender, RoutedEventArgs e)
@@ -687,6 +759,15 @@ public partial class MainWindow : Window
 
     private void Tab_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            if (sender is UIElement element && element.IsMouseCaptured)
+                element.ReleaseMouseCapture();
+
+            _tabDragSource = null;
+            _isTabDragging = false;
+        }
+
         if (e.ChangedButton == MouseButton.Middle &&
             sender is FrameworkElement el &&
             el.DataContext is BrowserTab tab)
