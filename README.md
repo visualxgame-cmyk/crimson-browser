@@ -29,6 +29,7 @@
 - **Pregătit pentru Extensii & Shields**:
   - Buton dedicat **Crimson Shields** cu meniu flyout pentru monitorizarea intimității și a consumului.
   - Blocare ad/tracker și eliminarea reclamelor YouTube înainte de programare, fără flash vizual.
+  - Modul **Low-RAM** suspendă tab-urile din fundal și eliberează memoria celor inactive după 10 minute, păstrând URL-ul pentru restaurare.
   - Instrumente de dezvoltator integrate (**DevTools** prin `F12`).
   - Curățare instantanee de cache și date de navigare din meniu.
 

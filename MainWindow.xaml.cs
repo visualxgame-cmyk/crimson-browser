@@ -34,6 +34,10 @@ public partial class MainWindow : Window
     private BrowserTab? _tabDragSource;
     private bool _isTabDragging;
 
+    // ── Memory saver ──
+    private readonly DispatcherTimer _memorySaverTimer;
+    private static readonly TimeSpan TabDiscardAfter = TimeSpan.FromMinutes(10);
+
     // ── Commands ──
     public ICommand NewTabCommand            { get; }
     public ICommand CloseCurrentTabCommand   { get; }
@@ -95,6 +99,9 @@ public partial class MainWindow : Window
         InitializeShieldsUi();
         ApplyLocalizationToAllUi();
 
+        _memorySaverTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(45) };
+        _memorySaverTimer.Tick += (_, _) => ApplyMemorySaverPolicy();
+
         Loaded       += MainWindow_Loaded;
         StateChanged += MainWindow_StateChanged;
         Closing      += MainWindow_Closing;
@@ -104,6 +111,8 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         await InitializeBrowserEnvironmentAsync();
+        _memorySaverTimer.Start();
+        ApplyMemorySaverPolicy();
         _ = CheckForUpdatesAutomaticallyAsync();
     }
 
@@ -324,7 +333,11 @@ public partial class MainWindow : Window
             WindowState = WindowState.Maximized;
     }
 
-    private void MainWindow_Closing(object? sender, CancelEventArgs e) => SaveSession();
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        _memorySaverTimer.Stop();
+        SaveSession();
+    }
 
     private void SaveSession()
     {
@@ -953,8 +966,52 @@ public partial class MainWindow : Window
                     UpdateBlockedStats();
                 else if (e.PropertyName == nameof(ShieldService.IsShieldsEnabled))
                     UpdateShieldsUi();
+                else if (e.PropertyName == nameof(ShieldService.LowRamMode))
+                    ApplyMemorySaverPolicy();
             });
         };
+    }
+
+    /// <summary>
+    /// Low-RAM policy: keep active tabs at normal priority, lower the memory target of every
+    /// background tab, and unload tabs that have been idle for a while. Audio tabs are exempt.
+    /// </summary>
+    private void ApplyMemorySaverPolicy()
+    {
+        bool enabled = ShieldService.Instance.LowRamMode;
+
+        foreach (var tab in Tabs.ToList())
+        {
+            if (tab == _activeTab)
+            {
+                tab.NoteActivity();
+                continue;
+            }
+
+            bool playingAudio = false;
+            try { playingAudio = tab.WebView.CoreWebView2?.IsDocumentPlayingAudio == true; }
+            catch { }
+
+            if (playingAudio)
+            {
+                // Never discard a tab that is still making sound; restart its idle timer.
+                tab.NoteActivity();
+                continue;
+            }
+
+            if (tab.IsDiscarded) continue;
+
+            if (enabled && !tab.IsLoading && !tab.IsStartPage &&
+                DateTime.UtcNow - tab.LastActivityUtc >= TabDiscardAfter)
+            {
+                tab.Discard();
+                continue;
+            }
+
+            tab.ApplyMemoryPolicy(false);
+        }
+
+        _activeTab?.ApplyMemoryPolicy(true);
     }
 
     private void UpdateBlockedStats()

@@ -19,6 +19,20 @@ public class BrowserTab : INotifyPropertyChanged
     private bool   _isActive;
     private string? _faviconUrl;
 
+    // ── Memory saver state ──
+    private bool    _isDiscarded;
+    private bool    _isDiscardNavigation;
+    private bool    _hasCompletedNavigation;
+    private string? _discardedUrl;
+    private string? _discardedTitle;
+    private DateTime _lastActivityUtc = DateTime.UtcNow;
+
+    /// <summary>Last time this tab was visible or playing audio. Used by the discard policy.</summary>
+    public DateTime LastActivityUtc => _lastActivityUtc;
+
+    /// <summary>True when the page has been unloaded to reclaim memory; the URL is kept.</summary>
+    public bool IsDiscarded => _isDiscarded;
+
     public string Id { get; } = Guid.NewGuid().ToString("N");
 
     /// <summary>Incognito tabs must never write to the on-disk history.</summary>
@@ -76,29 +90,107 @@ public class BrowserTab : INotifyPropertyChanged
         get => _isActive;
         set
         {
-            if (SetField(ref _isActive, value))
-            {
-                WebView.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            if (!SetField(ref _isActive, value)) return;
 
-                // Low-RAM Optimizer: suspend background tabs to cut memory usage
-                try
-                {
-                    if (ShieldService.Instance.LowRamMode && WebView.CoreWebView2 != null)
-                    {
-                        if (value)
-                        {
-                            WebView.CoreWebView2.Resume();
-                        }
-                        else if (!WebView.CoreWebView2.IsDocumentPlayingAudio)
-                        {
-                            // Never suspend a background tab that is playing music or video.
-                            _ = WebView.CoreWebView2.TrySuspendAsync();
-                        }
-                    }
-                }
-                catch { }
+            WebView.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+
+            if (value)
+            {
+                NoteActivity();
+                RestoreFromDiscard();
+            }
+
+            ApplyMemoryPolicy(value);
+        }
+    }
+
+    /// <summary>Marks this tab as recently used so the discard policy gives it a fresh grace period.</summary>
+    public void NoteActivity() => _lastActivityUtc = DateTime.UtcNow;
+
+    /// <summary>
+    /// Applies the Low-RAM policy: inactive tabs ask Chromium to lower their memory target and,
+    /// when possible, suspend their script timers. Active tabs are always restored to Normal.
+    /// </summary>
+    public void ApplyMemoryPolicy(bool active)
+    {
+        try
+        {
+            var core = WebView.CoreWebView2;
+            if (core is null) return;
+
+            bool lowRam = ShieldService.Instance.LowRamMode;
+
+            core.MemoryUsageTargetLevel = (!active && lowRam)
+                ? CoreWebView2MemoryUsageTargetLevel.Low
+                : CoreWebView2MemoryUsageTargetLevel.Normal;
+
+            if (active || !lowRam)
+            {
+                if (core.IsSuspended) core.Resume();
+            }
+            else if (!_isDiscarded && _hasCompletedNavigation && !IsLoading &&
+                     !core.IsDocumentPlayingAudio && !core.IsSuspended)
+            {
+                // Suspending pauses background timers/animations; it does not free the renderer,
+                // which is why unused tabs are eventually discarded below.
+                _ = core.TrySuspendAsync();
             }
         }
+        catch { }
+    }
+
+    /// <summary>
+    /// Chrome-style tab discard: unload the page but remember its URL and title so the session
+    /// file still restores the right page. The tab reloads when the user activates it again.
+    /// </summary>
+    public void Discard()
+    {
+        if (IsActive || _isDiscarded || IsStartPage || !_hasCompletedNavigation) return;
+
+        var core = WebView.CoreWebView2;
+        if (core is null) return;
+
+        try
+        {
+            if (core.IsDocumentPlayingAudio) return;
+
+            _discardedUrl   = Url;
+            _discardedTitle = Title;
+            _isDiscarded    = true;
+            _isDiscardNavigation = true;
+
+            if (core.IsSuspended) core.Resume();
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+
+            core.NavigateToString(
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\">" +
+                "<style>html,body{margin:0;height:100%;background:#0c0d10}</style>" +
+                "</head><body></body></html>");
+        }
+        catch
+        {
+            _isDiscarded = false;
+            _isDiscardNavigation = false;
+            _discardedUrl = null;
+            _discardedTitle = null;
+        }
+    }
+
+    private void RestoreFromDiscard()
+    {
+        if (!_isDiscarded) return;
+
+        string? target = _discardedUrl;
+
+        _isDiscarded = false;
+        _isDiscardNavigation = false;
+        _discardedUrl = null;
+        _discardedTitle = null;
+
+        if (string.IsNullOrWhiteSpace(target))
+            LoadStartPage();
+        else
+            Navigate(target);
     }
 
     public string? FaviconUrl
@@ -205,6 +297,10 @@ public class BrowserTab : INotifyPropertyChanged
                 {
                     LoadStartPage();
                 }
+
+                // New tabs may start in the background (session restore), so apply the
+                // current Low-RAM policy as soon as the WebView is ready.
+                ApplyMemoryPolicy(IsActive);
             }
         }
         catch (Exception ex)
@@ -234,6 +330,9 @@ public class BrowserTab : INotifyPropertyChanged
 
     private void CoreWebView2_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
+        // The discard placeholder is not a real navigation: keep the tab's URL/title intact.
+        if (_isDiscardNavigation) return;
+
         // Enforce HTTPS if the shield setting is on
         if (ShieldService.Instance.IsShieldsEnabled &&
             ShieldService.Instance.EnforceHttps &&
@@ -254,8 +353,25 @@ public class BrowserTab : INotifyPropertyChanged
 
     private void CoreWebView2_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        if (_isDiscardNavigation)
+        {
+            // Placeholder finished loading. The real URL/title were never touched.
+            _isDiscardNavigation = false;
+            IsLoading = false;
+            return;
+        }
+
+        if (_isDiscarded)
+        {
+            IsLoading = false;
+            return;
+        }
+
+        _hasCompletedNavigation = true;
         IsLoading = false;
         UpdateHistoryState();
+
+        if (IsActive) NoteActivity();
 
         if (IsStartPage)
         {
@@ -290,6 +406,9 @@ public class BrowserTab : INotifyPropertyChanged
 
     private void CoreWebView2_SourceChanged(object? sender, CoreWebView2SourceChangedEventArgs e)
     {
+        // Ignore the source update caused by the discard placeholder.
+        if (_isDiscarded || _isDiscardNavigation) return;
+
         if (WebView.Source != null)
         {
             Url = WebView.Source.ToString();
@@ -299,6 +418,13 @@ public class BrowserTab : INotifyPropertyChanged
 
     private void CoreWebView2_DocumentTitleChanged(object? sender, object e)
     {
+        if (_isDiscarded || _isDiscardNavigation)
+        {
+            // Keep the original tab title while the placeholder is loaded.
+            if (!string.IsNullOrWhiteSpace(_discardedTitle)) Title = _discardedTitle!;
+            return;
+        }
+
         if (IsStartPage)
         {
             Title = LocalizationService.Instance.Get("NewTab");
@@ -853,6 +979,15 @@ public class BrowserTab : INotifyPropertyChanged
 
     public void Navigate(string target)
     {
+        // An explicit navigation replaces the discarded placeholder.
+        if (_isDiscarded)
+        {
+            _isDiscarded = false;
+            _isDiscardNavigation = false;
+            _discardedUrl = null;
+            _discardedTitle = null;
+        }
+
         if (string.IsNullOrWhiteSpace(target) || target == "crimson://start")
         {
             LoadStartPage();
@@ -933,6 +1068,12 @@ public class BrowserTab : INotifyPropertyChanged
 
     public void Reload()
     {
+        if (_isDiscarded)
+        {
+            RestoreFromDiscard();
+            return;
+        }
+
         if (WebView.CoreWebView2 is null)
         {
             _ = InitializeAsync(_environment);
