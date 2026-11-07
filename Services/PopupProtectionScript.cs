@@ -53,7 +53,7 @@ internal static class PopupProtectionScript
             }
             document.addEventListener('click', protectPlayerClick, true);
             document.addEventListener('auxclick', protectPlayerClick, true);
-            window.__crimsonSetPopupProtection = value => { enabled = !!value; };
+            window.__crimsonSetPopupProtection = value => { enabled = !!value; trustedLink = null; };
             window.__crimsonAllowPopup = url => {
                 // Chromium may consume user activation before the native verification runs.
                 // CEF checks activation; this one-shot token checks the clicked destination.

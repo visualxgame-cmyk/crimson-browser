@@ -11,10 +11,24 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings settings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
+        PopupNavigationHandler.Open(tab, control, frame, targetUrl, userGesture);
+        return true;
+    }
+    protected override bool DoClose(IWebBrowser control, IBrowser browser)
+    {
+        if (!browser.IsPopup) tab.Ui(control, tab.CloseRequested);
+        return false;
+    }
+}
+
+internal static class PopupNavigationHandler
+{
+    public static void Open(BrowserTab tab, IWebBrowser control, IFrame frame, string targetUrl, bool userGesture)
+    {
         bool protection = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups;
         if (!protection)
             tab.OpenPopup(targetUrl);
-        else if (PopupNavigationPolicy.ShouldBlock(targetUrl, userGesture, disposition is WindowOpenDisposition.NewPopup or WindowOpenDisposition.NewWindow))
+        else if (PopupNavigationPolicy.ShouldBlock(targetUrl, userGesture))
             tab.Ui(control, ShieldService.Instance.IncrementBlockedCount);
         else if (PopupNavigationPolicy.IsAuthenticationTarget(targetUrl))
             tab.OpenPopup(targetUrl);
@@ -24,11 +38,10 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
             // Require an explicit, trusted link in the source frame, without blocking its thread.
             var result = frame.EvaluateScriptAsync("window.__crimsonAllowPopup?.(" + System.Text.Json.JsonSerializer.Serialize(targetUrl) + ") === true",
                 timeout: TimeSpan.FromSeconds(3));
-            _ = CompleteVerifiedPopup(control, targetUrl, result);
+            _ = CompleteVerifiedPopup(tab, control, targetUrl, result);
         }
-        return true;
     }
-    private async Task CompleteVerifiedPopup(IWebBrowser source, string url, Task<JavascriptResponse> verification)
+    private static async Task CompleteVerifiedPopup(BrowserTab tab, IWebBrowser source, string url, Task<JavascriptResponse> verification)
     {
         bool allowed = false;
         try { allowed = (await verification).Result is true; }
@@ -41,11 +54,6 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
             if (allowed) tab.OpenPopup(url);
             else ShieldService.Instance.IncrementBlockedCount();
         });
-    }
-    protected override bool DoClose(IWebBrowser control, IBrowser browser)
-    {
-        if (!browser.IsPopup) tab.Ui(control, tab.CloseRequested);
-        return false;
     }
 }
 
@@ -63,6 +71,14 @@ internal sealed class TabDisplayHandler(BrowserTab tab) : DisplayHandler
 
 internal sealed class TabRequestHandler(BrowserTab tab) : RequestHandler
 {
+    protected override bool OnOpenUrlFromTab(IWebBrowser control, IBrowser browser, IFrame frame, string targetUrl,
+        WindowOpenDisposition disposition, bool userGesture)
+    {
+        if (disposition is not (WindowOpenDisposition.NewForegroundTab or WindowOpenDisposition.NewBackgroundTab or
+            WindowOpenDisposition.NewWindow or WindowOpenDisposition.NewPopup)) return false;
+        PopupNavigationHandler.Open(tab, control, frame, targetUrl, userGesture);
+        return true;
+    }
     protected override void OnRenderProcessTerminated(IWebBrowser control, IBrowser browser,
         CefTerminationStatus status, int errorCode, string errorMessage)
         => tab.Ui(control, () => tab.EngineFailed($"{status} ({errorCode}): {errorMessage}"));

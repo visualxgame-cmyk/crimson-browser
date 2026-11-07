@@ -155,6 +155,13 @@ internal static class Program
                     host.SendMouseClickEvent(new CefSharp.MouseEvent(20, 260, CefEventFlags.None), MouseButtonType.Left, true, 1);
                 });
                 await Until(() => popup == "https://smoke.crimson/two.html", "ordinary new-tab links remain functional with popup protection");
+                popup = null;
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(20, 260, CefEventFlags.ShiftDown), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(20, 260, CefEventFlags.ShiftDown), MouseButtonType.Left, true, 1);
+                });
+                await Until(() => popup == "https://smoke.crimson/two.html", "Shift-click keeps an explicit link available");
                 await tab.WebView.EvaluateScriptAsync("window.__crimsonSetPopupProtection(false);window.playStarted=false;");
                 popup = null;
                 int blockedBefore = CrimsonBrowser.Services.ShieldService.Instance.BlockedCount;
@@ -163,6 +170,11 @@ internal static class Program
                 await Until(() => CrimsonBrowser.Services.ShieldService.Instance.BlockedCount > blockedBefore,
                     "native protection rejects an advertising popup even when the page script guard is disabled");
                 Check(popup == null, "native popup verification does not authorize the play button as a link");
+                blockedBefore = CrimsonBrowser.Services.ShieldService.Instance.BlockedCount;
+                await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                    "{\"expression\":\"window.open('https://random-ad.test/landing','ad','width=400,height=500')\",\"userGesture\":true}"));
+                await Until(() => CrimsonBrowser.Services.ShieldService.Instance.BlockedCount > blockedBefore,
+                    "native protection rejects advertising windows with custom popup dimensions");
                 await tab.WebView.EvaluateScriptAsync("window.__crimsonSetPopupProtection(true)");
                 await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
                     "{\"expression\":\"window.open('https://accounts.google.com/ServiceLogin','signin','width=400,height=500')\",\"userGesture\":true}"));

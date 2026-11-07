@@ -9,12 +9,11 @@ internal static class PopupNavigationPolicy
             uri.IdnHost is "login.microsoftonline.com" or "login.live.com";
     }
 
-    public static bool ShouldBlock(string targetUrl, bool userGesture, bool popupWindow)
+    public static bool ShouldBlock(string targetUrl, bool userGesture)
     {
         if (ShieldRequestPolicy.ShouldBlockUrl(targetUrl)) return true;
         if (!userGesture) return true;
-        if (IsAuthenticationTarget(targetUrl)) return false;
-        return popupWindow || !Uri.TryCreate(targetUrl, UriKind.Absolute, out var target) ||
+        return !Uri.TryCreate(targetUrl, UriKind.Absolute, out var target) ||
             target.Scheme is not ("http" or "https");
     }
 }
