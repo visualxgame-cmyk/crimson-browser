@@ -92,6 +92,24 @@ internal static class Program
                 await Until(() => tab.WebView.IsBrowserInitialized && !tab.IsLoading && tab.Title != "", "browser initialized");
                 await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
                     (await tab.WebView.EvaluateScriptAsync("typeof openSettings")).Result as string == "function", "bundled new tab rendered");
+                if (args.Contains("--require-aac-h264"))
+                {
+                    var mediaCapabilities = await tab.WebView.EvaluateScriptAsync("MediaSource.isTypeSupported('video/mp4; codecs=\"avc1.42E01E\"') && MediaSource.isTypeSupported('audio/mp4; codecs=\"mp4a.40.2\"')");
+                    Check(mediaCapabilities.Result is true, "staged native engine exposes H.264 and AAC through MediaSource");
+                }
+                string? mediaFixture = args.FirstOrDefault(argument => argument.StartsWith("--codec-fixture=", StringComparison.Ordinal))?[16..];
+                if (mediaFixture != null)
+                {
+                    File.Copy(Path.GetFullPath(mediaFixture), Path.Combine(root, "codec-fixture.mp4"));
+                    File.WriteAllText(Path.Combine(root, "codec-fixture.html"), "<!doctype html><title>Codec decoding fixture</title><video id='decode' src='codec-fixture.mp4' muted autoplay></video>");
+                    tab.Navigate("https://smoke.crimson/codec-fixture.html");
+                    await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                        (await tab.WebView.EvaluateScriptAsync("(()=>{const video=document.getElementById('decode');return !!video && !video.error && video.videoWidth>0 && video.currentTime>0.2 && !video.paused})()")).Result is true,
+                        "staged native engine decodes and plays the supplied local MP4 fixture");
+                    tab.Navigate("https://start.crimson/startpage.html");
+                    await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                        (await tab.WebView.EvaluateScriptAsync("typeof openSettings")).Result as string == "function", "new tab restored after decoding fixture");
+                }
                 int settingsRequests = 0;
                 tab.RequestOpenSettings += () => settingsRequests++;
                 await tab.WebView.EvaluateScriptAsync("openSettings()");

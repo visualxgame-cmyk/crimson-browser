@@ -1,0 +1,9 @@
+{
+  "cefVersion": "156.0.15",
+  "cefCommit": "cf671c072925b27823a61181152f4f288e8e4306",
+  "chromiumVersion": "156.0.8078.80",
+  "branch": "8078",
+  "automateSha256": "94d3ddd1e0d35482132f45dc101a593c9371b6eb2d8ff4af6cfe2734d2e48c6a",
+  "mediaFixture": "bear-1280x720.mp4",
+  "mediaFixtureSha256": "bcb75d3db0a1a5056f4cd5c770ceccdb4cae920f21abb8139b29cd9ad39e3857"
+}
