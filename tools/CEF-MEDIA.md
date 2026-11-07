@@ -15,7 +15,7 @@ After source synchronization, `-Phase Build` resumes compilation using the exist
 
 Build and stage the CEF integration test application first. Run its normal regression suite and the opt-in media checks against the staged engine before publishing. A matching version string alone does not prove AAC/H.264 decoding support.
 
-The test executable accepts `--require-aac-h264 --codec-fixture=<local-H264-AAC-MP4>` to require MediaSource support and actual local MP4 playback. `--probe-live=<public-YouTube-URL>` prints codec capabilities and the public player response using an isolated temporary profile.
+The test executable accepts `--require-aac-h264 --codec-fixture=<local-H264-AAC-MP4>` to require MediaSource support and actual local MP4 playback. `--probe-live=<public-YouTube-URL>` prints codec capabilities and the public player response using an isolated temporary profile. Adding `--require-live-playback` also requires the public player to decode and advance video frames. Network availability, consent and stream availability can affect this opt-in live check.
 
 `Test-CefMedia.ps1 -DistributionRoot <distribution-directory>` builds an isolated test application, stages the engine, and requires H.264/AAC support, playback of a hash-pinned Chromium test clip, and the existing regression suite. The clip is downloaded from the official Chromium GitHub mirror unless `-MediaFixture` points to the pinned local copy.
 

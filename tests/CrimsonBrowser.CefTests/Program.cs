@@ -54,6 +54,23 @@ internal static class Program
                         return response.Result is true;
                     }, "public live response available");
                     Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
+                    if (args.Contains("--require-live-playback"))
+                    {
+                        await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("!!document.querySelector('video')")).Result is true,
+                            "public live player is created");
+                        var firstFrame = await tab.WebView.EvaluateScriptAsync("document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames");
+                        double initialFrames = Convert.ToDouble(firstFrame.Result);
+                        var probeHost = tab.WebView.GetBrowser().GetHost();
+                        await Cef.UIThreadTaskFactory.StartNew(() => probeHost.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                            "{\"expression\":\"(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play().catch(error=>{window.__crimsonPlaybackError=error.name;});})()\",\"userGesture\":true}"));
+                        await UntilAsync(async () =>
+                        {
+                            var playback = await tab.WebView.EvaluateScriptAsync("(()=>{const v=document.querySelector('video');return !!v && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +
+                                (initialFrames + 3).ToString(System.Globalization.CultureInfo.InvariantCulture) + "})()");
+                            return playback.Result is true;
+                        }, "public live decodes and advances video frames");
+                        Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
+                    }
                     return;
                 }
                 context.RegisterSchemeHandlerFactory("https", "start.crimson",
