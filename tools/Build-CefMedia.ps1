@@ -93,10 +93,10 @@ try {
     }
     if ($Phase -in @('Build', 'All')) {
         Invoke-BuildTool $python @((Join-Path $cef 'tools\gclient_hook.py')) 'generate' $cef
-        Invoke-BuildTool (Join-Path $tools 'autoninja.bat') @('-C', 'out\Release_GN_x64', '-j', "$Jobs", 'cefclient') 'compile' $source
+        Invoke-BuildTool (Join-Path $tools 'autoninja.bat') @('-C', 'out\Release_GN_x64', '-j', "$Jobs", 'cefclient', 'bootstrap', 'bootstrapc') 'compile' $source
     }
     if ($Phase -in @('Package', 'All')) {
-        Invoke-BuildTool $python @((Join-Path $cef 'tools\make_distrib.py'), '--ninja-build', '--x64-build',
+        Invoke-BuildTool $python @((Join-Path $cef 'tools\make_distrib.py'), "--output-dir=$cef\binary_distrib", '--ninja-build', '--x64-build',
             '--minimal', '--allow-partial', '--no-symbols', '--no-docs', '--no-archive') 'package' $cef
         Write-Output "Native distribution is under $cef\binary_distrib. It must pass media and browser regression checks before use."
     }
