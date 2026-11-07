@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.IO;
 
 namespace CrimsonBrowser.Services;
@@ -11,26 +10,32 @@ public class HistoryService
     public static HistoryService Instance => _instance ??= new HistoryService();
 
     private readonly string _historyFilePath;
+    private readonly BackgroundProfileWriter<HistoryEntry[]> _writer;
     private List<HistoryEntry> _entries = new();
 
     public IReadOnlyList<HistoryEntry> Entries => _entries.AsReadOnly();
 
     public event Action? HistoryChanged;
 
-    public HistoryService()
+    public HistoryService() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CrimsonBrowser", "history.json")) { }
+
+    internal HistoryService(string filePath)
     {
-        string folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CrimsonBrowser"
-        );
-        _historyFilePath = Path.Combine(folder, "history.json");
+        _historyFilePath = filePath;
+        _writer = new BackgroundProfileWriter<HistoryEntry[]>(_historyFilePath, (path, snapshot) =>
+        {
+            AtomicFileStore.Write(path, snapshot);
+            // Clearing history also replaces the recovery copy with empty history.
+            if (snapshot.Length == 0) AtomicFileStore.Write(path, snapshot);
+        });
         Load();
     }
 
     public void AddEntry(string title, string url)
     {
         if (string.IsNullOrWhiteSpace(url) || url == "crimson://start") return;
-        if (url.StartsWith("https://start.crimson")) return;
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Host.Equals("start.crimson", StringComparison.OrdinalIgnoreCase)) return;
 
         // Remove duplicate if same URL
         _entries.RemoveAll(e => e.Url == url);
@@ -59,32 +64,29 @@ public class HistoryService
             .ToList();
     }
 
-    public void Clear()
+    public bool Clear()
     {
         _entries.Clear();
         HistoryChanged?.Invoke();
         Save();
+        return FlushPendingWrites();
     }
 
     private void Load()
     {
         try
         {
-            if (File.Exists(_historyFilePath))
-            {
-                var loaded = AtomicFileStore.Read<List<HistoryEntry>>(_historyFilePath);
-                if (loaded != null) _entries = loaded;
-            }
+            var loaded = AtomicFileStore.Read<List<HistoryEntry>>(_historyFilePath);
+            if (loaded != null) _entries = loaded.Take(2000).ToList();
         }
-        catch { }
+        catch (Exception error) { ProfileStorageDiagnostics.Report(_historyFilePath, error); }
     }
 
     private void Save()
     {
-        try
-        {
-            AtomicFileStore.Write(_historyFilePath, _entries);
-        }
-        catch { }
+        _writer.Schedule(_entries.ToArray());
     }
+
+    public bool FlushPendingWrites() => _writer.Flush();
+    internal static bool FlushIfCreated() => _instance?.FlushPendingWrites() ?? true;
 }

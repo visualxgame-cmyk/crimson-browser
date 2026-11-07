@@ -13,6 +13,102 @@ try
     Assert(AtomicFileStore.Read<TestData>(file)?.Value == "first", "backup recovers a corrupt primary profile file");
 
     Console.WriteLine("PASS: Atomic profile storage");
+    var errors = new List<string>();
+    void StorageFailed(string name, Exception error) { lock (errors) errors.Add(name); }
+    ProfileStorageDiagnostics.Failed += StorageFailed;
+    try
+    {
+        var bookmarks = new BookmarksService(Path.Combine(root, "bookmarks.json"));
+        bookmarks.Add("Upper", "https://EXAMPLE.test/Page?q=A#Part");
+        bookmarks.Add("Lower", "https://example.test/page?q=A#Part");
+        bookmarks.Add("Same", "https://example.test:443/Page?q=A#Part");
+        Assert(bookmarks.Bookmarks.Count == 2, "bookmark hosts normalize while path case remains distinct");
+        Assert(!bookmarks.Contains("https://example.test/Page?q=a#Part"), "query values preserve case");
+        Assert(!bookmarks.Contains("https://example.test/Page?q=A#part"), "fragments preserve case");
+        bookmarks.Remove("https://example.test/page?q=A#Part");
+        Assert(bookmarks.Bookmarks.Single().Title == "Upper", "removing a bookmark preserves a different case-sensitive path");
+        Assert(new BookmarksService(Path.Combine(root, "bookmarks.json")).Bookmarks.Count == 1, "bookmarks survive restart");
+        using (var locked = new FileStream(Path.Combine(root, "bookmarks.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            bookmarks.Remove("https://example.test/Page?q=A#Part");
+            Assert(bookmarks.Bookmarks.Count == 1, "a failed removal does not pretend the bookmark was deleted");
+        }
+
+        string blocked = Path.Combine(root, "not-a-directory");
+        File.WriteAllText(blocked, "occupied");
+        var unsavable = new BookmarksService(Path.Combine(blocked, "bookmarks.json"));
+        int previousErrors = errors.Count;
+        unsavable.Add("Cannot save", "https://example.test/");
+        Assert(unsavable.Bookmarks.Count == 0 && errors.Count > previousErrors, "failed bookmark saves are reported without falsely adding a favorite");
+
+        string corrupt = Path.Combine(root, "corrupt.json");
+        File.WriteAllText(corrupt, "invalid");
+        File.WriteAllText(corrupt + ".bak", "invalid");
+        previousErrors = errors.Count;
+        _ = new BookmarksService(corrupt);
+        Assert(errors.Count > previousErrors, "unrecoverable profile corruption is reported");
+
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var written = new List<int>();
+        int caller = Environment.CurrentManagedThreadId;
+        int workerThread = caller;
+        var writer = new BackgroundProfileWriter<int>("test.json", (_, value) =>
+        {
+            workerThread = Environment.CurrentManagedThreadId;
+            if (value == 1) { entered.Set(); if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException(); }
+            written.Add(value);
+        });
+        try
+        {
+            writer.Schedule(1);
+            Assert(entered.Wait(TimeSpan.FromSeconds(5)), "background disk writer starts");
+            writer.Schedule(2);
+            writer.Schedule(3);
+        }
+        finally { release.Set(); }
+        Assert(writer.Flush() && workerThread != caller && written.SequenceEqual(new[] { 1, 3 }),
+            "disk writes run off the caller thread, coalesce and flush the latest snapshot");
+        var failingWriter = new BackgroundProfileWriter<int>("failed.json", (_, value) =>
+        {
+            if (value == 1) throw new IOException("Simulated storage failure");
+        });
+        failingWriter.Schedule(1);
+        Assert(!failingWriter.Flush(), "background storage failures remain observable at shutdown");
+        failingWriter.Schedule(2);
+        Assert(failingWriter.Flush(), "a subsequent successful save clears the failure state");
+
+        string historyPath = Path.Combine(root, "history.json");
+        var savedHistory = new HistoryService(historyPath);
+        for (int i = 0; i < 80; i++) savedHistory.AddEntry("Page " + i, "https://example.test/" + i);
+        Assert(savedHistory.FlushPendingWrites(), "pending history is saved before exit");
+        Assert(new HistoryService(historyPath).Entries[0].Url.EndsWith("/79"), "latest history survives restart");
+        Assert(savedHistory.Clear(), "history clearing completes pending disk writes");
+        Assert(new HistoryService(historyPath).Entries.Count == 0 && AtomicFileStore.Read<HistoryEntry[]>(historyPath + ".bak")!.Length == 0,
+            "cleared history cannot return from its recovery backup");
+
+        string downloadsPath = Path.Combine(root, "downloads.json");
+        var downloads = new DownloadsService(downloadsPath);
+        string downloadedFile = Path.Combine(root, "download.txt");
+        File.WriteAllText(downloadedFile, "download test");
+        downloads.Update("one", downloadedFile, "https://example.test/file", 100, 100, DownloadStatus.Completed);
+        downloads.Update("two", Path.Combine(root, "partial.txt"), "https://example.test/partial", 100, 20, DownloadStatus.InProgress);
+        downloads.Update("private", Path.Combine(root, "secret.txt"), "https://private.test/file", 100, 100, DownloadStatus.Completed, isPrivate: true);
+        Assert(downloads.FlushPendingWrites(), "download history flushes on exit");
+        var restored = new DownloadsService(downloadsPath);
+        Assert(restored.Downloads.Count == 2 && restored.Downloads.Any(item => item.IsCompleted), "completed downloads survive restart without retaining private downloads");
+        Assert(restored.ActiveCount == 0 && restored.Downloads.Any(item => item.Status == DownloadStatus.Failed), "interrupted downloads do not remain permanently active after restart");
+        Assert(!File.ReadAllText(downloadsPath).Contains("private.test"), "incognito download URLs are excluded from disk snapshots");
+        restored.ClearCompleted();
+        Assert(restored.FlushPendingWrites() && new DownloadsService(downloadsPath).Downloads.Count == 0 && File.Exists(downloadedFile),
+            "clearing download history persists without deleting downloaded files");
+        for (int i = 0; i < 220; i++) restored.Update("bounded-" + i, Path.Combine(root, i + ".bin"),
+            "https://example.test/" + i, 100, 100, DownloadStatus.Completed);
+        Assert(restored.FlushPendingWrites() && restored.Downloads.Count == 200 && new DownloadsService(downloadsPath).Downloads.Count == 200,
+            "download history stays bounded in memory and on disk");
+        Console.WriteLine("PASS: Bookmark identity, storage failure reporting, background history and persistent downloads");
+    }
+    finally { ProfileStorageDiagnostics.Failed -= StorageFailed; }
     var history = new[]
     {
         new HistoryEntry("ChatGPT conversation", "https://chatgpt.com/c/example", DateTime.Now),

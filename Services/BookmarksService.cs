@@ -23,38 +23,41 @@ public class BookmarksService
 
     public event Action? BookmarksChanged;
 
-    public BookmarksService()
+    public BookmarksService() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CrimsonBrowser", "bookmarks.json")) { }
+
+    internal BookmarksService(string filePath)
     {
-        string folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CrimsonBrowser"
-        );
-        _filePath = Path.Combine(folder, "bookmarks.json");
+        _filePath = filePath;
         Load();
     }
 
     public bool Contains(string url) =>
-        Bookmarks.Any(b => string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
+        Bookmarks.Any(b => BookmarkAddress.Equals(b.Url, url));
 
     public void Add(string title, string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return;
         if (Contains(url)) return;
 
-        Bookmarks.Insert(0, new Bookmark { Title = string.IsNullOrWhiteSpace(title) ? url : title, Url = url });
+        var bookmark = new Bookmark { Title = string.IsNullOrWhiteSpace(title) ? url : title, Url = url };
+        var snapshot = Bookmarks.ToList();
+        snapshot.Insert(0, bookmark);
+        if (!Save(snapshot)) return;
+        Bookmarks.Insert(0, bookmark);
         BookmarksChanged?.Invoke();
-        Save();
     }
 
     public void Remove(string url)
     {
         var existing = Bookmarks.FirstOrDefault(b =>
-            string.Equals(b.Url, url, StringComparison.OrdinalIgnoreCase));
+            BookmarkAddress.Equals(b.Url, url));
         if (existing != null)
         {
+            var snapshot = Bookmarks.Where(b => b != existing).ToList();
+            if (!Save(snapshot)) return;
             Bookmarks.Remove(existing);
             BookmarksChanged?.Invoke();
-            Save();
         }
     }
 
@@ -70,24 +73,22 @@ public class BookmarksService
     {
         try
         {
-            if (File.Exists(_filePath))
+            var list = AtomicFileStore.Read<List<Bookmark>>(_filePath);
+            if (list != null)
             {
-                var list = AtomicFileStore.Read<List<Bookmark>>(_filePath);
-                if (list != null)
-                {
-                    foreach (var b in list) Bookmarks.Add(b);
-                }
+                foreach (var b in list) Bookmarks.Add(b);
             }
         }
-        catch { }
+        catch (Exception error) { ProfileStorageDiagnostics.Report(_filePath, error); }
     }
 
-    private void Save()
+    private bool Save(List<Bookmark> snapshot)
     {
         try
         {
-            AtomicFileStore.Write(_filePath, Bookmarks.ToList());
+            AtomicFileStore.Write(_filePath, snapshot);
+            return true;
         }
-        catch { }
+        catch (Exception error) { ProfileStorageDiagnostics.Report(_filePath, error); return false; }
     }
 }

@@ -191,7 +191,7 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
     public void Discard()
     {
         if (IsDisposed || IsActive || _isDiscarded || !WebView.IsBrowserInitialized || !_navigationComplete || IsDocumentPlayingAudio ||
-            _formDirty || DownloadsService.Instance.ActiveCount > 0) return;
+            _formDirty || WebView.DownloadHandler is TabDownloadHandler { HasActiveDownloads: true }) return;
         // CEF cannot import navigation entries into a newly created browser. Keep
         // tabs with Back/Forward history alive rather than silently losing that history.
         if (CanGoBack || CanGoForward || WebView.CanGoBack || WebView.CanGoForward) return;

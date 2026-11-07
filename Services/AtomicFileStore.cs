@@ -14,23 +14,28 @@ internal static class AtomicFileStore
 
     public static T? Read<T>(string path)
     {
+        Exception? failure = null;
         foreach (string candidate in new[] { path, path + ".bak" })
         {
             try
             {
-                if (File.Exists(candidate))
-                    return JsonSerializer.Deserialize<T>(File.ReadAllText(candidate, Encoding.UTF8));
+                return JsonSerializer.Deserialize<T>(File.ReadAllText(candidate, Encoding.UTF8));
             }
-            catch (JsonException)
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+            catch (UnauthorizedAccessException error) { failure = error; }
+            catch (JsonException error)
             {
+                failure = error;
                 // Try the last known-good copy below.
             }
-            catch (IOException)
+            catch (IOException error)
             {
+                failure = error;
                 // The profile can be momentarily busy during shutdown; retain existing data.
             }
         }
-
+        if (failure != null) throw new InvalidDataException("Neither the profile file nor its backup could be read.", failure);
         return default;
     }
 

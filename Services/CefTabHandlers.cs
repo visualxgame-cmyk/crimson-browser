@@ -96,14 +96,19 @@ internal sealed class TabPermissionHandler(BrowserTab tab) : PermissionHandler
     }
 }
 
-internal sealed class TabDownloadHandler(BrowserTab tab) : DownloadHandler, IDisposable
+internal sealed class TabDownloadHandler(BrowserTab tab,
+    Func<string, System.Windows.Window?, string?>? selectSavePath = null) : DownloadHandler, IDisposable
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<IBeforeDownloadCallback, byte> _pending = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, byte> _active = new();
+    internal bool HasActiveDownloads => !_pending.IsEmpty || !_active.IsEmpty;
     protected override bool CanDownload(IWebBrowser control, IBrowser browser, string url, string method) => true;
     protected override bool OnBeforeDownload(IWebBrowser control, IBrowser browser, CefSharp.DownloadItem item,
         IBeforeDownloadCallback callback)
     {
         string suggested = System.IO.Path.GetFileName(item.SuggestedFileName);
+        int downloadId = item.Id;
+        _active.TryAdd(downloadId, 0);
         _pending.TryAdd(callback, 0);
         System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
         {
@@ -111,11 +116,19 @@ internal sealed class TabDownloadHandler(BrowserTab tab) : DownloadHandler, IDis
             try
             {
                 if (tab.IsDisposed || !_pending.ContainsKey(callback)) return;
-                var dialog = new Microsoft.Win32.SaveFileDialog { FileName = suggested, OverwritePrompt = true };
-                if (dialog.ShowDialog(System.Windows.Window.GetWindow(tab.WebView)) == true)
-                    path = dialog.FileName;
+                var owner = System.Windows.Window.GetWindow(tab.WebView);
+                if (selectSavePath != null) path = selectSavePath(suggested, owner);
+                else
+                {
+                    var dialog = new Microsoft.Win32.SaveFileDialog { FileName = suggested, OverwritePrompt = true };
+                    if (dialog.ShowDialog(owner) == true) path = dialog.FileName;
+                }
             }
-            finally { Complete(callback, tab.IsDisposed ? null : path); }
+            finally
+            {
+                if (path == null || tab.IsDisposed) _active.TryRemove(downloadId, out _);
+                Complete(callback, tab.IsDisposed ? null : path);
+            }
         }));
         return true;
     }
@@ -136,13 +149,15 @@ internal sealed class TabDownloadHandler(BrowserTab tab) : DownloadHandler, IDis
         IDownloadItemCallback callback)
     {
         string key = browser.Identifier + ":" + item.Id;
+        if (item.IsInProgress && !item.IsComplete && !item.IsCancelled) _active.TryAdd(item.Id, 0);
+        else _active.TryRemove(item.Id, out _);
         // DownloadItem snapshots are invalid after this callback, so copy primitive values.
         string path = item.FullPath, url = item.Url;
         long total = item.TotalBytes, received = item.ReceivedBytes;
         var status = item.IsComplete ? DownloadStatus.Completed : item.IsCancelled ? DownloadStatus.Cancelled :
             item.IsInProgress ? DownloadStatus.InProgress : DownloadStatus.Failed;
         System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-            DownloadsService.Instance.Update(key, path, url, total, received, status)));
+            DownloadsService.Instance.Update(key, path, url, total, received, status, tab.IsIncognito)));
     }
 }
 

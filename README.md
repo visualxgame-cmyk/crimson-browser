@@ -30,6 +30,8 @@ Installerul și checksum-ul SHA-256 apar în `dist`. Aplicația completă este �
 - Sesiunea încarcă paginile restaurate doar la selectare. Taburile ascunse sunt limitate de CEF. După trei minute, modul Low RAM poate elibera complet motorul și suprafața unui tab inactiv, restaurându-l la selectare. Taburile cu formulare modificate, media în redare, permisiuni media acordate, descărcări active sau istoric Înapoi/Înainte sunt protejate; CEF nu poate importa acel istoric într-un motor nou. Ferestrele închise își dezabonează evenimentele globale.
 - Incognito folosește un context CEF fără cache pe disc, separat pentru fiecare fereastră; istoricul și permisiunile sale nu sunt persistate.
 - Descărcări cu alegerea destinației și progres în interfața Crimson.
+- Lista descărcărilor normale se păstrează între porniri (până la 200 de intrări); descărcările incognito nu sunt scrise pe disc. O descărcare protejează de eliberare doar tabul care o deține.
+- Istoricul este salvat în fundal, cu scrieri serializate și finalizare la închidere. Erorile de stocare sunt raportate; o favorită este adăugată în listă numai după salvarea reușită.
 - Actualizări prin GitHub Releases cu verificarea checksum-ului și repornire după instalare.
 
 CEF păstrează arhitectura Chromium cu procese auxiliare. Folosim mecanismul oficial SelfHost: rendererul, GPU-ul și utilitarele rulează tot ca `CrimsonBrowser.exe`, fără WebView2 Manager sau un executabil CefSharp separat. Consumul depinde de site-uri, media și numărul de taburi și trebuie măsurat pe aceleași pagini.

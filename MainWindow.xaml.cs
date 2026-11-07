@@ -1067,7 +1067,7 @@ public partial class MainWindow : Window
         if (sender is FrameworkElement { DataContext: DownloadItem item } && item.IsCompleted)
         {
             try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.SavePath) { UseShellExecute = true }); }
-            catch { }
+            catch (Exception error) { ShowDownloadError(error.Message); }
         }
     }
 
@@ -1075,10 +1075,20 @@ public partial class MainWindow : Window
     {
         if (sender is not FrameworkElement { DataContext: DownloadItem item }) return;
         string? folder = Path.GetDirectoryName(item.SavePath);
-        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            ShowDownloadError(LocalizationService.Instance.Get("DownloadFolderMissing"));
+            return;
+        }
 
         try { System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + item.SavePath + "\""); }
-        catch { }
+        catch (Exception error) { ShowDownloadError(error.Message); }
+    }
+
+    private void ShowDownloadError(string message)
+    {
+        var loc = LocalizationService.Instance;
+        CrimsonDialog.Info(this, loc.Get("DownloadOpenErrorTitle"), message);
     }
 
     private void MenuDownloads_Click(object sender, RoutedEventArgs e)
@@ -1328,7 +1338,7 @@ public partial class MainWindow : Window
         {
             await _activeTab.ClearBrowsingDataAsync();
             CefProfileData.RequestReset();
-            HistoryService.Instance.Clear();
+            if (!HistoryService.Instance.Clear()) return;
 
             CrimsonDialog.Info(
                 this,

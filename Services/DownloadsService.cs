@@ -24,7 +24,8 @@ public class DownloadItem : INotifyPropertyChanged
     public string Filename   { get; set; } = string.Empty;
     public string SavePath   { get; set; } = string.Empty;
     public string Url        { get; set; } = string.Empty;
-    public DateTime StartedAt { get; } = DateTime.Now;
+    public DateTime StartedAt { get; init; } = DateTime.Now;
+    internal bool IsPrivate { get; init; }
 
     public long TotalBytes
     {
@@ -96,7 +97,11 @@ public class DownloadsService
 
     public ObservableCollection<DownloadItem> Downloads { get; } = new();
 
-    public DownloadsService()
+    private readonly string _filePath;
+    private readonly BackgroundProfileWriter<DownloadRecord[]> _writer;
+
+    public DownloadsService() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CrimsonBrowser", "downloads.json"))
     {
         // Refresh the localized status labels of existing entries when the UI language changes.
         LocalizationService.Instance.LanguageChanged += () =>
@@ -106,19 +111,46 @@ public class DownloadsService
         };
     }
 
+    internal DownloadsService(string filePath)
+    {
+        _filePath = filePath;
+        _writer = new BackgroundProfileWriter<DownloadRecord[]>(_filePath, (path, snapshot) =>
+        {
+            AtomicFileStore.Write(path, snapshot);
+            if (snapshot.Length == 0) AtomicFileStore.Write(path, snapshot);
+        });
+        try
+        {
+            var records = AtomicFileStore.Read<DownloadRecord[]>(_filePath);
+            if (records == null) return;
+            foreach (var record in records.Take(200))
+                Downloads.Add(new DownloadItem
+                {
+                    SavePath = record.SavePath, Filename = Path.GetFileName(record.SavePath), Url = record.Url,
+                    StartedAt = record.StartedAt, TotalBytes = record.TotalBytes, ReceivedBytes = record.ReceivedBytes,
+                    Status = record.Status == DownloadStatus.InProgress ? DownloadStatus.Failed : record.Status
+                });
+        }
+        catch (Exception error) { ProfileStorageDiagnostics.Report(_filePath, error); }
+    }
+
     public event Action? ActiveDownloadsChanged;
 
     public int ActiveCount => Downloads.Count(d => d.Status == DownloadStatus.InProgress);
 
     private readonly Dictionary<string, DownloadItem> _tracked = new();
-    public void Update(string key, string path, string url, long total, long received, DownloadStatus status)
+    public void Update(string key, string path, string url, long total, long received, DownloadStatus status, bool isPrivate = false)
     {
+        bool created = false;
         if (!_tracked.TryGetValue(key, out var item))
         {
-            item = new DownloadItem();
+            item = new DownloadItem { IsPrivate = isPrivate };
             _tracked.Add(key, item);
             Downloads.Insert(0, item);
+            created = true;
         }
+        var previousStatus = item.Status;
+        bool pathChanged = item.SavePath != path;
         item.SavePath = path;
         item.Filename = Path.GetFileName(path);
         item.Url = url;
@@ -126,7 +158,13 @@ public class DownloadsService
         item.ReceivedBytes = received;
         item.Status = status;
         item.RefreshDetails();
-        ActiveDownloadsChanged?.Invoke();
+        if (created || previousStatus != status) ActiveDownloadsChanged?.Invoke();
+        if (created || previousStatus != status) TrimHistory();
+        // Progress callbacks stay in memory. Persist starts and terminal transitions only.
+        if (!item.IsPrivate && (created || previousStatus != status || pathChanged))
+        {
+            Save();
+        }
     }
 
     public void ClearCompleted()
@@ -134,5 +172,22 @@ public class DownloadsService
         var done = Downloads.Where(d => d.Status != DownloadStatus.InProgress).ToList();
         foreach (var d in done) Downloads.Remove(d);
         foreach (var key in _tracked.Where(pair => done.Contains(pair.Value)).Select(pair => pair.Key).ToArray()) _tracked.Remove(key);
+        Save();
     }
+
+    private void TrimHistory()
+    {
+        var expired = Downloads.Where(item => item.Status != DownloadStatus.InProgress).Skip(200).ToHashSet();
+        foreach (var item in expired) Downloads.Remove(item);
+        foreach (var key in _tracked.Where(pair => expired.Contains(pair.Value)).Select(pair => pair.Key).ToArray())
+            _tracked.Remove(key);
+    }
+
+    private void Save() => _writer.Schedule(Downloads.Where(item => !item.IsPrivate && !string.IsNullOrWhiteSpace(item.SavePath)).Take(200).Select(item =>
+        new DownloadRecord(item.SavePath, item.Url, item.StartedAt, item.TotalBytes, item.ReceivedBytes, item.Status)).ToArray());
+
+    public bool FlushPendingWrites() => _writer.Flush();
+    internal static bool FlushIfCreated() => _instance?.FlushPendingWrites() ?? true;
+    private sealed record DownloadRecord(string SavePath, string Url, DateTime StartedAt, long TotalBytes,
+        long ReceivedBytes, DownloadStatus Status);
 }

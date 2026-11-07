@@ -12,6 +12,7 @@ public partial class App : Application
     private MainWindow? _mainWindow;
     private readonly Queue<string> _pendingMessages = new();
     private bool _shuttingDown;
+    private readonly HashSet<string> _reportedStorageErrors = new(StringComparer.Ordinal);
 
     internal static string? PendingStartupUrl { get; private set; }
 
@@ -40,6 +41,7 @@ public partial class App : Application
         PendingStartupUrl = StartupUrl(e.Args);
 
         base.OnStartup(e);
+        ProfileStorageDiagnostics.Failed += ProfileStorageFailed;
 
         try
         {
@@ -137,9 +139,28 @@ public partial class App : Application
     {
         _shuttingDown = true;
         foreach (var window in Windows.OfType<MainWindow>().ToArray()) window.DisposeBrowsers();
+        bool historySaved = HistoryService.FlushIfCreated();
+        bool downloadsSaved = DownloadsService.FlushIfCreated();
+        if ((!historySaved && !_reportedStorageErrors.Contains("history.json")) ||
+            (!downloadsSaved && !_reportedStorageErrors.Contains("downloads.json")))
+            MessageBox.Show(LocalizationService.Instance.Get("StorageExitError"),
+                LocalizationService.Instance.Get("StorageErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+        ProfileStorageDiagnostics.Failed -= ProfileStorageFailed;
         if (CefRuntime.IsInitialized) CefRuntime.Shutdown();
         _singleInstance?.Dispose();
         base.OnExit(e);
+    }
+
+    private void ProfileStorageFailed(string file, Exception error)
+    {
+        LogException("Profile storage: " + file, error);
+        if (_shuttingDown || Dispatcher.HasShutdownStarted) return;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_shuttingDown || !_reportedStorageErrors.Add(file)) return;
+            var loc = LocalizationService.Instance;
+            CrimsonDialog.Info(_mainWindow, loc.Get("StorageErrorTitle"), loc.Format("StorageErrorMessage", file, error.Message));
+        }));
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

@@ -7,6 +7,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\Services\AtomicFileStore.cs" Link="AtomicFileStore.cs" />
+    <Compile Include="..\..\Services\BackgroundProfileWriter.cs" Link="BackgroundProfileWriter.cs" />
+    <Compile Include="..\..\Services\ProfileStorageDiagnostics.cs" Link="ProfileStorageDiagnostics.cs" />
+    <Compile Include="..\..\Services\BookmarkAddress.cs" Link="BookmarkAddress.cs" />
+    <Compile Include="..\..\Services\BookmarksService.cs" Link="BookmarksService.cs" />
+    <Compile Include="..\..\Services\DownloadsService.cs" Link="DownloadsService.cs" />
+    <Compile Include="..\..\Services\LocalizationService.cs" Link="LocalizationService.cs" />
     <Compile Include="..\..\Services\HistoryService.cs" Link="HistoryService.cs" />
     <Compile Include="..\..\Services\OmniboxSuggestions.cs" Link="OmniboxSuggestions.cs" />
     <Compile Include="..\..\Services\ShieldRequestPolicy.cs" Link="ShieldRequestPolicy.cs" />

@@ -141,8 +141,15 @@ internal static class Program
                 tab.WebView.ExecuteScriptAsync("document.getElementById('media').pause()");
                 await Until(() => !tab.IsDocumentPlayingAudio, "paused media releases its memory-saver exemption");
                 var releasedView = tab.WebView;
+                string unrelatedDownload = "unrelated-" + Guid.NewGuid().ToString("N");
+                CrimsonBrowser.Services.DownloadsService.Instance.Update(unrelatedDownload, Path.Combine(root, "other.bin"),
+                    "https://smoke.crimson/other.bin", 100, 10, CrimsonBrowser.Services.DownloadStatus.InProgress, isPrivate: true);
                 tab.Discard();
                 Check(tab.IsDiscarded, "idle tab document discarded");
+                Check(tab.IsDiscarded && CrimsonBrowser.Services.DownloadsService.Instance.ActiveCount > 0,
+                    "a download in another tab does not prevent idle tab discard");
+                CrimsonBrowser.Services.DownloadsService.Instance.Update(unrelatedDownload, Path.Combine(root, "other.bin"),
+                    "https://smoke.crimson/other.bin", 100, 10, CrimsonBrowser.Services.DownloadStatus.Cancelled, isPrivate: true);
                 Check(releasedView.IsDisposed, "discard releases native browser and surface");
                 tab.IsActive = true;
                 await Until(() => !tab.IsDiscarded && tab.Title == "CEF Test Two" && !tab.IsLoading, "discarded tab restores");
@@ -269,6 +276,32 @@ internal static class Program
                         "startup placeholder is removed after initialization");
                 }
                 finally { deferred.Close(); }
+                File.WriteAllBytes(Path.Combine(root, "payload.bin"), new byte[65536]);
+                string downloadPath = Path.Combine(root, "saved-payload.bin");
+                using (var downloading = new BrowserTab(context, isIncognito: true))
+                {
+                    CrimsonBrowser.Services.TabDownloadHandler? handler = null;
+                    handler = new CrimsonBrowser.Services.TabDownloadHandler(downloading, (_, _) =>
+                    {
+                        Check(handler!.HasActiveDownloads, "download owner is protected while choosing a save location");
+                        downloading.IsActive = false;
+                        downloading.Discard();
+                        Check(!downloading.IsDiscarded, "memory saving preserves the tab that owns a pending download");
+                        return downloadPath;
+                    });
+                    downloading.WebView.DownloadHandler = handler;
+                    downloading.Navigate("https://smoke.crimson/two.html");
+                    window.Content = downloading.WebView;
+                    downloading.IsActive = true;
+                    await Until(() => downloading.Title == "CEF Test Two" && !downloading.IsLoading, "download owner fixture loads");
+                    downloading.WebView.StartDownload("https://smoke.crimson/payload.bin");
+                    await Until(() => File.Exists(downloadPath) && CrimsonBrowser.Services.DownloadsService.Instance.Downloads.Any(item =>
+                        item.SavePath == downloadPath && item.Status == CrimsonBrowser.Services.DownloadStatus.Completed), "native CEF download completes");
+                    Check(File.ReadAllBytes(downloadPath).Length == 65536, "downloaded fixture retains its complete payload");
+                    downloading.Discard();
+                    Check(downloading.IsDiscarded, "completed download releases its tab memory-saver exemption");
+                    window.Content = null;
+                }
                 Console.WriteLine("PASS: CEF integration");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); exitCode = 1; }
