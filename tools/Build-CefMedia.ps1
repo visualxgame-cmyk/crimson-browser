@@ -99,7 +99,21 @@ try {
     if ($Phase -in @('Package', 'All')) {
         Invoke-BuildTool $python @((Join-Path $cef 'tools\make_distrib.py'), "--output-dir=$cef\binary_distrib", '--ninja-build', '--x64-build',
             '--minimal', '--allow-partial', '--no-symbols', '--no-docs', '--no-archive') 'package' $cef
-        Write-Output "Native distribution is under $cef\binary_distrib. It must pass media and browser regression checks before use."
+        $expected = "$($version.cefVersion)+g$($version.cefCommit.Substring(0, 7))+chromium-$($version.chromiumVersion)"
+        $distributions = @(Get-ChildItem -LiteralPath (Join-Path $cef 'binary_distrib') -Directory | Where-Object {
+            $library = Join-Path $_.FullName 'Release\libcef.dll'
+            (Test-Path -LiteralPath $library) -and [Diagnostics.FileVersionInfo]::GetVersionInfo($library).FileVersion -eq $expected
+        })
+        if ($distributions.Count -ne 1) { throw 'Expected exactly one matching native CEF distribution.' }
+        & (Join-Path $PSScriptRoot 'Test-CefMedia.ps1') -DistributionRoot $distributions[0].FullName `
+            -MediaFixture (Join-Path $source "media\test\data\$($version.mediaFixture)")
+        [ordered]@{
+            distribution = $distributions[0].FullName
+            nativeVersion = $expected
+            sha256 = (Get-FileHash -LiteralPath (Join-Path $distributions[0].FullName 'Release\libcef.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+            verifiedUtc = [DateTime]::UtcNow.ToString('o')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $BuildRoot 'verified-engine.json') -Encoding utf8
+        Write-Output "Verified native distribution: $($distributions[0].FullName)"
     }
 }
 finally {

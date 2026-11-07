@@ -11,7 +11,7 @@ Get-Content D:\CrimsonCEF\logs\sync.stdout.log -Tail 20 -Wait
 Get-Content D:\CrimsonCEF\logs\compile.stdout.log -Tail 20 -Wait
 ```
 
-After source synchronization, `-Phase Build` resumes compilation using the existing Ninja outputs; `-Phase Package` creates the native distribution. `Stage-CefMedia.ps1` validates native version, commit and x64 architecture before copying a complete distribution into an isolated built application directory and checking every copied hash.
+After source synchronization, `-Phase Build` resumes compilation using the existing Ninja outputs; `-Phase Package` creates the native distribution and runs the media and browser regression checks. It writes `verified-engine.json` only after those checks pass. `Stage-CefMedia.ps1` validates native version, commit and x64 architecture before copying a complete distribution into an isolated built application directory and checking every copied hash.
 
 Build and stage the CEF integration test application first. Run its normal regression suite and the opt-in media checks against the staged engine before publishing. A matching version string alone does not prove AAC/H.264 decoding support.
 
