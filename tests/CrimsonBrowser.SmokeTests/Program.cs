@@ -141,6 +141,13 @@ try
     Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://www.youtube.com/watch?v=example"), "normal YouTube content keeps ad filtering");
     Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://accounts.google.com.evil.test/"), "authentication origins are exact");
     Console.WriteLine("PASS: Authentication-safe Shields request matching");
+    Assert(PopupNavigationPolicy.ShouldBlock("https://popads.net/open", true, false), "advertising popups are blocked even with user activation");
+    Assert(PopupNavigationPolicy.ShouldBlock("https://random.test/", true, true), "unsolicited popup windows are blocked after a player click");
+    Assert(PopupNavigationPolicy.ShouldBlock("https://example.test/", false, false), "automatic popups are blocked");
+    Assert(!PopupNavigationPolicy.ShouldBlock("https://example.test/article", true, false), "explicit links can still open a new tab");
+    Assert(!PopupNavigationPolicy.ShouldBlock("https://accounts.google.com/ServiceLogin", true, true), "Google sign-in popup remains available");
+    Assert(PopupNavigationPolicy.ShouldBlock("https://accounts.google.com.evil.test/", true, true), "authentication popup exceptions require the exact host");
+    Console.WriteLine("PASS: Popup navigation policy");
     return 0;
 }
 finally

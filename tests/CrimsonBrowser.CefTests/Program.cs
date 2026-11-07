@@ -37,10 +37,38 @@ internal static class Program
                     args.FirstOrDefault(a => a.StartsWith("--subprocess=", StringComparison.Ordinal))?[13..]);
                 Check(CrimsonBrowser.Services.CefRuntime.IsInitialized, "production CEF initialization succeeds with an isolated profile");
                 var context = Cef.GetGlobalRequestContext();
+                string? probeUrl = args.FirstOrDefault(argument => argument.StartsWith("--probe-live=", StringComparison.Ordinal))?[13..];
+                if (probeUrl != null)
+                {
+                    tab = new BrowserTab(context, isIncognito: true);
+                    window = new Window { Title = "Crimson media diagnostics", Width = 1000, Height = 700, Content = tab.WebView };
+                    tab.IsActive = true;
+                    window.Show();
+                    await Until(() => tab.WebView.IsBrowserInitialized && tab.WebView.CanExecuteJavascriptInMainFrame, "media probe ready");
+                    Console.WriteLine("CODECS: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({h264:MediaSource.isTypeSupported('video/mp4; codecs=\"avc1.42E01E\"'),aac:MediaSource.isTypeSupported('audio/mp4; codecs=\"mp4a.40.2\"'),vp9:MediaSource.isTypeSupported('video/webm; codecs=\"vp9\"'),opus:MediaSource.isTypeSupported('audio/webm; codecs=\"opus\"')})")).Result);
+                    tab.Navigate(probeUrl);
+                    await UntilAsync(async () =>
+                    {
+                        if (!tab.WebView.CanExecuteJavascriptInMainFrame) return false;
+                        var response = await tab.WebView.EvaluateScriptAsync("!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'");
+                        return response.Result is true;
+                    }, "public live response available");
+                    Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
+                    return;
+                }
                 context.RegisterSchemeHandlerFactory("https", "start.crimson",
                     new FolderSchemeHandlerFactory(Path.Combine(AppContext.BaseDirectory, "Resources"), schemeName: "https", hostName: "start.crimson", defaultPage: "startpage.html"));
                 File.WriteAllText(Path.Combine(root, "one.html"), "<!doctype html><title>CEF Test One</title><body>Crimson needle needle<input id='form'><a id='popup' href='https://smoke.crimson/two.html' target='_blank' style='position:absolute;left:20px;top:100px;width:200px;height:40px'>New tab</a></body>");
                 File.WriteAllText(Path.Combine(root, "two.html"), "<!doctype html><title>CEF Test Two</title><body>Second page<audio id='media' src='silence.wav' loop preload='auto'></audio></body>");
+                File.WriteAllText(Path.Combine(root, "player-fixture.html"), """
+                    <!doctype html><title>Popup player fixture</title><body style="margin:0">
+                    <video style="position:absolute;left:0;top:0;width:320px;height:180px"></video>
+                    <a id="overlay" href="https://random-ad.test/landing" target="_blank"
+                       style="position:absolute;left:0;top:0;width:320px;height:180px" onclick="window.playerClicks=(window.playerClicks||0)+1">Play</a>
+                    <button id="play" style="position:absolute;top:200px" onclick="window.openResult=window.open('https://random-ad.test/landing');window.playStarted=true">Play video</button>
+                    <a id="normal-link" href="https://smoke.crimson/two.html" target="_blank" style="position:absolute;top:250px">Article</a>
+                    </body>
+                    """);
                 using (var wave = new BinaryWriter(File.Create(Path.Combine(root, "silence.wav"))))
                 {
                     wave.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wave.Write(8036);
@@ -78,18 +106,69 @@ internal static class Program
                 tab.StopFind();
                 tab.WebView.ZoomFactor = 1.2;
                 Check(Math.Abs(tab.WebView.ZoomFactor - 1.2) < .01, "zoom conversion");
+                tab.WebView.ZoomFactor = 1;
                 string? popup = null;
                 tab.RequestNewTab += (_, url) => popup = url;
                 var host = tab.WebView.GetBrowser().GetHost();
                 // DevTools supplies user activation without desktop coordinates or timing races.
-                await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
-                    "{\"expression\":\"document.getElementById('popup').click()\",\"userGesture\":true}"));
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 120, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 120, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
                 await Until(() => popup == "https://smoke.crimson/two.html", "CEF popup callback");
                 Check(tab.Url == "https://smoke.crimson/one.html", "popup preserves source tab");
                 tab.Navigate("https://smoke.crimson/two.html");
                 await Until(() => tab.Title == "CEF Test Two" && !tab.IsLoading, "second navigation");
                 tab.GoBack();
                 await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "back navigation");
+                tab.Navigate("https://smoke.crimson/player-fixture.html");
+                await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                    (await tab.WebView.EvaluateScriptAsync("document.title==='Popup player fixture' && typeof window.__crimsonSetPopupProtection==='function'")).Result is true,
+                    "player popup protection is installed");
+                popup = null;
+                await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                    "{\"expression\":\"document.getElementById('play').click()\",\"userGesture\":true}"));
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.playStarted===true && window.openResult===null")).Result is true,
+                    "play handler continues while its advertising window.open is blocked");
+                Check(popup == null, "a play click does not create an advertising tab");
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.playerClicks===1")).Result is true,
+                    "trusted overlay click still reaches the player handler");
+                Check(popup == null && tab.Url == "https://smoke.crimson/player-fixture.html", "advertising link covering the video is cancelled");
+                await tab.WebView.EvaluateScriptAsync("document.getElementById('overlay').removeAttribute('target')");
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.playerClicks===2")).Result is true,
+                    "same-tab overlay click reaches the player handler");
+                Check(tab.Url == "https://smoke.crimson/player-fixture.html", "overlay advertising cannot replace the current tab");
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(20, 260, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(20, 260, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
+                await Until(() => popup == "https://smoke.crimson/two.html", "ordinary new-tab links remain functional with popup protection");
+                await tab.WebView.EvaluateScriptAsync("window.__crimsonSetPopupProtection(false);window.playStarted=false;");
+                popup = null;
+                int blockedBefore = CrimsonBrowser.Services.ShieldService.Instance.BlockedCount;
+                await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                    "{\"expression\":\"document.getElementById('play').click()\",\"userGesture\":true}"));
+                await Until(() => CrimsonBrowser.Services.ShieldService.Instance.BlockedCount > blockedBefore,
+                    "native protection rejects an advertising popup even when the page script guard is disabled");
+                Check(popup == null, "native popup verification does not authorize the play button as a link");
+                await tab.WebView.EvaluateScriptAsync("window.__crimsonSetPopupProtection(true)");
+                await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                    "{\"expression\":\"window.open('https://accounts.google.com/ServiceLogin','signin','width=400,height=500')\",\"userGesture\":true}"));
+                await Until(() => popup == "https://accounts.google.com/ServiceLogin", "Google authentication windows remain available");
+                tab.Navigate("https://smoke.crimson/one.html");
+                await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "normal fixture restored");
                 string? shortcut = null;
                 tab.RequestShortcut += (_, action) => shortcut = action;
                 tab.WebView.GetBrowser().GetHost().SendKeyEvent(new KeyEvent

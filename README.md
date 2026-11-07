@@ -27,6 +27,7 @@ Installerul și checksum-ul SHA-256 apar în `dist`. Aplicația completă este �
 - Fereastra și geometria sesiunii sunt afișate înaintea inițializării CEF; curățarea vechilor profiluri temporare rulează separat de pornirea interfeței.
 - Setări în română/engleză, motor de căutare și fundal personalizat.
 - Crimson Shields: filtrarea domeniilor cunoscute de reclame/tracking, script de filtrare și upgrade HTTPS.
+- Blocarea popup-urilor verifică linkul apăsat în cadrul sursă, blochează ferestrele publicitare declanșate de butoanele Play și anulează linkurile externe suprapuse peste video. Linkurile obișnuite și ferestrele Google/Microsoft de autentificare cu gest al utilizatorului sunt păstrate. Comutatorul se aplică și paginilor deja deschise; nu se folosesc temporizatoare pentru această protecție.
 - Sesiunea încarcă paginile restaurate doar la selectare. Taburile ascunse sunt limitate de CEF. După trei minute, modul Low RAM poate elibera complet motorul și suprafața unui tab inactiv, restaurându-l la selectare. Taburile cu formulare modificate, media în redare, permisiuni media acordate, descărcări active sau istoric Înapoi/Înainte sunt protejate; CEF nu poate importa acel istoric într-un motor nou. Ferestrele închise își dezabonează evenimentele globale.
 - Incognito folosește un context CEF fără cache pe disc, separat pentru fiecare fereastră; istoricul și permisiunile sale nu sunt persistate.
 - Descărcări cu alegerea destinației și progres în interfața Crimson.

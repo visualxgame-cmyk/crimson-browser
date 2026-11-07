@@ -11,9 +11,36 @@ internal sealed class TabLifeSpanHandler(BrowserTab tab) : LifeSpanHandler
         IWindowInfo windowInfo, IBrowserSettings settings, ref bool noJavascriptAccess, out IWebBrowser newBrowser)
     {
         newBrowser = null!;
-        if (userGesture || !ShieldService.Instance.IsShieldsEnabled || !ShieldService.Instance.BlockPopups)
+        bool protection = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups;
+        if (!protection)
             tab.OpenPopup(targetUrl);
+        else if (PopupNavigationPolicy.ShouldBlock(targetUrl, userGesture, disposition is WindowOpenDisposition.NewPopup or WindowOpenDisposition.NewWindow))
+            tab.Ui(control, ShieldService.Instance.IncrementBlockedCount);
+        else if (PopupNavigationPolicy.IsAuthenticationTarget(targetUrl))
+            tab.OpenPopup(targetUrl);
+        else
+        {
+            // CEF labels an advertiser's onclick window.open as a user gesture too.
+            // Require an explicit, trusted link in the source frame, without blocking its thread.
+            var result = frame.EvaluateScriptAsync("window.__crimsonAllowPopup?.(" + System.Text.Json.JsonSerializer.Serialize(targetUrl) + ") === true",
+                timeout: TimeSpan.FromSeconds(3));
+            _ = CompleteVerifiedPopup(control, targetUrl, result);
+        }
         return true;
+    }
+    private async Task CompleteVerifiedPopup(IWebBrowser source, string url, Task<JavascriptResponse> verification)
+    {
+        bool allowed = false;
+        try { allowed = (await verification).Result is true; }
+        catch (Exception error) when (error is ObjectDisposedException or TaskCanceledException or InvalidOperationException or TimeoutException)
+        {
+            // A closed source frame cannot authorize a pending popup.
+        }
+        tab.Ui(source, () =>
+        {
+            if (allowed) tab.OpenPopup(url);
+            else ShieldService.Instance.IncrementBlockedCount();
+        });
     }
     protected override bool DoClose(IWebBrowser control, IBrowser browser)
     {
@@ -42,6 +69,12 @@ internal sealed class TabRequestHandler(BrowserTab tab) : RequestHandler
     protected override bool OnBeforeBrowse(IWebBrowser control, IBrowser browser, IFrame frame,
         IRequest request, bool gesture, bool redirect)
     {
+        if (frame.IsMain && ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups &&
+            ShieldRequestPolicy.ShouldBlockUrl(request.Url))
+        {
+            tab.Ui(control, ShieldService.Instance.IncrementBlockedCount);
+            return true;
+        }
         if (frame.IsMain && ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.EnforceHttps &&
             Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) && uri.Scheme == "http" && !uri.IsLoopback)
         {
@@ -200,6 +233,9 @@ internal sealed class TabRenderHandler(BrowserTab tab) : IRenderProcessMessageHa
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _mediaTokens = new();
     public void OnContextCreated(IWebBrowser control, IBrowser browser, IFrame frame)
     {
+        bool protectPopups = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups;
+        frame.ExecuteJavaScriptAsync(PopupProtectionScript.Source + "\nwindow.__crimsonSetPopupProtection(" +
+            (protectPopups ? "true" : "false") + ");");
         if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers &&
             !ShieldRequestPolicy.IsAuthenticationPage(frame.Url))
             frame.ExecuteJavaScriptAsync(BrowserScripts.AdBlock);

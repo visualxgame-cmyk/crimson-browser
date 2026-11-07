@@ -49,6 +49,7 @@ public partial class App : Application
             MainWindow = _mainWindow;
             _mainWindow.ContentRendered += MainWindow_FirstContentRendered;
             _mainWindow.Show();
+            ShieldService.Instance.PropertyChanged += PopupSettingsChanged;
         }
         catch (Exception ex)
         {
@@ -146,6 +147,7 @@ public partial class App : Application
             MessageBox.Show(LocalizationService.Instance.Get("StorageExitError"),
                 LocalizationService.Instance.Get("StorageErrorTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         ProfileStorageDiagnostics.Failed -= ProfileStorageFailed;
+        if (_mainWindow != null) ShieldService.Instance.PropertyChanged -= PopupSettingsChanged;
         if (CefRuntime.IsInitialized) CefRuntime.Shutdown();
         _singleInstance?.Dispose();
         base.OnExit(e);
@@ -161,6 +163,15 @@ public partial class App : Application
             var loc = LocalizationService.Instance;
             CrimsonDialog.Info(_mainWindow, loc.Get("StorageErrorTitle"), loc.Format("StorageErrorMessage", file, error.Message));
         }));
+    }
+
+    private void PopupSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is not (nameof(ShieldService.IsShieldsEnabled) or nameof(ShieldService.BlockPopups))) return;
+        foreach (var window in Windows.OfType<MainWindow>())
+            foreach (var tab in window.Tabs) tab.UpdatePopupProtection();
+        foreach (var window in Windows.OfType<IncognitoWindow>())
+            foreach (var tab in window.Tabs) tab.UpdatePopupProtection();
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

@@ -125,6 +125,11 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
                 Guid.TryParseExact(message.Substring(14, 32), "N", out var mediaToken))
                 Ui(view, () => SetMediaFrame(message.Substring(14, 32), message[^1] == '1'));
             if (message == "crimson-form-dirty") Ui(view, () => _formDirty = true);
+            if (message == "crimson-popup-blocked") Ui(view, () =>
+            {
+                if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups)
+                    ShieldService.Instance.IncrementBlockedCount();
+            });
         };
         view.Address = "https://start.crimson/startpage.html";
         return view;
@@ -177,6 +182,17 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
         completion?.TrySetResult((index, count));
     }
     public void NoteActivity() => LastActivityUtc = DateTime.UtcNow;
+    internal void UpdatePopupProtection()
+    {
+        if (IsDisposed || _isDiscarded || !WebView.IsBrowserInitialized) return;
+        bool enabled = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups;
+        var browser = WebView.GetBrowser();
+        foreach (string identifier in browser.GetFrameIdentifiers())
+        {
+            using var frame = browser.GetFrameByIdentifier(identifier);
+            frame?.ExecuteJavaScriptAsync("window.__crimsonSetPopupProtection?.(" + (enabled ? "true" : "false") + ");");
+        }
+    }
     public void ApplyMemoryPolicy(bool active)
     {
         if (IsDisposed || _isDiscarded || !WebView.IsBrowserInitialized) return;
