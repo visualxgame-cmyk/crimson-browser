@@ -16,6 +16,33 @@
         <WindowChrome CaptionHeight="42" GlassFrameThickness="0" CornerRadius="0" ResizeBorderThickness="6" />
     </WindowChrome.WindowChrome>
 
+    <Window.Resources>
+        <Style x:Key="CrimsonBookmarkButtonStyle" TargetType="Button" BasedOn="{StaticResource CrimsonNavButtonStyle}">
+            <Setter Property="Width" Value="Auto" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="MaxWidth" Value="180" />
+            <Setter Property="Padding" Value="8 0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BookmarkSurface" Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BookmarkSurface" Property="Background" Value="#252836" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="BookmarkSurface" Property="Background" Value="#252836" /></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="BookmarkSurface" Property="Background" Value="#351722" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <!-- Global Key Bindings -->
     <Window.InputBindings>
         <KeyBinding Key="T"  Modifiers="Control"              Command="{Binding NewTabCommand,            RelativeSource={RelativeSource AncestorType=Window}}" />
@@ -175,7 +202,7 @@
         <!-- ============================================================ -->
         <!-- ROW 1: NAVIGATION & OMNIBOX TOOLBAR                         -->
         <!-- ============================================================ -->
-        <Border Grid.Row="1" Background="{StaticResource CrimsonBgBarBrush}" BorderBrush="#1C1D26" BorderThickness="0 0 0 1"
+        <Border Grid.Row="1" x:Name="NavigationBar" Background="{StaticResource CrimsonBgBarBrush}" BorderBrush="#1C1D26" BorderThickness="0 0 0 1"
                 Padding="10 0 10 0">
             <Grid VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
@@ -309,8 +336,9 @@
         <!-- ============================================================ -->
         <Border Grid.Row="2" x:Name="BookmarksBarBorder" Background="#0F1018" BorderBrush="#1C1D26"
                 BorderThickness="0 0 0 1" Padding="10 4" Visibility="Collapsed">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <ItemsControl x:Name="BookmarksBarItemsControl">
+            <ScrollViewer x:Name="BookmarksScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" CanContentScroll="False"
+                          PreviewMouseWheel="Bookmarks_PreviewMouseWheel">
+                <ItemsControl x:Name="BookmarksBarItemsControl" HorizontalAlignment="Left">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Horizontal" />
@@ -318,13 +346,13 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Button Style="{StaticResource CrimsonNavButtonStyle}" Margin="0 0 4 0"
+                            <Button Style="{StaticResource CrimsonBookmarkButtonStyle}" Margin="0 0 4 0"
                                     Height="26" Padding="8 0"
-                                    ToolTip="{Binding Url}"
+                                    ToolTip="{Binding TooltipText}"
                                     Click="BookmarkBarItem_Click"
                                     Tag="{Binding}">
-                                <TextBlock Text="{Binding Title}" FontSize="11.5" Foreground="#C9CCD8"
-                                           MaxWidth="130" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding DisplayTitle}" FontSize="11.5" Foreground="#C9CCD8"
+                                           MaxWidth="160" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                             </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -336,6 +364,10 @@
         <!-- ROW 3: WEB CONTENT VIEWPORT                                 -->
         <!-- ============================================================ -->
         <Grid Grid.Row="4" Background="{StaticResource CrimsonBgDarkBrush}" x:Name="WebContainer" />
+        <Border Grid.Row="4" x:Name="StartupPlaceholder" Background="{StaticResource CrimsonBgDarkBrush}" Visibility="Collapsed">
+            <TextBlock Text="{loc:Loc StartingBrowser}" Foreground="{StaticResource TextMutedBrush}" FontSize="13"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
 
         <!-- ============================================================ -->
         <!-- FLOATING: CRIMSON SHIELDS POPUP                             -->

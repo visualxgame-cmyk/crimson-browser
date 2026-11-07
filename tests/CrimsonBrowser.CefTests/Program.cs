@@ -33,16 +33,9 @@ internal static class Program
             int exitCode = 0;
             try
             {
-                var settings = new CefSharp.Wpf.CefSettings
-                {
-                    BrowserSubprocessPath = args.FirstOrDefault(a => a.StartsWith("--subprocess=", StringComparison.Ordinal))?[13..]
-                        ?? Path.Combine(AppContext.BaseDirectory, "CrimsonBrowser.exe"),
-                    RootCachePath = root,
-                    CachePath = Path.Combine(root, "Default"),
-                    LogFile = Path.Combine(root, "cef.log")
-                };
-                Cef.EnableWaitForBrowsersToClose();
-                Check(Cef.Initialize(settings, false, browserProcessHandler: null), "CEF initialized with Crimson subprocesses");
+                CrimsonBrowser.Services.CefRuntime.Initialize(root,
+                    args.FirstOrDefault(a => a.StartsWith("--subprocess=", StringComparison.Ordinal))?[13..]);
+                Check(CrimsonBrowser.Services.CefRuntime.IsInitialized, "production CEF initialization succeeds with an isolated profile");
                 var context = Cef.GetGlobalRequestContext();
                 context.RegisterSchemeHandlerFactory("https", "start.crimson",
                     new FolderSchemeHandlerFactory(Path.Combine(AppContext.BaseDirectory, "Resources"), schemeName: "https", hostName: "start.crimson", defaultPage: "startpage.html"));
@@ -215,8 +208,67 @@ internal static class Program
                     await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
                     Check(!main.Tabs[^1].WebView.IsBrowserInitialized,
                         "background session tabs do not initialize native renderers before selection");
+                    var bookmarks = (ItemsControl)main.FindName("BookmarksBarItemsControl");
+                    bookmarks.ItemsSource = new[]
+                    {
+                        new CrimsonBrowser.Services.Bookmark { Title = "YouTube", Url = "https://youtube.com/" },
+                        new CrimsonBrowser.Services.Bookmark { Title = new string('W', 120), Url = "https://example.test/long" },
+                        new CrimsonBrowser.Services.Bookmark { Title = "", Url = "https://chatgpt.com/" }
+                    };
+                    main.ToggleBookmarksBar();
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    bookmarks.UpdateLayout();
+                    var firstBookmark = FindChild<Button>(bookmarks.ItemContainerGenerator.ContainerFromIndex(0));
+                    var longBookmark = FindChild<Button>(bookmarks.ItemContainerGenerator.ContainerFromIndex(1));
+                    var unnamedBookmark = FindChild<TextBlock>(bookmarks.ItemContainerGenerator.ContainerFromIndex(2));
+                    Check(firstBookmark.ActualWidth > 50, "bookmark labels are not constrained to navigation icon width");
+                    Check(longBookmark.ActualWidth <= 180 && longBookmark.ActualHeight >= 26, "long bookmark labels remain bounded and fully visible vertically");
+                    Check(unnamedBookmark.Text == "chatgpt.com", "bookmarks without a title display their site name");
+                    if (args.Contains("--capture-bookmarks"))
+                    {
+                        var bar = (FrameworkElement)main.FindName("BookmarksBarBorder");
+                        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(bar.ActualWidth),
+                            (int)Math.Ceiling(bar.ActualHeight), 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                        var drawing = new System.Windows.Media.DrawingVisual();
+                        using (var canvas = drawing.RenderOpen())
+                            canvas.DrawRectangle(new System.Windows.Media.VisualBrush(bar), null, new Rect(0, 0, bar.ActualWidth, bar.ActualHeight));
+                        bitmap.Render(drawing);
+                        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+                        using var image = File.Create(Path.Combine(AppContext.BaseDirectory, "bookmarks-preview.png"));
+                        encoder.Save(image);
+                    }
+                    bookmarks.ItemsSource = Enumerable.Range(1, 16).Select(index => new CrimsonBrowser.Services.Bookmark
+                    {
+                        Title = "Bookmark " + index + " with a longer title", Url = "https://example.test/" + index
+                    }).ToArray();
+                    main.Width = 700;
+                    bookmarks.UpdateLayout();
+                    main.UpdateLayout();
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    var bookmarkScroll = (ScrollViewer)main.FindName("BookmarksScrollViewer");
+                    bookmarkScroll.UpdateLayout();
+                    Check(bookmarkScroll.ScrollableWidth > 0 && bookmarkScroll.ViewportHeight >= 26,
+                        "overflow bookmarks keep full label height in a narrow window");
+                    bookmarkScroll.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+                        { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+                    await main.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(bookmarkScroll.HorizontalOffset > 0, "mouse wheel reaches overflow bookmarks horizontally");
                 }
                 finally { main.Close(); }
+                var deferred = new CrimsonBrowser.MainWindow(deferBrowserStartup: true);
+                deferred.Show();
+                try
+                {
+                    await deferred.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+                    Check(deferred.Tabs.Count == 0 && !deferred.NewWindowCommand.CanExecute(null), "startup shell waits for engine readiness before creating browsers");
+                    deferred.CompleteBrowserStartup();
+                    deferred.CompleteBrowserStartup();
+                    Check(deferred.Tabs.Count == 1 && deferred.NewTabCommand.CanExecute(null), "engine completion initializes the shell once and enables navigation");
+                    Check(((Border)deferred.FindName("StartupPlaceholder")).Visibility == Visibility.Collapsed,
+                        "startup placeholder is removed after initialization");
+                }
+                finally { deferred.Close(); }
                 Console.WriteLine("PASS: CEF integration");
             }
             catch (Exception ex) { Console.Error.WriteLine(ex); exitCode = 1; }
@@ -225,7 +277,8 @@ internal static class Program
                 tab?.Dispose();
                 if (window != null) { window.Content = null; window.Close(); }
                 privateContext?.Dispose();
-                if (Cef.IsInitialized == true) { Cef.WaitForBrowsersToClose(); Cef.Shutdown(); }
+                CrimsonBrowser.Services.CefRuntime.Shutdown();
+                CrimsonBrowser.Services.CefRuntime.Shutdown();
                 Console.WriteLine("Test profile: " + root);
                 app.Shutdown(exitCode);
             }
@@ -237,6 +290,26 @@ internal static class Program
     {
         if (!condition) throw new InvalidOperationException(message);
         Console.WriteLine("PASS: " + message);
+    }
+    private static T FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent is T match) return match;
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = FindChildOrNull<T>(System.Windows.Media.VisualTreeHelper.GetChild(parent, i));
+            if (child != null) return child;
+        }
+        throw new InvalidOperationException("Missing visual element " + typeof(T).Name);
+    }
+    private static T? FindChildOrNull<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent is T match) return match;
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = FindChildOrNull<T>(System.Windows.Media.VisualTreeHelper.GetChild(parent, i));
+            if (child != null) return child;
+        }
+        return null;
     }
     private static async Task Until(Func<bool> condition, string description)
     {

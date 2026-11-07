@@ -24,6 +24,9 @@ public partial class MainWindow : Window
     private bool _isOmniboxFocused;
 
     private readonly bool _restoreSession;
+    private readonly bool _deferBrowserStartup;
+    private readonly SessionState? _startupSession;
+    private bool _startupCompleted;
     private bool _isFullscreen;
     private WindowState _preFullscreenState = WindowState.Normal;
     private Rect _preFullscreenBounds = Rect.Empty;
@@ -66,27 +69,34 @@ public partial class MainWindow : Window
     public ICommand ZoomOutCommand           { get; }
 
     public MainWindow(bool restoreSession = false,
-        Func<string, IReadOnlyList<OmniboxSuggestion>>? addressSuggestions = null)
+        Func<string, IReadOnlyList<OmniboxSuggestion>>? addressSuggestions = null,
+        bool deferBrowserStartup = false)
     {
         _restoreSession = restoreSession;
+        _deferBrowserStartup = deferBrowserStartup;
+        _startupSession = restoreSession && App.PendingStartupUrl is null ? SessionService.Load() : null;
         _addressSuggestions = addressSuggestions ?? (query => OmniboxSuggestions.Search(HistoryService.Instance.Entries, query));
 
         InitializeComponent();
+        if (_startupSession != null) ApplySessionBounds(_startupSession);
+        StartupPlaceholder.Visibility = deferBrowserStartup ? Visibility.Visible : Visibility.Collapsed;
+        NavigationBar.IsEnabled = !deferBrowserStartup;
+        BookmarksBarItemsControl.IsEnabled = !deferBrowserStartup;
 
         _permissionBroker = new PermissionBroker(this, persistChoices: true);
 
-        NewTabCommand            = new RelayCommand(_ => AddNewTab());
+        NewTabCommand            = new RelayCommand(_ => AddNewTab(), _ => _browserInitialized);
         CloseCurrentTabCommand   = new RelayCommand(_ => { if (_activeTab != null) CloseTab(_activeTab); });
         RefreshCommand           = new RelayCommand(_ => _activeTab?.Reload());
         FocusOmniboxCommand      = new RelayCommand(_ => FocusOmnibox());
         OpenDevToolsCommand      = new RelayCommand(_ => _activeTab?.ShowDevTools());
         OpenHistoryCommand       = new RelayCommand(_ => OpenHistory());
-        OpenIncognitoCommand     = new RelayCommand(_ => OpenIncognito());
+        OpenIncognitoCommand     = new RelayCommand(_ => OpenIncognito(), _ => _browserInitialized);
         ReopenClosedTabCommand   = new RelayCommand(_ => ReopenLastTab());
         ToggleBookmarksBarCommand = new RelayCommand(_ => ToggleBookmarksBar());
         ToggleBookmarkCommand    = new RelayCommand(_ => ToggleCurrentBookmark());
-        NewWindowCommand         = new RelayCommand(_ => { var w = new MainWindow(); w.Show(); });
-        ToggleFullscreenCommand  = new RelayCommand(_ => ToggleFullscreen());
+        NewWindowCommand         = new RelayCommand(_ => { var w = new MainWindow(); w.Show(); }, _ => _browserInitialized);
+        ToggleFullscreenCommand  = new RelayCommand(_ => ToggleFullscreen(), _ => _browserInitialized);
         NextTabCommand           = new RelayCommand(_ => SelectNextTab(1));
         PrevTabCommand           = new RelayCommand(_ => SelectNextTab(-1));
         FindCommand              = new RelayCommand(_ => OpenFind());
@@ -122,7 +132,19 @@ public partial class MainWindow : Window
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        if (!_deferBrowserStartup) CompleteBrowserStartup();
+    }
+
+    internal void CompleteBrowserStartup()
+    {
+        if (_startupCompleted || !IsLoaded) return;
+        _startupCompleted = true;
         InitializeBrowserEnvironment();
+        if (!_browserInitialized) return;
+        StartupPlaceholder.Visibility = Visibility.Collapsed;
+        NavigationBar.IsEnabled = true;
+        BookmarksBarItemsControl.IsEnabled = true;
+        CommandManager.InvalidateRequerySuggested();
         _memorySaverTimer.Start();
         ApplyMemorySaverPolicy();
         if (_restoreSession) _ = CheckForUpdatesAutomaticallyAsync();
@@ -139,11 +161,8 @@ public partial class MainWindow : Window
             string? startupUrl = _restoreSession ? App.TakePendingStartupUrl() : null;
 
             SessionState? session = _restoreSession && startupUrl is null
-                ? SessionService.Load()
+                ? _startupSession
                 : null;
-
-            if (session is not null)
-                ApplySessionBounds(session);
 
             if (!string.IsNullOrWhiteSpace(startupUrl))
             {
@@ -382,6 +401,7 @@ public partial class MainWindow : Window
 
     private void SaveSession()
     {
+        if (!_browserInitialized) return;
         // Only the primary window owns the shared session file.
         if (Application.Current?.MainWindow != this) return;
 
@@ -1013,6 +1033,15 @@ public partial class MainWindow : Window
         if (sender is Button btn && btn.Tag is Bookmark bm)
         {
             _activeTab?.Navigate(bm.Url);
+        }
+    }
+
+    private void Bookmarks_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is ScrollViewer scroll && scroll.ScrollableWidth > 0)
+        {
+            scroll.ScrollToHorizontalOffset(scroll.HorizontalOffset - e.Delta);
+            e.Handled = true;
         }
     }
 

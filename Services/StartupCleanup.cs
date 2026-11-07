@@ -11,15 +11,18 @@ internal static class StartupCleanup
     {
         try
         {
-            string temporaryRoot = Path.GetTempPath();
+            string temporaryRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
             DateTime cutoff = DateTime.UtcNow.AddDays(-1);
 
             foreach (string folder in Directory.EnumerateDirectories(temporaryRoot, IncognitoPrefix + "*"))
             {
                 try
                 {
+                    string candidate = Path.GetFullPath(folder);
+                    if (!candidate.StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase) ||
+                        (File.GetAttributes(candidate) & FileAttributes.ReparsePoint) != 0) continue;
                     if (Directory.GetLastWriteTimeUtc(folder) < cutoff)
-                        Directory.Delete(folder, recursive: true);
+                        Directory.Delete(candidate, recursive: true);
                 }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }

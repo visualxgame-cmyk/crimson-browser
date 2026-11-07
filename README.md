@@ -9,6 +9,7 @@ Necesită Windows x64, .NET 10 SDK și Microsoft Visual C++ 2019 sau mai nou (x6
 ```powershell
 dotnet build CrimsonBrowser.csproj -c Release
 dotnet run --project tests/CrimsonBrowser.SmokeTests -c Release
+dotnet run --project tests/CrimsonBrowser.StartupTests -c Release
 dotnet run --project tests/CrimsonBrowser.CefTests -c Release
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
 ```
@@ -22,6 +23,8 @@ Installerul și checksum-ul SHA-256 apar în `dist`. Aplicația completă este �
 - Taburi, reordonare prin tragere, sesiune, linkuri externe în tab nou.
 - Bara de adrese completează domeniile vizitate și afișează până la șase sugestii locale din istoric, fără cereri de rețea.
 - Favorite, istoric, căutare în pagină, zoom, fullscreen și DevTools.
+- Bara de favorite folosește lățimi adaptate titlurilor, afișează domeniul când titlul lipsește și permite derulare orizontală la depășirea spațiului disponibil.
+- Fereastra și geometria sesiunii sunt afișate înaintea inițializării CEF; curățarea vechilor profiluri temporare rulează separat de pornirea interfeței.
 - Setări în română/engleză, motor de căutare și fundal personalizat.
 - Crimson Shields: filtrarea domeniilor cunoscute de reclame/tracking, script de filtrare și upgrade HTTPS.
 - Sesiunea încarcă paginile restaurate doar la selectare. Taburile ascunse sunt limitate de CEF. După trei minute, modul Low RAM poate elibera complet motorul și suprafața unui tab inactiv, restaurându-l la selectare. Taburile cu formulare modificate, media în redare, permisiuni media acordate, descărcări active sau istoric Înapoi/Înainte sunt protejate; CEF nu poate importa acel istoric într-un motor nou. Ferestrele închise își dezabonează evenimentele globale.

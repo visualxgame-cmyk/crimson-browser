@@ -11,6 +11,7 @@ public partial class App : Application
     private SingleInstanceService? _singleInstance;
     private MainWindow? _mainWindow;
     private readonly Queue<string> _pendingMessages = new();
+    private bool _shuttingDown;
 
     internal static string? PendingStartupUrl { get; private set; }
 
@@ -37,26 +38,52 @@ public partial class App : Application
 
         _singleInstance.MessageReceived += OnExternalMessage;
         PendingStartupUrl = StartupUrl(e.Args);
-        StartupCleanup.RemoveStaleIncognitoProfiles();
 
         base.OnStartup(e);
 
-        try { CefRuntime.Initialize(); }
+        try
+        {
+            _mainWindow = new MainWindow(restoreSession: true, deferBrowserStartup: true);
+            MainWindow = _mainWindow;
+            _mainWindow.ContentRendered += MainWindow_FirstContentRendered;
+            _mainWindow.Show();
+        }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Crimson Browser — CEF", MessageBoxButton.OK, MessageBoxImage.Error);
+            LogException("Startup", ex);
+            MessageBox.Show(ex.Message, "Crimson Browser", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
             return;
         }
-
-        _mainWindow = new MainWindow(restoreSession: true);
-        MainWindow = _mainWindow;
-        _mainWindow.Show();
 
         while (_pendingMessages.TryDequeue(out string? message))
         {
             OnExternalMessage(message);
         }
+    }
+
+    private void MainWindow_FirstContentRendered(object? sender, EventArgs e)
+    {
+        if (sender is not MainWindow window) return;
+        window.ContentRendered -= MainWindow_FirstContentRendered;
+        // Give WPF its first frame before loading the native CEF engine. Initialize
+        // and Shutdown remain on this same application thread, as required by CEF.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_shuttingDown || !window.IsLoaded) return;
+            try
+            {
+                CefRuntime.Initialize();
+                window.CompleteBrowserStartup();
+                _ = Task.Run(StartupCleanup.RemoveStaleIncognitoProfiles);
+            }
+            catch (Exception ex)
+            {
+                LogException("Engine startup", ex);
+                MessageBox.Show(window, ex.Message, "Crimson Browser — CEF", MessageBoxButton.OK, MessageBoxImage.Error);
+                Shutdown(1);
+            }
+        }), DispatcherPriority.Background);
     }
 
     private static void ForwardToRunningInstance(string message)
@@ -108,12 +135,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _shuttingDown = true;
         foreach (var window in Windows.OfType<MainWindow>().ToArray()) window.DisposeBrowsers();
-        if (CefSharp.Cef.IsInitialized == true)
-        {
-            CefSharp.Cef.WaitForBrowsersToClose();
-            CefSharp.Cef.Shutdown();
-        }
+        if (CefRuntime.IsInitialized) CefRuntime.Shutdown();
         _singleInstance?.Dispose();
         base.OnExit(e);
     }

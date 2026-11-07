@@ -7,6 +7,9 @@ public class Bookmark
 {
     public string Title { get; set; } = string.Empty;
     public string Url   { get; set; } = string.Empty;
+    public string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title :
+        Uri.TryCreate(Url, UriKind.Absolute, out var uri) && uri.Host.Length > 0 ? uri.Host : Url;
+    public string TooltipText => DisplayTitle + Environment.NewLine + Url;
 }
 
 public class BookmarksService

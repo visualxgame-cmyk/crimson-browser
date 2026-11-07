@@ -34,6 +34,7 @@ public class LocalizationService : INotifyPropertyChanged
         ["en"] = new()
         {
             ["AppTitle"] = "Crimson Browser",
+            ["StartingBrowser"] = "Opening Crimson Browser…",
             ["NewTab"] = "New Tab",
             ["OmniboxPlaceholder"] = "Search with Google or enter web address...",
             ["BackTooltip"] = "Back (Alt+Left)",
@@ -262,6 +263,7 @@ public class LocalizationService : INotifyPropertyChanged
         ["ro"] = new()
         {
             ["AppTitle"] = "Crimson Browser",
+            ["StartingBrowser"] = "Se deschide Crimson Browser…",
             ["NewTab"] = "Filă nouă",
             ["OmniboxPlaceholder"] = "Caută pe Google sau introdu o adresă URL...",
             ["BackTooltip"] = "Înapoi (Alt+Stânga)",
