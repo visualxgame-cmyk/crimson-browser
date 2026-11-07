@@ -43,6 +43,17 @@ $manifest = foreach ($file in $files) {
     if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $sourceHash) { throw "Copy verification failed: $relative" }
     [ordered]@{ path = $relative; sha256 = $sourceHash.ToLowerInvariant() }
 }
+foreach ($notice in @('LICENSE.txt', 'CREDITS.html')) {
+    $sourceNotice = Join-Path $DistributionRoot $notice
+    if (!(Test-Path -LiteralPath $sourceNotice)) { continue }
+    $relative = Join-Path 'Resources\Licenses' ('CEF-Native-' + $notice)
+    $destination = Join-Path $ApplicationDirectory $relative
+    New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($destination)) -Force | Out-Null
+    Copy-Item -LiteralPath $sourceNotice -Destination $destination -Force
+    $hash = (Get-FileHash -LiteralPath $sourceNotice -Algorithm SHA256).Hash
+    if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $hash) { throw "Notice copy verification failed: $notice" }
+    $manifest += [ordered]@{ path = $relative; sha256 = $hash.ToLowerInvariant() }
+}
 [ordered]@{ nativeVersion = $actual; files = @($manifest) } | ConvertTo-Json -Depth 5 |
     Set-Content -LiteralPath (Join-Path $ApplicationDirectory 'crimson-cef-native.json') -Encoding utf8
 Write-Output "Staged and verified $($files.Count) native CEF files. Media decoding must be tested separately."

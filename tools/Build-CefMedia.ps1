@@ -37,7 +37,7 @@ $lock = [IO.File]::Open((Join-Path $BuildRoot 'engine-build.lock'), [IO.FileMode
 
 # These settings affect this build process and its children only.
 $environment = @{}
-foreach ($name in @('PATH', 'DEPOT_TOOLS_WIN_TOOLCHAIN', 'DEPOT_TOOLS_UPDATE', 'GN_DEFINES', 'GN_OUT_CONFIGS', 'GYP_MSVS_OVERRIDE_PATH')) {
+foreach ($name in @('PATH', 'DEPOT_TOOLS_WIN_TOOLCHAIN', 'DEPOT_TOOLS_UPDATE', 'GN_DEFINES', 'GN_ARGUMENTS', 'GN_OUT_CONFIGS', 'GYP_MSVS_OVERRIDE_PATH')) {
     $environment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 function Invoke-BuildTool([string]$Executable, [string[]]$Arguments, [string]$Name, [string]$WorkingDirectory) {
@@ -73,6 +73,7 @@ try {
     $env:DEPOT_TOOLS_UPDATE = '0'
     $env:GYP_MSVS_OVERRIDE_PATH = $vs.Trim()
     $env:GN_OUT_CONFIGS = 'Release_GN_x64'
+    $env:GN_ARGUMENTS = ''
     $env:GN_DEFINES = 'is_official_build=true is_component_build=false proprietary_codecs=true ffmpeg_branding=Chrome symbol_level=0 blink_symbol_level=0 v8_symbol_level=0 use_thin_lto=false chrome_pgo_phase=0'
     if ($Phase -in @('Sync', 'All')) {
         if (!(Test-Path -LiteralPath $automate)) {
