@@ -73,7 +73,7 @@ try {
     $env:DEPOT_TOOLS_UPDATE = '0'
     $env:GYP_MSVS_OVERRIDE_PATH = $vs.Trim()
     $env:GN_OUT_CONFIGS = 'Release_GN_x64'
-    $env:GN_ARGUMENTS = ''
+    $env:GN_ARGUMENTS = $null
     $env:GN_DEFINES = 'is_official_build=true is_component_build=false proprietary_codecs=true ffmpeg_branding=Chrome symbol_level=0 blink_symbol_level=0 v8_symbol_level=0 use_thin_lto=false chrome_pgo_phase=0'
     if ($Phase -in @('Sync', 'All')) {
         if (!(Test-Path -LiteralPath $automate)) {
