@@ -33,7 +33,11 @@ internal static class BrowserScripts
                         'adSlots',
                         'adBreakHeartbeatParams',
                         'adParams',
-                        'playerAdParams'
+                        'playerAdParams',
+                        // YouTube's player only stops playback and rewrites the status into
+                        // the ad-block enforcement wall when this renderer is present. Removing
+                        // it from the payload disarms the client-side enforcement itself.
+                        'bkaEnforcementMessageViewModel'
                     ];
 
                     function stripAds(root) {
@@ -55,7 +59,8 @@ internal static class BrowserScripts
 
                                     if (key === 'adBreakHeartbeatParams' ||
                                         key === 'adParams' ||
-                                        key === 'playerAdParams') {
+                                        key === 'playerAdParams' ||
+                                        key === 'bkaEnforcementMessageViewModel') {
                                         try { delete node[key]; } catch (e) { }
                                     } else if (Array.isArray(node[key])) {
                                         node[key] = [];
@@ -108,7 +113,8 @@ internal static class BrowserScripts
                                 (text.indexOf('adPlacements') !== -1 ||
                                  text.indexOf('playerAds') !== -1 ||
                                  text.indexOf('adSlots') !== -1 ||
-                                 text.indexOf('adBreakHeartbeatParams') !== -1)) {
+                                 text.indexOf('adBreakHeartbeatParams') !== -1 ||
+                                 text.indexOf('bkaEnforcementMessageViewModel') !== -1)) {
                                 try { stripAds(result); } catch (e) { }
                             }
                             return result;
@@ -118,9 +124,44 @@ internal static class BrowserScripts
                     // Use YouTube's WEB channel playback context only after its specific
                     // ad-block enforcement response. Ordinary playback, login, live chat,
                     // comments and other origins keep their original request bodies.
-                    var recoveredVideos = new Set();
+                    var playbackRecoveries = new Map();
+                    var playbackModes = ['channel', 'lactmilli', 'yahi', 'inline'];
                     var nativeParse = JSON.parse;
                     var nativeStringify = JSON.stringify;
+                    function preparePlayerRequest(request) {
+                        if (!enabled || !request || typeof request !== 'object' ||
+                            request.context?.client?.clientName !== 'WEB' ||
+                            !request.playbackContext?.contentPlaybackContext || location.pathname.startsWith('/shorts/')) return request;
+                        var recovery = playbackRecoveries.get(request.videoId);
+                        if (!recovery || recovery.attempt < 0) return request;
+                        var mode = playbackModes[recovery.attempt];
+                        var client = Object.assign({}, request.context.client);
+                        var playback = Object.assign({}, request.playbackContext.contentPlaybackContext);
+                        var result = Object.assign({}, request, {
+                            context: Object.assign({}, request.context, {client:client}),
+                            playbackContext: Object.assign({}, request.playbackContext, {contentPlaybackContext:playback})
+                        });
+                        if (mode === 'channel') client.clientScreen = 'CHANNEL';
+                        else if (mode === 'lactmilli') result.params = '8AUB';
+                        else if (mode === 'yahi') result.params = 'YAHI';
+                        else if (mode === 'inline') playback.isInlinePlaybackNoAd = true;
+                        if (typeof client.userAgent === 'string') {
+                            client.userAgent = client.userAgent.replace(/; (?:channel|lactmilli|yahi|inline)\b/g, '')
+                                .replace(/(Mozilla\/5\.0 \([^)]+)/, '$1; ' + mode);
+                        }
+                        if (mode !== 'yahi') playback.lactMilliseconds = String(Date.now());
+                        playback.referer = (playback.referer || location.href).replace(/(?:#reloadxhr)?$/, '#reloadxhr');
+                        return result;
+                    }
+                    // Some YouTube transports capture fetch/XHR before CEF's context
+                    // notification. Adapt serialization too, only after a proven enforcement
+                    // response and only for that video's WEB playback request.
+                    function recoveryStringify(value, replacer, space) {
+                        return nativeStringify.call(this, preparePlayerRequest(value), replacer, space);
+                    }
+                    function installRecoverySerialization() {
+                        if (JSON.stringify === nativeStringify) JSON.stringify = recoveryStringify;
+                    }
                     function playerEndpoint(value) {
                         try {
                             var url = new URL(value, location.href);
@@ -128,14 +169,11 @@ internal static class BrowserScripts
                         } catch (e) { return false; }
                     }
                     function playerBody(body) {
-                        if (!enabled || recoveredVideos.size === 0 || typeof body !== 'string') return body;
+                        if (!enabled || playbackRecoveries.size === 0 || typeof body !== 'string') return body;
                         try {
                             var request = nativeParse(body);
-                            if (request?.context?.client?.clientName !== 'WEB' || !recoveredVideos.has(request.videoId) ||
-                                !request.playbackContext?.contentPlaybackContext ||
-                                location.pathname.startsWith('/shorts/')) return body;
-                            request.context.client.clientScreen = 'CHANNEL';
-                            return nativeStringify(request);
+                            var modified = preparePlayerRequest(request);
+                            return modified === request ? body : nativeStringify(modified);
                         } catch (e) { return body; }
                     }
                     // Response.json does not call the page's JSON.parse override.
@@ -155,7 +193,7 @@ internal static class BrowserScripts
                         if (endpoint && init && typeof init.body === 'string') {
                             var body = playerBody(init.body);
                             if (body !== init.body) init = Object.assign({}, init, {body:body});
-                        } else if (enabled && endpoint && recoveredVideos.size > 0 && input instanceof Request &&
+                        } else if (enabled && endpoint && playbackRecoveries.size > 0 && input instanceof Request &&
                             input.method === 'POST' && !(init && init.body != null)) {
                             var original = await input.clone().text();
                             var modified = playerBody(original);
@@ -252,15 +290,35 @@ internal static class BrowserScripts
                         typeof current.loadVideoById !== 'function') return;
                     var response = current.getPlayerResponse();
                     var status = response?.playabilityStatus;
-                    if (status?.status !== 'UNPLAYABLE' || !status.errorScreen) return;
-                    // This support URL identifies ad-block enforcement independently of UI
-                    // language. Never replace age, account, unavailable-video or CAPTCHA errors.
+                    var id = response?.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
+                    if (!id || !status?.errorScreen || location.pathname.startsWith('/shorts/')) return;
+                    var recovery = playbackRecoveries.get(id);
                     var error = nativeStringify(status.errorScreen);
-                    if (!error.includes('https://support.google.com/youtube/answer/3037019') ||
-                        error.includes('playerCaptchaViewModel')) return;
-                    var id = response.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
-                    if (!id || recoveredVideos.has(id)) return;
-                    recoveredVideos.add(id);
+                    if (error.includes('playerCaptchaViewModel')) return;
+                    // Search the serialized error screen instead of one fixed nesting level
+                    // so the check survives YouTube moving the command into
+                    // primaryButton.buttonRenderer.command or a parallel command list.
+                    // WEB_PAGE_TYPE_UNKNOWN with the playback-help link is the older
+                    // enforcement signature; a plain 3037019 link alone stays untouched.
+                    var adBlockMessage = error.includes('openAdAllowlistInstructionCommand') ||
+                        (status.status === 'ERROR' && error.includes('WEB_PAGE_TYPE_UNKNOWN') &&
+                         error.includes('https://support.google.com/youtube/answer/3037019'));
+                    // 3037019 is generic playback help, not an ad-block identifier. Only
+                    // continue that response when this video already had a verified ad-block
+                    // enforcement command. Account/age/private-video errors remain visible.
+                    var compatibilityFailure = recovery && status.status === 'UNPLAYABLE' &&
+                        error.includes('https://support.google.com/youtube/answer/3037019');
+                    if (!adBlockMessage && !compatibilityFailure) return;
+                    if (!recovery) {
+                        // Retain no response payloads; a long SPA session stays bounded.
+                        if (playbackRecoveries.size >= 64) playbackRecoveries.delete(playbackRecoveries.keys().next().value);
+                        recovery = {attempt:-1, seen:new WeakSet()};
+                        playbackRecoveries.set(id, recovery);
+                    }
+                    if (recovery.seen.has(response) || recovery.attempt + 1 >= playbackModes.length) return;
+                    recovery.seen.add(response);
+                    recovery.attempt++;
+                    installRecoverySerialization();
                     var start = response.playerConfig?.playbackStartConfig?.startSeconds || 0;
                     current.loadVideoById(id, start);
                 }
@@ -342,6 +400,10 @@ internal static class BrowserScripts
                     injectCss();
                     var style = document.getElementById('crimson-ad-blocker-css');
                     if (style) style.disabled = !enabled;
+                    if (isYouTube()) {
+                        if (!enabled && JSON.stringify === recoveryStringify) JSON.stringify = nativeStringify;
+                        else if (enabled && playbackRecoveries.size > 0) installRecoverySerialization();
+                    }
                     playerObserver.disconnect();
                     documentObserver.disconnect();
                     observedPlayer = null;

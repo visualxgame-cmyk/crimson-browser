@@ -9,7 +9,8 @@ internal static class YouTubeShieldChecks
         await Evaluate(tab, """
             window.__crimsonSetAdProtection(false);
             delete window.__crimsonSetAdProtection;
-            Object.defineProperty(window,'ytInitialData',{configurable:true,writable:true,value:{marker:'keep-existing',adSlots:[1]}});
+            Object.defineProperty(window,'ytInitialData',{configurable:true,writable:true,value:{marker:'keep-existing',adSlots:[1],
+                auxiliaryUi:{messageRenderers:{bkaEnforcementMessageViewModel:{title:{content:'wall'}}}}}});
             window.testAccessor=()=>({marker:'keep-accessor'});
             Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true,get:window.testAccessor});
             window.nativeStringify=JSON.stringify;
@@ -19,18 +20,19 @@ internal static class YouTubeShieldChecks
             window.fetch=async function(input,init){
                 const body=init?.body ?? (input instanceof Request ? await input.clone().text() : null);
                 sentRequests.push({url:typeof input==='string'?input:input.url,body});
-                return new Response('{"adSlots":[1],"streamingData":{"marker":"keep-stream"}}',{
+                return new Response('{"adSlots":[1],"auxiliaryUi":{"messageRenderers":{"bkaEnforcementMessageViewModel":{"title":"wall"}}},"errorScreen":{"enforcementMessageViewModel":{"primaryButton":{"onTap":{"innertubeCommand":{"openAdAllowlistInstructionCommand":{}}}}}},"streamingData":{"marker":"keep-stream"}}',{
                     status:200,headers:{'X-Fixture':'keep-header','Content-Type':'application/json'}});
             };
             XMLHttpRequest.prototype.open=function(method,url){this.fixtureUrl=url};
             XMLHttpRequest.prototype.send=function(body){sentRequests.push({url:this.fixtureUrl,body})};
-            window.fixtureBody=()=>JSON.stringify({videoId:'fixture-video',context:{client:{clientName:'WEB',clientScreen:'WATCH'}},
+            window.fixtureBody=()=>nativeStringify({videoId:'fixture-video',context:{client:{clientName:'WEB',clientScreen:'WATCH',userAgent:navigator.userAgent}},
                 playbackContext:{contentPlaybackContext:{signatureTimestamp:123}},attestationRequest:{marker:'keep-proof'}});
             true;
             """, "prepare isolated YouTube networking fixture");
         await Evaluate(tab, BrowserScripts.ConfigureAdProtection(true) + "\ntrue;", "install updated YouTube filtering");
         await Evaluate(tab, """
             ytInitialData.marker==='keep-existing' && ytInitialData.adSlots.length===0 &&
+            ytInitialData.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel===undefined &&
             Object.getOwnPropertyDescriptor(window,'ytInitialPlayerResponse').get===window.testAccessor &&
             JSON.stringify===nativeStringify && intervalCalls===0
             """, "preserve existing page data, accessors and JSON serialization without polling timers");
@@ -42,14 +44,17 @@ internal static class YouTubeShieldChecks
                 const data=await response.json();
                 const cloned=await copy.json();
                 return data.adSlots.length===0 && cloned.adSlots.length===0 && data.streamingData.marker==='keep-stream' &&
+                    data.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel===undefined &&
+                    data.errorScreen.enforcementMessageViewModel.primaryButton.onTap.innertubeCommand.openAdAllowlistInstructionCommand &&
                     response.status===200 && response.headers.get('X-Fixture')==='keep-header' &&
                     JSON.parse(sentRequests.at(-1).body).context.client.clientScreen==='WATCH';
             })();
             """, "filter native fetch JSON and clones while preserving response metadata and ordinary playback");
         await Evaluate(tab, """
             window.fixtureResponse={videoDetails:{videoId:'fixture-video'},playerConfig:{playbackStartConfig:{startSeconds:42}},
-                playabilityStatus:{status:'UNPLAYABLE',errorScreen:{playerErrorMessageRenderer:{subreason:{runs:[{
-                    navigationEndpoint:{webCommandMetadata:{url:'https://support.google.com/youtube/answer/3037019'}}}]}}}}};
+                playabilityStatus:{status:'ERROR',errorScreen:{enforcementMessageViewModel:{
+                    title:{content:'Localized enforcement title'},primaryButton:{onTap:{parallelCommand:{commands:[
+                    {innertubeCommand:{openAdAllowlistInstructionCommand:{}}}]}}}}}}};
             window.recoveryCount=0;
             window.fixturePlayer=document.createElement('div');
             fixturePlayer.id='movie_player';
@@ -78,7 +83,8 @@ internal static class YouTubeShieldChecks
                 const requestInput=JSON.parse(sentRequests.at(-1).body);
                 const xhr=new XMLHttpRequest();xhr.open('POST',location.origin+'/youtubei/v1/player');xhr.send(fixtureBody());
                 const xhrBody=JSON.parse(sentRequests.at(-1).body);
-                await fetch('/youtubei/v1/live_chat/get_live_chat',{method:'POST',body:fixtureBody()});
+                await fetch('/youtubei/v1/live_chat/get_live_chat',{method:'POST',body:JSON.stringify({videoId:'fixture-video',
+                    context:{client:{clientName:'WEB',clientScreen:'WATCH'}},continuation:'fixture'})});
                 const chat=JSON.parse(sentRequests.at(-1).body);
                 const other=JSON.parse(fixtureBody());other.videoId='live-video';
                 await fetch('/youtubei/v1/player',{method:'POST',body:JSON.stringify(other)});
@@ -91,6 +97,34 @@ internal static class YouTubeShieldChecks
             """, "scope channel recovery to the blocked video across fetch, Request and XHR without altering live chat or verification data");
         await EvaluatePromise(tab, """
             return (async()=>{
+                const original=JSON.parse(fixtureBody());
+                const encoded=JSON.parse(JSON.stringify(original));
+                if(encoded.context.client.clientScreen!=='CHANNEL' || original.context.client.clientScreen!=='WATCH' ||
+                    encoded.playbackContext.contentPlaybackContext.referer.indexOf('#reloadxhr')<0 ||
+                    !encoded.playbackContext.contentPlaybackContext.lactMilliseconds) return false;
+                fixtureResponse={videoDetails:{videoId:'fixture-video'},playabilityStatus:{status:'UNPLAYABLE',errorScreen:{
+                    playerInterstitialRenderer:{content:{interstitialViewModel:{description:{content:'Generic playback failure'},
+                    support:'https://support.google.com/youtube/answer/3037019'}}}}}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                const lact=JSON.parse(JSON.stringify(original));
+                fixtureResponse=structuredClone(fixtureResponse);
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                const yahi=JSON.parse(JSON.stringify(original));
+                fixtureResponse=structuredClone(fixtureResponse);
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                const inline=JSON.parse(JSON.stringify(original));
+                fixtureResponse=structuredClone(fixtureResponse);
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                return recoveryCount===4 && lact.params==='8AUB' && yahi.params==='YAHI' &&
+                    inline.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd===true &&
+                    fixtureResponse.playabilityStatus.status==='UNPLAYABLE' && original.context.client.clientScreen==='WATCH';
+            })();
+            """, "adapt captured serializers and advance bounded playback contexts only on new server responses");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                fixtureResponse={videoDetails:{videoId:'untouched-video'},playabilityStatus:{status:'UNPLAYABLE',errorScreen:{
+                    support:'https://support.google.com/youtube/answer/3037019'}}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
                 fixtureResponse.videoDetails.videoId='captcha-video';
                 fixtureResponse.playabilityStatus.errorScreen.playerCaptchaViewModel={};
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
@@ -100,7 +134,7 @@ internal static class YouTubeShieldChecks
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
                 const video=fixturePlayer.querySelector('video');
                 await Promise.resolve();
-                return recoveryCount===1 && video.playbackRate===1.5 && Math.abs(video.volume-0.35)<0.001 && !video.muted && skips===1;
+                return recoveryCount===4 && video.playbackRate===1.5 && Math.abs(video.volume-0.35)<0.001 && !video.muted && skips===1;
             })();
             """, "retain CAPTCHA and account errors and user media settings while using available skip controls");
         await Evaluate(tab, BrowserScripts.ConfigureAdProtection(false) + "\ntrue;", "disable filtering on an already open document");
