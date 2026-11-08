@@ -20,8 +20,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ($NativeCefDistribution -and $PSVersionTable.PSVersion.Major -lt 7) {
-    throw 'Custom CEF staging requires PowerShell 7. Run this script with pwsh.'
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw 'CEF media packaging requires PowerShell 7. Run this script with pwsh.'
 }
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
@@ -30,9 +30,8 @@ $csproj = Join-Path $root "CrimsonBrowser.csproj"
 $publishDir = Join-Path $root "dist\publish"
 $iss = Join-Path $root "installer\CrimsonBrowser.iss"
 
-if ($NativeCefDistribution) {
-    & (Join-Path $root 'tools\Test-CefMedia.ps1') -DistributionRoot $NativeCefDistribution -MediaFixture $NativeCefMediaFixture
-}
+if (!$NativeCefDistribution) { $NativeCefDistribution = & (Join-Path $root 'tools\Get-CefMedia.ps1') }
+& (Join-Path $root 'tools\Test-CefMedia.ps1') -DistributionRoot $NativeCefDistribution -MediaFixture $NativeCefMediaFixture
 
 # Keep the installer version and asset name in sync with the project version.
 # Release builds pass -Version (for example 1.0.1) so the tag, executable and installer match.

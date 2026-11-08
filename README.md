@@ -11,7 +11,7 @@ dotnet build CrimsonBrowser.csproj -c Release
 dotnet run --project tests/CrimsonBrowser.SmokeTests -c Release
 dotnet run --project tests/CrimsonBrowser.StartupTests -c Release
 dotnet run --project tests/CrimsonBrowser.CefTests -c Release
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
 ```
 
 Testele CEF folosesc un profil temporar și deschid o fereastră pentru verificarea motorului. Acoperă pagina locală, izolarea comenzii Setări, navigarea, căutarea nativă, zoom, popup-uri, scurtături și izolarea cookie-urilor. Nu autentifică utilizatori și nu modifică istoricul real.
@@ -43,7 +43,7 @@ Favoritele, istoricul, setările și sesiunea folosesc în continuare `%LOCALAPP
 
 „Șterge datele de navigare” elimină imediat cache-ul HTTP, cookie-urile și istoricul. La următoarea pornire resetează întregul profil CEF și permisiunile sale; bazele de date deschise nu sunt șterse în timpul funcționării. Favoritele și setările Crimson se păstrează.
 
-Buildurile standard CEF nu includ toate codecurile proprietare sau DRM-ul disponibil în Chrome/Brave. Redarea H.264/AAC și serviciile DRM nu sunt garantate. Autentificarea Google, apelurile, descărcările și video fullscreen trebuie verificate și pe serviciile folosite efectiv înainte de o lansare publică. Nu sunt ocolite restricțiile impuse de site-uri.
+Installerul include motorul CEF fixat prin SHA-256, cu AAC și H.264. Împachetarea verifică redarea efectivă a unui MP4 și testele de integrare CEF. Compilările simple prin `dotnet build` folosesc motorul standard NuGet; pentru distribuție se folosește `build-installer.ps1` din PowerShell 7.2+. Detaliile compilării native sunt în [tools/CEF-MEDIA.md](tools/CEF-MEDIA.md). Widevine/DRM nu este inclus; Netflix nu este încă suportat. Nu sunt ocolite restricțiile impuse de site-uri.
 
 ## Comenzi
 

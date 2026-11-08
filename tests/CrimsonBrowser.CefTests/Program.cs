@@ -41,6 +41,21 @@ internal static class Program
                 if (probeUrl != null)
                 {
                     tab = new BrowserTab(context, isIncognito: true);
+                    int navigationEpoch = 0;
+                    tab.WebView.FrameLoadStart += (_, frame) => { if (frame.Frame.IsMain) Interlocked.Increment(ref navigationEpoch); };
+                    tab.InitializationFailed += (_, reason) => Console.Error.WriteLine("LIVE ENGINE ERROR: " + reason);
+                    async Task<JavascriptResponse?> ReadPublicPage(string script)
+                    {
+                        if (tab.WebView.IsLoading || !tab.WebView.CanExecuteJavascriptInMainFrame) return null;
+                        int epoch = Volatile.Read(ref navigationEpoch);
+                        try { return await tab.WebView.EvaluateScriptAsync(script, timeout: TimeSpan.FromSeconds(5)); }
+                        catch (TaskCanceledException) when (epoch != Volatile.Read(ref navigationEpoch) || tab.WebView.IsLoading ||
+                            !tab.WebView.CanExecuteJavascriptInMainFrame)
+                        {
+                            // Navigation invalidates in-flight script replies. Observe the next document instead.
+                            return null;
+                        }
+                    }
                     window = new Window { Title = "Crimson media diagnostics", Width = 1000, Height = 700, Content = tab.WebView };
                     tab.IsActive = true;
                     window.Show();
@@ -49,26 +64,28 @@ internal static class Program
                     tab.Navigate(probeUrl);
                     await UntilAsync(async () =>
                     {
-                        if (!tab.WebView.CanExecuteJavascriptInMainFrame) return false;
-                        var response = await tab.WebView.EvaluateScriptAsync("!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'");
-                        return response.Result is true;
+                        var response = await ReadPublicPage("!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'");
+                        return response?.Result is true;
                     }, "public live response available");
                     Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
                     if (args.Contains("--require-live-playback"))
                     {
-                        await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("!!document.querySelector('video')")).Result is true,
+                        await UntilAsync(async () => (await ReadPublicPage("!!document.querySelector('video')"))?.Result is true,
                             "public live player is created");
                         var firstFrame = await tab.WebView.EvaluateScriptAsync("document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames");
                         double initialFrames = Convert.ToDouble(firstFrame.Result);
-                        var probeHost = tab.WebView.GetBrowser().GetHost();
-                        await Cef.UIThreadTaskFactory.StartNew(() => probeHost.ExecuteDevToolsMethod(0, "Runtime.evaluate",
-                            "{\"expression\":\"(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play().catch(error=>{window.__crimsonPlaybackError=error.name;});})()\",\"userGesture\":true}"));
-                        await UntilAsync(async () =>
+                        // Muted playback does not require a fabricated user gesture.
+                        await ReadPublicPage("(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play().catch(error=>{window.__crimsonPlaybackError=error.name;});return true;})()");
+                        try { await UntilAsync(async () =>
                         {
-                            var playback = await tab.WebView.EvaluateScriptAsync("(()=>{const v=document.querySelector('video');return !!v && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +
+                            var playback = await ReadPublicPage("(()=>{const v=document.querySelector('video');return !!v && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +
                                 (initialFrames + 3).ToString(System.Globalization.CultureInfo.InvariantCulture) + "})()");
-                            return playback.Result is true;
-                        }, "public live decodes and advances video frames");
+                            return playback?.Result is true;
+                        }, "public live decodes and advances video frames"); }
+                        finally
+                        {
+                            Console.WriteLine("PLAYER STATE: " + (await ReadPublicPage("JSON.stringify({state:document.getElementById('movie_player')?.getPlayerState?.(),error:document.getElementById('movie_player')?.getPlayerError?.(),playError:window.__crimsonPlaybackError,video:[...document.querySelectorAll('video')].map(v=>({paused:v.paused,ready:v.readyState,network:v.networkState,width:v.videoWidth,time:v.currentTime,frames:v.getVideoPlaybackQuality().totalVideoFrames,error:v.error?.code})),message:document.querySelector('.ytp-error-content-wrap')?.innerText,consent:!!document.querySelector('ytd-consent-bump-v2-lightbox')})"))?.Result);
+                        }
                         Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
                     }
                     return;

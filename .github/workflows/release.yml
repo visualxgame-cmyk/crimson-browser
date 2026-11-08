@@ -61,8 +61,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release smoke tests failed.' }
           dotnet run --project tests/CrimsonBrowser.StartupTests/CrimsonBrowser.StartupTests.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw 'Cold startup test failed.' }
-          dotnet run --project tests/CrimsonBrowser.CefTests/CrimsonBrowser.CefTests.csproj -c Release
-          if ($LASTEXITCODE -ne 0) { throw 'CEF integration tests failed.' }
+          # build-installer downloads the hash-pinned media engine and requires
+          # actual AAC/H.264 decoding plus the CEF regression suite before packaging.
           $version = "${{ steps.version.outputs.version }}"
           .\build-installer.ps1 -Version $version
 

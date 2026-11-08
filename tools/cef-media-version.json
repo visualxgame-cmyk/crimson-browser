@@ -3,6 +3,9 @@
   "cefCommit": "cf671c072925b27823a61181152f4f288e8e4306",
   "chromiumVersion": "156.0.8078.80",
   "branch": "8078",
+  "runtimeUrl": "https://github.com/visualxgame-cmyk/crimson-browser/releases/download/cef-media-156.0.15-cf671c0/crimson-cef-156.0.15-cf671c0-win-x64-media.zip",
+  "runtimeSha256": "bf6a4633cd6c57547362aaf3d0d26b5e282832bb34cf2bfa3a7d8cdc53f55b3d",
+  "libcefSha256": "e960191a3a9d5cbbfac5d5cd46128866febd5a28c07ae9ecdbe7af34d4356157",
   "automateSha256": "94d3ddd1e0d35482132f45dc101a593c9371b6eb2d8ff4af6cfe2734d2e48c6a",
   "mediaFixture": "bear-1280x720.mp4",
   "mediaFixtureSha256": "bcb75d3db0a1a5056f4cd5c770ceccdb4cae920f21abb8139b29cd9ad39e3857"
