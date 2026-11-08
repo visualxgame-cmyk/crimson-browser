@@ -1,6 +1,6 @@
 # Custom CEF media build
 
-The native engine is pinned in `cef-media-version.json` to the exact CEF revision used by CefSharp. Build tools and native outputs stay outside the application checkout in `D:\CrimsonCEF`. The installed browser is not changed during compilation.
+The native engine is pinned in `cef-media-version.json` to the exact CEF revision used by CefSharp. Build tools and native outputs stay outside the application checkout in `D:\CrimsonCEF`. The installed browser is not changed during compilation. During an active build, a temporary Windows power request prevents automatic sleep and is released at exit; it does not change the power plan or block explicit user sleep.
 
 Requires PowerShell 7.2+, the official depot_tools bootstrap, Visual Studio Desktop C++ with MFC/ATL, and the matching Windows SDK. The build script checks prerequisites, limits compilation to four jobs by default, and stops its own process tree if free space falls below 12 GiB. It generates Release x64 only, with debug symbols and PGO/LTO disabled to reduce build time and space.
 

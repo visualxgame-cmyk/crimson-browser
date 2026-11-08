@@ -67,7 +67,11 @@ function Invoke-BuildTool([string]$Executable, [string[]]$Arguments, [string]$Na
     }
 }
 
+$powerRequest = $false
 try {
+    . (Join-Path $PSScriptRoot 'BuildPowerRequest.ps1')
+    $powerRequest = Start-CrimsonBuildPowerRequest
+    if (!$powerRequest) { Write-Warning 'Automatic sleep prevention was not acquired for this build.' }
     $env:PATH = "$tools;$env:PATH"
     $env:DEPOT_TOOLS_WIN_TOOLCHAIN = '0'
     $env:DEPOT_TOOLS_UPDATE = '0'
@@ -117,6 +121,7 @@ try {
     }
 }
 finally {
+    if ($powerRequest) { Stop-CrimsonBuildPowerRequest }
     foreach ($name in $environment.Keys) { [Environment]::SetEnvironmentVariable($name, $environment[$name], 'Process') }
     $lock.Dispose()
 }
