@@ -67,7 +67,7 @@ internal static class Program
                         var response = await ReadPublicPage("!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'");
                         return response?.Result is true;
                     }, "public live response available");
-                    Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
+                    Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
                     if (args.Contains("--require-live-playback"))
                     {
                         await UntilAsync(async () => (await ReadPublicPage("!!document.querySelector('video')"))?.Result is true,
@@ -86,7 +86,7 @@ internal static class Program
                         {
                             Console.WriteLine("PLAYER STATE: " + (await ReadPublicPage("JSON.stringify({state:document.getElementById('movie_player')?.getPlayerState?.(),error:document.getElementById('movie_player')?.getPlayerError?.(),playError:window.__crimsonPlaybackError,video:[...document.querySelectorAll('video')].map(v=>({paused:v.paused,ready:v.readyState,network:v.networkState,width:v.videoWidth,time:v.currentTime,frames:v.getVideoPlaybackQuality().totalVideoFrames,error:v.error?.code})),message:document.querySelector('.ytp-error-content-wrap')?.innerText,consent:!!document.querySelector('ytd-consent-bump-v2-lightbox')})"))?.Result);
                         }
-                        Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
+                        Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,title:document.title,width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
                     }
                     return;
                 }
