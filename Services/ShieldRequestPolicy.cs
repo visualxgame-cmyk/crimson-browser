@@ -51,13 +51,9 @@ internal static class ShieldRequestPolicy
     // YouTube serves ads from youtube.com itself, so these must be filtered individually.
     private static readonly string[] BlockedUrlFragments = new[]
     {
-        "youtube.com/api/stats/ads",
-        "youtube.com/api/stats/atr",
         "youtube.com/get_midroll_info",
         "youtube.com/pagead/",
-        "youtube.com/ptracking",
         "youtube.com/youtubei/v1/ads",
-        "youtube.com/youtubei/v1/log_event",
         "google.com/pagead/",
         "googletagservices.com/tag/js/gpt.js",
         "/gampad/ads",
@@ -69,9 +65,8 @@ internal static class ShieldRequestPolicy
         "/advertisement.",
         "/advertisement/",
         "ad_type=",
-        // "adformat=" is intentionally not blocked: cancelling the ad's media stream leaves
-        // YouTube stuck in ad mode (black player) until its timeout, which is much slower
-        // than letting the hidden ad load and seeking straight to its end.
+        // "adformat=" is intentionally not matched: media URLs carry both video
+        // content and ads. Cancelling that transport can strand the player in ad mode.
         "adslot=",
         "ad_slot=",
         "/telemetry?",
@@ -89,6 +84,11 @@ internal static class ShieldRequestPolicy
     public static bool ShouldBlockUrl(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) return false;
+        // YouTube reuses its media transport for both content and ads. Dropping a
+        // signed media segment breaks playback; the player script filters ad metadata.
+        if (MatchesDomain(uri.IdnHost, "googlevideo.com") && uri.AbsolutePath == "/videoplayback") return false;
+        if (MatchesDomain(uri.IdnHost, "youtube.com") && uri.AbsolutePath is
+            "/api/stats/ads" or "/api/stats/atr" or "/ptracking" or "/youtubei/v1/log_event") return false;
         foreach (string rule in BlockedDomains)
             if (MatchesHostAndPath(uri, rule)) return true;
         foreach (string rule in BlockedUrlFragments)

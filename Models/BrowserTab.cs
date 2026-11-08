@@ -193,6 +193,18 @@ public sealed class BrowserTab : INotifyPropertyChanged, IDisposable
             frame?.ExecuteJavaScriptAsync("window.__crimsonSetPopupProtection?.(" + (enabled ? "true" : "false") + ");");
         }
     }
+    internal void UpdateAdProtection()
+    {
+        if (IsDisposed || _isDiscarded || !WebView.IsBrowserInitialized) return;
+        bool enabled = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers;
+        var browser = WebView.GetBrowser();
+        foreach (string identifier in browser.GetFrameIdentifiers())
+        {
+            using var frame = browser.GetFrameByIdentifier(identifier);
+            if (frame != null && !ShieldRequestPolicy.IsAuthenticationPage(frame.Url))
+                frame.ExecuteJavaScriptAsync(BrowserScripts.ConfigureAdProtection(enabled));
+        }
+    }
     public void ApplyMemoryPolicy(bool active)
     {
         if (IsDisposed || _isDiscarded || !WebView.IsBrowserInitialized) return;

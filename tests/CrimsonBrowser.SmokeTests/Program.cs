@@ -141,6 +141,10 @@ try
     Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://www.youtube.com/watch?v=example"), "normal YouTube content keeps ad filtering");
     Assert(!ShieldRequestPolicy.IsAuthenticationPage("https://accounts.google.com.evil.test/"), "authentication origins are exact");
     Console.WriteLine("PASS: Authentication-safe Shields request matching");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://www.youtube.com/youtubei/v1/log_event?alt=json"), "YouTube playback reporting is not an advertising endpoint");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://www.youtube.com/api/stats/ads?event=playback&ad_type=video&adslot=1"), "YouTube ad playback reporting does not break the player");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://rr1.googlevideo.com/videoplayback?ad_type=video&adslot=1&sig=fixture"), "signed YouTube media transport remains playable");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://googlevideo.com.evil.test/videoplayback?ad_type=video"), "media exception requires an actual Googlevideo host");
     Assert(PopupNavigationPolicy.ShouldBlock("https://popads.net/open", true), "advertising popups are blocked even with user activation");
     Assert(PopupNavigationPolicy.ShouldBlock("https://example.test/", false), "automatic popups are blocked");
     Assert(!PopupNavigationPolicy.ShouldBlock("https://example.test/article", true), "explicit links proceed to intent verification");

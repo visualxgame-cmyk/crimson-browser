@@ -252,9 +252,9 @@ internal sealed class TabRenderHandler(BrowserTab tab) : IRenderProcessMessageHa
         bool protectPopups = ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockPopups;
         frame.ExecuteJavaScriptAsync(PopupProtectionScript.Source + "\nwindow.__crimsonSetPopupProtection(" +
             (protectPopups ? "true" : "false") + ");");
-        if (ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers &&
-            !ShieldRequestPolicy.IsAuthenticationPage(frame.Url))
-            frame.ExecuteJavaScriptAsync(BrowserScripts.AdBlock);
+        if (!ShieldRequestPolicy.IsAuthenticationPage(frame.Url))
+            frame.ExecuteJavaScriptAsync(BrowserScripts.ConfigureAdProtection(
+                ShieldService.Instance.IsShieldsEnabled && ShieldService.Instance.BlockAdsAndTrackers));
         string token = Guid.NewGuid().ToString("N");
         _mediaTokens[frame.Identifier.ToString()] = token;
         frame.ExecuteJavaScriptAsync("(()=>{const report=()=>CefSharp.PostMessage('crimson-media:" + token +

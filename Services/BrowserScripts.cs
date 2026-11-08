@@ -2,13 +2,19 @@ namespace CrimsonBrowser.Services;
 
 internal static class BrowserScripts
 {
+    public static string ConfigureAdProtection(bool enabled) =>
+        "window.__crimsonAdProtectionEnabled=" + (enabled ? "true" : "false") + ";\n" + AdBlock;
     public const string AdBlock = """
             (function () {
                 var authHost = (location.hostname || '').toLowerCase();
                 if (authHost === 'accounts.google.com' || authHost === 'accounts.youtube.com' ||
                     ((authHost === 'youtube.com' || authHost.endsWith('.youtube.com')) &&
                      location.pathname.toLowerCase().startsWith('/signin'))) return;
-                if (window.__crimsonAdShield) return;
+                if (window.__crimsonSetAdProtection) {
+                    window.__crimsonSetAdProtection(window.__crimsonAdProtectionEnabled !== false);
+                    return;
+                }
+                var enabled = window.__crimsonAdProtectionEnabled !== false;
                 window.__crimsonAdShield = true;
 
                 function isYouTube() {
@@ -18,10 +24,8 @@ internal static class BrowserScripts
                            host.endsWith('.youtube-nocookie.com');
                 }
 
-                // YouTube embeds its ad schedule in the initial page data and in youtubei/v1/player
-                // responses. Removing that metadata before the player reads it prevents any ad
-                // break from being scheduled at all, so content starts immediately. The CSS hiding
-                // below stays as a fallback for ads that slip through in the future.
+                // Filter known ad metadata in initial data and player responses. Keep
+                // playback/error information intact and preserve page-owned accessors.
                 if (isYouTube()) {
                     var adKeys = [
                         'adPlacements',
@@ -33,7 +37,7 @@ internal static class BrowserScripts
                     ];
 
                     function stripAds(root) {
-                        if (!root || typeof root !== 'object') return;
+                        if (!enabled || !root || typeof root !== 'object') return;
                         var queue = [root];
                         var seen = new WeakSet();
                         var visited = 0;
@@ -100,7 +104,7 @@ internal static class BrowserScripts
                         var nativeJsonParse = JSON.parse;
                         JSON.parse = function (text, reviver) {
                             var result = nativeJsonParse(text, reviver);
-                            if (typeof text === 'string' &&
+                            if (enabled && typeof text === 'string' &&
                                 (text.indexOf('adPlacements') !== -1 ||
                                  text.indexOf('playerAds') !== -1 ||
                                  text.indexOf('adSlots') !== -1 ||
@@ -110,16 +114,68 @@ internal static class BrowserScripts
                             return result;
                         };
                     } catch (e) { }
-                }
 
-                // Ads share the same <video> element as real content, so hiding it only while the
-                // player carries the ad-showing class keeps the ad from ever being painted while
-                // letting the content frame reappear instantly when the class is removed.
-                var videoHideCss =
-                    '#movie_player.ad-showing video,' +
-                    '.html5-video-player.ad-showing video.html5-main-video,' +
-                    '#movie_player.ad-showing .video-ads' +
-                    '{ visibility: hidden !important; opacity: 0 !important; }';
+                    // Use YouTube's WEB channel playback context only after its specific
+                    // ad-block enforcement response. Ordinary playback, login, live chat,
+                    // comments and other origins keep their original request bodies.
+                    var recoveredVideos = new Set();
+                    var nativeParse = JSON.parse;
+                    var nativeStringify = JSON.stringify;
+                    function playerEndpoint(value) {
+                        try {
+                            var url = new URL(value, location.href);
+                            return url.origin === location.origin && url.pathname === '/youtubei/v1/player';
+                        } catch (e) { return false; }
+                    }
+                    function playerBody(body) {
+                        if (!enabled || recoveredVideos.size === 0 || typeof body !== 'string') return body;
+                        try {
+                            var request = nativeParse(body);
+                            if (request?.context?.client?.clientName !== 'WEB' || !recoveredVideos.has(request.videoId) ||
+                                !request.playbackContext?.contentPlaybackContext ||
+                                location.pathname.startsWith('/shorts/')) return body;
+                            request.context.client.clientScreen = 'CHANNEL';
+                            return nativeStringify(request);
+                        } catch (e) { return body; }
+                    }
+                    // Response.json does not call the page's JSON.parse override.
+                    // Keep the native Response itself (headers, URL, streaming and cloning).
+                    function playerResponse(response) {
+                        var json = response.json;
+                        var clone = response.clone;
+                        response.json = function() {
+                            return json.call(this).then(function(value) { stripAds(value); return value; });
+                        };
+                        response.clone = function() { return playerResponse(clone.call(this)); };
+                        return response;
+                    }
+                    var nativeFetch = window.fetch;
+                    if (nativeFetch) window.fetch = async function(input, init) {
+                        var endpoint = playerEndpoint(typeof input === 'string' || input instanceof URL ? input : input?.url);
+                        if (endpoint && init && typeof init.body === 'string') {
+                            var body = playerBody(init.body);
+                            if (body !== init.body) init = Object.assign({}, init, {body:body});
+                        } else if (enabled && endpoint && recoveredVideos.size > 0 && input instanceof Request &&
+                            input.method === 'POST' && !(init && init.body != null)) {
+                            var original = await input.clone().text();
+                            var modified = playerBody(original);
+                            if (modified !== original) input = new Request(input, {body:modified});
+                        }
+                        var response = await nativeFetch.call(this, input, init);
+                        return enabled && endpoint ? playerResponse(response) : response;
+                    };
+                    var playerRequests = new WeakSet();
+                    var nativeOpen = XMLHttpRequest.prototype.open;
+                    var nativeSend = XMLHttpRequest.prototype.send;
+                    XMLHttpRequest.prototype.open = function(method, url) {
+                        playerRequests.delete(this);
+                        if (String(method).toUpperCase() === 'POST' && playerEndpoint(url)) playerRequests.add(this);
+                        return nativeOpen.apply(this, arguments);
+                    };
+                    XMLHttpRequest.prototype.send = function(body) {
+                        return nativeSend.call(this, playerRequests.has(this) ? playerBody(body) : body);
+                    };
+                }
 
                 var cosmeticCss = [
                     'ins.adsbygoogle',
@@ -162,15 +218,18 @@ internal static class BrowserScripts
                     if (document.getElementById('crimson-ad-blocker-css')) return true;
                     var style = document.createElement('style');
                     style.id = 'crimson-ad-blocker-css';
-                    style.textContent = videoHideCss + cosmeticCss;
+                    style.textContent = cosmeticCss;
+                    style.disabled = !enabled;
                     parent.appendChild(style);
                     return true;
                 }
 
+                var clickedButtons = new WeakSet();
                 function clickFirst(selectors) {
                     for (var i = 0; i < selectors.length; i++) {
                         var button = document.querySelector(selectors[i]);
-                        if (button) {
+                        if (button && !button.disabled && !clickedButtons.has(button)) {
+                            clickedButtons.add(button);
                             try { button.click(); return true; } catch (e) { }
                         }
                     }
@@ -187,104 +246,81 @@ internal static class BrowserScripts
                     return !!document.querySelector('.html5-video-player.ad-showing');
                 }
 
-                function videoElement() {
-                    return document.querySelector('#movie_player video.html5-main-video') ||
-                           document.querySelector('video.html5-main-video') ||
-                           document.querySelector('video');
+                function recoverBlockedPlayback() {
+                    var current = player();
+                    if (!enabled || !current || typeof current.getPlayerResponse !== 'function' ||
+                        typeof current.loadVideoById !== 'function') return;
+                    var response = current.getPlayerResponse();
+                    var status = response?.playabilityStatus;
+                    if (status?.status !== 'UNPLAYABLE' || !status.errorScreen) return;
+                    // This support URL identifies ad-block enforcement independently of UI
+                    // language. Never replace age, account, unavailable-video or CAPTCHA errors.
+                    var error = nativeStringify(status.errorScreen);
+                    if (!error.includes('https://support.google.com/youtube/answer/3037019') ||
+                        error.includes('playerCaptchaViewModel')) return;
+                    var id = response.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
+                    if (!id || recoveredVideos.has(id)) return;
+                    recoveredVideos.add(id);
+                    var start = response.playerConfig?.playbackStartConfig?.startSeconds || 0;
+                    current.loadVideoById(id, start);
                 }
-
-                // Save the user's media state once per ad break so mute/volume/speed survive it.
-                function stashMediaState(video) {
-                    if (video.__crimsonAdState) return;
-                    video.__crimsonAdState = {
-                        muted: video.muted,
-                        volume: video.volume,
-                        rate: video.playbackRate
-                    };
-                }
-
-                function restoreMediaState(video) {
-                    var state = video.__crimsonAdState;
-                    if (!state) return;
-                    delete video.__crimsonAdState;
-                    try { video.muted = state.muted; } catch (e) { }
-                    try { video.volume = state.volume; } catch (e) { }
-                    try { video.playbackRate = state.rate; } catch (e) { }
-                }
-
+                var wasShowingAd = false;
                 function skipAd() {
-                    injectCss();
-
-                    if (!isYouTube()) return;
-
-                    var video = videoElement();
-                    var showing = adShowing();
-
-                    if (!showing) {
-                        if (video) restoreMediaState(video);
+                    if (!enabled || !isYouTube()) return;
+                    recoverBlockedPlayback();
+                    if (!adShowing()) {
+                        if (wasShowingAd) clickedButtons = new WeakSet();
+                        wasShowingAd = false;
                         return;
                     }
-
-                    if (video) {
-                        stashMediaState(video);
-                        try { video.muted = true; } catch (e) { }
-
-                        // Seekable ads end immediately. Unskippable ones cannot be seeked past,
-                        // but they run muted and invisibly at 16x, so the wait is imperceptible.
-                        try { if (video.playbackRate < 16) video.playbackRate = 16; } catch (e) { }
-                        try {
-                            var duration = video.duration;
-                            if (isFinite(duration) && duration > 0) {
-                                var target = Math.max(0, duration - 0.1);
-                                if (video.currentTime < target) video.currentTime = target;
-                            }
-                        } catch (e) { }
-                    }
-
-                    // Dismiss any skip/close button that YouTube has already rendered.
+                    wasShowingAd = true;
+                    // Use available player controls; do not falsify media time, volume or
+                    // playback rate. Those changes also affect server-side playback checks.
                     clickFirst([
                         '.ytp-ad-skip-button',
                         '.ytp-ad-skip-button-modern',
                         '.ytp-skip-ad-button',
                         '.ytp-ad-skip-button-container button',
                         'button.ytp-ad-skip-button',
-                        '.ytp-ad-survey-answer-button',
                         '.ytp-ad-overlay-close-button'
                     ]);
                 }
 
-                var rafId = 0;
-                function watchAdFrames() {
-                    rafId = 0;
-                    skipAd();
-                    if (adShowing()) rafId = window.requestAnimationFrame(watchAdFrames);
-                }
-
+                var scheduled = false;
                 function kick() {
-                    skipAd();
-                    if (!rafId && adShowing()) rafId = window.requestAnimationFrame(watchAdFrames);
+                    if (!enabled || scheduled) return;
+                    scheduled = true;
+                    queueMicrotask(function() { scheduled = false; skipAd(); });
                 }
 
                 // The player class flips between content and ad mode; react to the flip at once.
                 var observedPlayer = null;
+                var playerObserver = new MutationObserver(kick);
                 function observePlayer() {
+                    if (!enabled || !isYouTube()) return;
                     var current = player();
-                    if (!current || current === observedPlayer) return;
+                    if (current === observedPlayer) return;
+                    playerObserver.disconnect();
                     observedPlayer = current;
-                    try {
-                        new MutationObserver(kick).observe(current, {
+                    if (current) {
+                        playerObserver.observe(current, {
+                            childList: true,
+                            subtree: true,
                             attributes: true,
                             attributeFilter: ['class']
                         });
-                    } catch (e) { }
+                        kick();
+                    }
                 }
 
-                // Media events fire before a new ad frame is painted, so handle them synchronously.
-                ['loadstart', 'loadedmetadata', 'durationchange', 'play', 'playing',
-                 'timeupdate', 'ratechange', 'volumechange', 'emptied'].forEach(function (name) {
+                // React to player transitions; no interval or frame-by-frame polling.
+                ['loadedmetadata', 'play', 'error'].forEach(function (name) {
                     document.addEventListener(name, function (event) {
                         var target = event.target;
-                        if (target && target.tagName === 'VIDEO') kick();
+                        if (target && target.tagName === 'VIDEO') {
+                            if (name === 'loadedmetadata') clickedButtons = new WeakSet();
+                            kick();
+                        }
                     }, true);
                 });
 
@@ -297,23 +333,27 @@ internal static class BrowserScripts
                     kick();
                 }, true);
 
-                injectCss();
-                observePlayer();
-                kick();
-
-                try {
-                    new MutationObserver(function () {
-                        injectCss();
-                        observePlayer();
-                    }).observe(document.documentElement, { childList: true, subtree: true });
-                } catch (e) { }
-
-                // Safety net for pages that create or replace the player after load.
-                window.setInterval(function () {
+                var documentObserver = new MutationObserver(function() {
+                    if (!observedPlayer || !observedPlayer.isConnected) observePlayer();
+                });
+                window.__crimsonSetAdProtection = function(value) {
+                    enabled = !!value;
+                    window.__crimsonAdProtectionEnabled = enabled;
                     injectCss();
+                    var style = document.getElementById('crimson-ad-blocker-css');
+                    if (style) style.disabled = !enabled;
+                    playerObserver.disconnect();
+                    documentObserver.disconnect();
+                    observedPlayer = null;
+                    if (!enabled || !isYouTube()) return;
+                    documentObserver.observe(document, {childList:true, subtree:true});
                     observePlayer();
                     kick();
-                }, 250);
+                };
+                document.addEventListener('DOMContentLoaded', function() {
+                    window.__crimsonSetAdProtection(enabled);
+                }, {once:true});
+                window.__crimsonSetAdProtection(enabled);
             })();
             """;
 }

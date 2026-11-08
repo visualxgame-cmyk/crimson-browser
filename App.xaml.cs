@@ -167,11 +167,21 @@ public partial class App : Application
 
     private void PopupSettingsChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
-        if (args.PropertyName is not (nameof(ShieldService.IsShieldsEnabled) or nameof(ShieldService.BlockPopups))) return;
+        if (args.PropertyName is not (nameof(ShieldService.IsShieldsEnabled) or nameof(ShieldService.BlockPopups) or
+            nameof(ShieldService.BlockAdsAndTrackers))) return;
+        bool adsChanged = args.PropertyName != nameof(ShieldService.BlockPopups);
         foreach (var window in Windows.OfType<MainWindow>())
-            foreach (var tab in window.Tabs) tab.UpdatePopupProtection();
+            foreach (var tab in window.Tabs)
+            {
+                tab.UpdatePopupProtection();
+                if (adsChanged) tab.UpdateAdProtection();
+            }
         foreach (var window in Windows.OfType<IncognitoWindow>())
-            foreach (var tab in window.Tabs) tab.UpdatePopupProtection();
+            foreach (var tab in window.Tabs)
+            {
+                tab.UpdatePopupProtection();
+                if (adsChanged) tab.UpdateAdProtection();
+            }
     }
 
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

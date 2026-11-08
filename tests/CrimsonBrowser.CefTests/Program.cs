@@ -70,7 +70,7 @@ internal static class Program
                     Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
                     if (args.Contains("--require-live-playback"))
                     {
-                        await UntilAsync(async () => (await ReadPublicPage("!!document.querySelector('video')"))?.Result is true,
+                        await UntilAsync(async () => (await ReadPublicPage("(()=>{const consent=document.querySelector('ytd-consent-bump-v2-lightbox');return location.hostname!=='consent.youtube.com' && !!document.querySelector('video') && !(consent && consent.getClientRects().length)})()"))?.Result is true,
                             "public live player is created", args.Contains("--interactive-consent") ? 120 : 20);
                         var firstFrame = await tab.WebView.EvaluateScriptAsync("document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames");
                         double initialFrames = Convert.ToDouble(firstFrame.Result);
@@ -78,15 +78,15 @@ internal static class Program
                         await ReadPublicPage("(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play().catch(error=>{window.__crimsonPlaybackError=error.name;});return true;})()");
                         try { await UntilAsync(async () =>
                         {
-                            var playback = await ReadPublicPage("(()=>{const v=document.querySelector('video');return !!v && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +
-                                (initialFrames + 3).ToString(System.Globalization.CultureInfo.InvariantCulture) + "})()");
+                            var playback = await ReadPublicPage("(()=>{const v=document.querySelector('video'),p=document.getElementById('movie_player');return !!v && !!p && !p.classList.contains('ad-showing') && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +
+                                (initialFrames + 90).ToString(System.Globalization.CultureInfo.InvariantCulture) + "})()");
                             return playback?.Result is true;
-                        }, "public live decodes and advances video frames"); }
+                        }, "public live decodes and advances video frames", args.Contains("--interactive-consent") ? 120 : 20); }
                         finally
                         {
                             Console.WriteLine("PLAYER STATE: " + (await ReadPublicPage("JSON.stringify({state:document.getElementById('movie_player')?.getPlayerState?.(),error:document.getElementById('movie_player')?.getPlayerError?.(),playError:window.__crimsonPlaybackError,video:[...document.querySelectorAll('video')].map(v=>({paused:v.paused,ready:v.readyState,network:v.networkState,width:v.videoWidth,time:v.currentTime,frames:v.getVideoPlaybackQuality().totalVideoFrames,error:v.error?.code})),message:document.querySelector('.ytp-error-content-wrap')?.innerText,consent:!!document.querySelector('ytd-consent-bump-v2-lightbox')})"))?.Result);
                         }
-                        Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,title:document.title,width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
+                        Console.WriteLine("PLAYBACK: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,title:document.title,adShowing:document.getElementById('movie_player').classList.contains('ad-showing'),width:document.querySelector('video').videoWidth,height:document.querySelector('video').videoHeight,frames:document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames,error:document.querySelector('video').error?.code||0})")).Result);
                     }
                     return;
                 }
@@ -311,14 +311,7 @@ internal static class Program
                 tab.IsActive = true;
                 tab.Navigate("https://www.youtube.com/youtube-fixture.html");
                 await Until(() => tab.Title == "YouTube script fixture" && !tab.IsLoading, "local YouTube-origin fixture loads");
-                await tab.WebView.EvaluateScriptAsync("delete window.__crimsonAdShield;" +
-                    "Object.defineProperty(window,'ytInitialData',{configurable:true,writable:true,value:{marker:'keep-existing',adSlots:[1]}});" +
-                    "window.testAccessor=function(){return {marker:'keep-accessor'}};" +
-                    "Object.defineProperty(window,'ytInitialPlayerResponse',{configurable:true,get:window.testAccessor});");
-                await tab.WebView.EvaluateScriptAsync(CrimsonBrowser.Services.BrowserScripts.AdBlock);
-                var initialData = await tab.WebView.EvaluateScriptAsync("ytInitialData.marker==='keep-existing' && ytInitialData.adSlots.length===0 && " +
-                    "Object.getOwnPropertyDescriptor(window,'ytInitialPlayerResponse').get===window.testAccessor");
-                Check(initialData.Result is true, "late ad-block injection preserves existing YouTube data and accessors");
+                await YouTubeShieldChecks.Run(tab);
                 tab.Navigate("https://accounts.google.com/auth-fixture.html");
                 await Until(() => tab.Title == "Authentication script fixture" && !tab.IsLoading, "local authentication-origin fixture loads");
                 await tab.WebView.EvaluateScriptAsync(CrimsonBrowser.Services.BrowserScripts.AdBlock);
