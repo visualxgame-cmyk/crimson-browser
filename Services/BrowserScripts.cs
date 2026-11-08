@@ -39,12 +39,17 @@ internal static class BrowserScripts
                         // it from the payload disarms the client-side enforcement itself.
                         'bkaEnforcementMessageViewModel'
                     ];
+                    // Videos whose responses carried the enforcement renderer. The server may
+                    // withhold the media at the same time, so these are candidates for the
+                    // alternate playback-context recovery even without the enforcement UI.
+                    var enforcedVideos = new Set();
 
                     function stripAds(root) {
                         if (!enabled || !root || typeof root !== 'object') return;
                         var queue = [root];
                         var seen = new WeakSet();
                         var visited = 0;
+                        var enforced = false;
 
                         while (queue.length && visited < 20000) {
                             visited++;
@@ -57,10 +62,12 @@ internal static class BrowserScripts
                                     var key = adKeys[i];
                                     if (!(key in node)) continue;
 
-                                    if (key === 'adBreakHeartbeatParams' ||
+                                    if (key === 'bkaEnforcementMessageViewModel') {
+                                        enforced = true;
+                                        try { delete node[key]; } catch (e) { }
+                                    } else if (key === 'adBreakHeartbeatParams' ||
                                         key === 'adParams' ||
-                                        key === 'playerAdParams' ||
-                                        key === 'bkaEnforcementMessageViewModel') {
+                                        key === 'playerAdParams') {
                                         try { delete node[key]; } catch (e) { }
                                     } else if (Array.isArray(node[key])) {
                                         node[key] = [];
@@ -74,6 +81,34 @@ internal static class BrowserScripts
                                 if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
                                 var value = node[k];
                                 if (value && typeof value === 'object') queue.push(value);
+                            }
+                        }
+
+                        if (enforced) {
+                            var enforcedId = root.videoDetails?.videoId ||
+                                root.playerResponse?.videoDetails?.videoId;
+                            if (!enforcedId && Array.isArray(root)) {
+                                for (var r = 0; r < root.length && !enforcedId; r++) {
+                                    var item = root[r];
+                                    enforcedId = item?.playerResponse?.videoDetails?.videoId ||
+                                        item?.videoDetails?.videoId;
+                                }
+                            }
+                            if (enforcedId) enforcedVideos.add(enforcedId);
+
+                            // YouTube pairs the enforcement renderer with a generic player
+                            // error screen. Removing the renderer alone leaves that error in
+                            // place, so the player reports "An error occurred" even though the
+                            // media is still present. Drop the error shell when streams exist
+                            // so playback starts normally; withhold it otherwise so the
+                            // playback-context recovery still has a signal.
+                            var enforcedPlayer = root.playabilityStatus ? root : root.playerResponse;
+                            var enforcedStatus = enforcedPlayer?.playabilityStatus;
+                            if (enforcedStatus && hasPlayableStream(enforcedPlayer)) {
+                                if (enforcedStatus.status === 'ERROR' || enforcedStatus.status === 'UNPLAYABLE')
+                                    enforcedStatus.status = 'OK';
+                                try { delete enforcedStatus.errorScreen; } catch (e) { }
+                                try { delete enforcedStatus.reason; } catch (e) { }
                             }
                         }
                     }
@@ -284,6 +319,16 @@ internal static class BrowserScripts
                     return !!document.querySelector('.html5-video-player.ad-showing');
                 }
 
+                function hasPlayableStream(response) {
+                    var streaming = response?.streamingData;
+                    return !!(streaming && (
+                        streaming.formats?.length ||
+                        streaming.adaptiveFormats?.length ||
+                        streaming.serverAbrStreamingUrl ||
+                        streaming.dashManifestUrl ||
+                        streaming.hlsManifestUrl));
+                }
+
                 function recoverBlockedPlayback() {
                     var current = player();
                     if (!enabled || !current || typeof current.getPlayerResponse !== 'function' ||
@@ -291,16 +336,25 @@ internal static class BrowserScripts
                     var response = current.getPlayerResponse();
                     var status = response?.playabilityStatus;
                     var id = response?.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
-                    if (!id || !status?.errorScreen || location.pathname.startsWith('/shorts/')) return;
+                    if (!id || !status || location.pathname.startsWith('/shorts/')) return;
                     var recovery = playbackRecoveries.get(id);
-                    var error = nativeStringify(status.errorScreen);
+                    var error = status.errorScreen ? nativeStringify(status.errorScreen) : '';
                     if (error.includes('playerCaptchaViewModel')) return;
+                    var video = current.querySelector('video');
+                    // The server can refuse playback while the only enforcement marker is the
+                    // renderer we already stripped. In that case the player shows a generic
+                    // error, a missing stream or a media-element failure, so recover from those
+                    // signals instead of waiting for the enforcement screen.
+                    var enforcedFailure = enforcedVideos.has(id) && (
+                        status.status === 'ERROR' || status.status === 'UNPLAYABLE' ||
+                        !hasPlayableStream(response) || !!(video && video.error));
                     // Search the serialized error screen instead of one fixed nesting level
                     // so the check survives YouTube moving the command into
                     // primaryButton.buttonRenderer.command or a parallel command list.
                     // WEB_PAGE_TYPE_UNKNOWN with the playback-help link is the older
                     // enforcement signature; a plain 3037019 link alone stays untouched.
-                    var adBlockMessage = error.includes('openAdAllowlistInstructionCommand') ||
+                    var adBlockMessage = enforcedFailure ||
+                        error.includes('openAdAllowlistInstructionCommand') ||
                         (status.status === 'ERROR' && error.includes('WEB_PAGE_TYPE_UNKNOWN') &&
                          error.includes('https://support.google.com/youtube/answer/3037019'));
                     // 3037019 is generic playback help, not an ad-block identifier. Only

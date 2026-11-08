@@ -20,7 +20,7 @@ internal static class YouTubeShieldChecks
             window.fetch=async function(input,init){
                 const body=init?.body ?? (input instanceof Request ? await input.clone().text() : null);
                 sentRequests.push({url:typeof input==='string'?input:input.url,body});
-                return new Response('{"adSlots":[1],"auxiliaryUi":{"messageRenderers":{"bkaEnforcementMessageViewModel":{"title":"wall"}}},"errorScreen":{"enforcementMessageViewModel":{"primaryButton":{"onTap":{"innertubeCommand":{"openAdAllowlistInstructionCommand":{}}}}}},"streamingData":{"marker":"keep-stream"}}',{
+                return new Response(window.fixtureResponseBody || '{"adSlots":[1],"auxiliaryUi":{"messageRenderers":{"bkaEnforcementMessageViewModel":{"title":"wall"}}},"errorScreen":{"enforcementMessageViewModel":{"primaryButton":{"onTap":{"innertubeCommand":{"openAdAllowlistInstructionCommand":{}}}}}},"streamingData":{"marker":"keep-stream"}}',{
                     status:200,headers:{'X-Fixture':'keep-header','Content-Type':'application/json'}});
             };
             XMLHttpRequest.prototype.open=function(method,url){this.fixtureUrl=url};
@@ -122,6 +122,41 @@ internal static class YouTubeShieldChecks
             """, "adapt captured serializers and advance bounded playback contexts only on new server responses");
         await EvaluatePromise(tab, """
             return (async()=>{
+                window.fixtureResponseBody=JSON.stringify({videoDetails:{videoId:'streamed-enforcement-video'},
+                    playabilityStatus:{status:'ERROR',reason:'An error occurred',errorScreen:{playerErrorMessageRenderer:{}}},
+                    auxiliaryUi:{messageRenderers:{bkaEnforcementMessageViewModel:{title:{content:'wall'}}}},
+                    streamingData:{adaptiveFormats:[{mimeType:'video/webm; codecs="vp9"'}]}});
+                const response=await fetch('/youtubei/v1/player',{method:'POST',body:fixtureBody()});
+                fixtureResponse=await response.json();
+                window.recoveryCount=0;
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                return fixtureResponse.playabilityStatus.status==='OK' &&
+                    fixtureResponse.playabilityStatus.errorScreen===undefined &&
+                    fixtureResponse.playabilityStatus.reason===undefined &&
+                    fixtureResponse.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel===undefined &&
+                    fixtureResponse.streamingData.adaptiveFormats.length===1 && recoveryCount===0;
+            })();
+            """, "clear the enforcement error shell when the response still carries playable streams");
+        await Evaluate(tab, "window.fixtureResponseBody=null;true;", "reset streamed enforcement fixture");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                window.fixtureResponseBody=JSON.stringify({videoDetails:{videoId:'generic-error-video'},
+                    playabilityStatus:{status:'ERROR'},auxiliaryUi:{messageRenderers:{
+                    bkaEnforcementMessageViewModel:{title:{content:'wall'}}}}});
+                const response=await fetch('/youtubei/v1/player',{method:'POST',body:fixtureBody()});
+                fixtureResponse=await response.json();
+                window.recoveryCount=0;
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                return fixtureResponse.auxiliaryUi.messageRenderers.bkaEnforcementMessageViewModel===undefined &&
+                    recoveryCount===1 && recoveredId==='generic-error-video';
+            })();
+            """, "recover a stripped enforcement response even when the player only reports a generic error");
+        await Evaluate(tab, "window.fixtureResponseBody=null;true;", "reset fixture response body");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                const before=recoveryCount;
                 fixtureResponse={videoDetails:{videoId:'untouched-video'},playabilityStatus:{status:'UNPLAYABLE',errorScreen:{
                     support:'https://support.google.com/youtube/answer/3037019'}}};
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
@@ -134,7 +169,7 @@ internal static class YouTubeShieldChecks
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
                 const video=fixturePlayer.querySelector('video');
                 await Promise.resolve();
-                return recoveryCount===4 && video.playbackRate===1.5 && Math.abs(video.volume-0.35)<0.001 && !video.muted && skips===1;
+                return recoveryCount===before && video.playbackRate===1.5 && Math.abs(video.volume-0.35)<0.001 && !video.muted && skips===1;
             })();
             """, "retain CAPTCHA and account errors and user media settings while using available skip controls");
         await Evaluate(tab, BrowserScripts.ConfigureAdProtection(false) + "\ntrue;", "disable filtering on an already open document");
