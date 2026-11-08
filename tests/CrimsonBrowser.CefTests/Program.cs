@@ -71,7 +71,7 @@ internal static class Program
                     if (args.Contains("--require-live-playback"))
                     {
                         await UntilAsync(async () => (await ReadPublicPage("!!document.querySelector('video')"))?.Result is true,
-                            "public live player is created");
+                            "public live player is created", args.Contains("--interactive-consent") ? 120 : 20);
                         var firstFrame = await tab.WebView.EvaluateScriptAsync("document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames");
                         double initialFrames = Convert.ToDouble(firstFrame.Result);
                         // Muted playback does not require a fabricated user gesture.
@@ -491,9 +491,9 @@ internal static class Program
     {
         await UntilAsync(() => Task.FromResult(condition()), description);
     }
-    private static async Task UntilAsync(Func<Task<bool>> condition, string description)
+    private static async Task UntilAsync(Func<Task<bool>> condition, string description, int timeoutSeconds = 20)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(20);
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
         while (!await condition())
         {
             if (DateTime.UtcNow > deadline) throw new TimeoutException(description);
