@@ -43,6 +43,10 @@ internal static class BrowserScripts
                     // withhold the media at the same time, so these are candidates for the
                     // alternate playback-context recovery even without the enforcement UI.
                     var enforcedVideos = new Set();
+                    // Videos whose stale unavailable state was cleared and whose player chain
+                    // was made visible again. Kept per video so a later pause or a removed
+                    // error renderer does not re-hide the playing frames.
+                    var revealedVideos = new Set();
 
                     function stripAds(root) {
                         if (!enabled || !root || typeof root !== 'object') return;
@@ -396,20 +400,54 @@ internal static class BrowserScripts
                     if (!enabled || !isYouTube()) return;
                     var current = player();
                     var video = current && current.querySelector('video');
-                    if (!video || video.paused || video.error || video.readyState < 2 || video.videoWidth <= 0) return;
+                    if (!video) return;
                     var response = null;
                     try {
                         response = typeof current.getPlayerResponse === 'function' ? current.getPlayerResponse() : null;
                     } catch (e) { }
-                    if (!response || !hasPlayableStream(response)) return;
+                    var id = response?.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
                     var renderer = document.querySelector('yt-player-error-message-renderer');
-                    if (!renderer) return;
-                    var shell = renderer.closest('yt-playability-error-supported-renderers') || renderer.parentElement;
-                    if (shell && shell.style.display !== 'none') shell.style.display = 'none';
-                    if (renderer.style.display !== 'none') renderer.style.display = 'none';
-                    document.querySelectorAll('.player-container-background').forEach(function (background) {
-                        if (background.style.display !== 'none') background.style.display = 'none';
-                    });
+                    var shouldReveal = !!id && revealedVideos.has(id);
+                    if (!shouldReveal) {
+                        // Start only once recovery actually produced advancing media, so a real
+                        // error keeps its shell and its hidden player.
+                        if (video.paused || video.error || video.readyState < 2 || video.videoWidth <= 0) return;
+                        if (!response || !hasPlayableStream(response)) return;
+                        if (!renderer) return;
+                        shouldReveal = true;
+                        if (id) {
+                            if (revealedVideos.size >= 64) revealedVideos.delete(revealedVideos.values().next().value);
+                            revealedVideos.add(id);
+                        }
+                    }
+                    if (!response || !hasPlayableStream(response)) return;
+                    if (renderer) {
+                        var shell = renderer.closest('yt-playability-error-supported-renderers') || renderer.parentElement;
+                        if (shell && shell.style.display !== 'none') shell.style.display = 'none';
+                        if (renderer.style.display !== 'none') renderer.style.display = 'none';
+                        document.querySelectorAll('.player-container-background').forEach(function (background) {
+                            if (background.style.display !== 'none') background.style.display = 'none';
+                        });
+                    }
+                    if (shouldReveal) revealActivePlayer(video);
+                }
+
+                // The unavailable state also sets visibility:hidden on the whole player
+                // chain, from #player-container-outer down through #movie_player and
+                // .html5-video-container to the <video>. Recovered frames then advance but
+                // are invisible. Restore visibility on the hidden nodes while the media is
+                // still playable, walking up from the video so only the real player chain is
+                // touched and stopping at the outer player container.
+                function revealActivePlayer(video) {
+                    var node = video;
+                    var guard = 0;
+                    while (node && node !== document.documentElement && guard++ < 20) {
+                        if (getComputedStyle(node).visibility === 'hidden') {
+                            node.style.setProperty('visibility', 'visible', 'important');
+                        }
+                        if (node.id === 'player-container-outer') break;
+                        node = node.parentElement;
+                    }
                 }
 
                 var wasShowingAd = false;
@@ -463,7 +501,7 @@ internal static class BrowserScripts
                 }
 
                 // React to player transitions; no interval or frame-by-frame polling.
-                ['loadedmetadata', 'play', 'error'].forEach(function (name) {
+                ['loadedmetadata', 'canplay', 'playing', 'play', 'error'].forEach(function (name) {
                     document.addEventListener(name, function (event) {
                         var target = event.target;
                         if (target && target.tagName === 'VIDEO') {

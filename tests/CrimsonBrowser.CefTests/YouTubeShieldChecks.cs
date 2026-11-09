@@ -177,6 +177,43 @@ internal static class YouTubeShieldChecks
                 return hidden;
             })();
             """, "remove the stale error shell and poster background once a recovered video is visibly playing");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                fixturePlayer.id='fixture-player-backup';
+                const outer=document.createElement('div');outer.id='player-container-outer';
+                const inner=document.createElement('div');inner.id='player-container-inner';
+                const container=document.createElement('div');container.id='player-container';
+                const ytd=document.createElement('ytd-player');
+                const innerContainer=document.createElement('div');innerContainer.id='container';
+                const movie=document.createElement('div');movie.id='movie_player';
+                const videoContainer=document.createElement('div');videoContainer.className='html5-video-container';
+                const video=document.createElement('video');
+                videoContainer.append(video);innerContainer.append(movie);movie.append(videoContainer);
+                ytd.append(innerContainer);container.append(ytd);inner.append(container);outer.append(inner);
+                const chain=[outer,inner,container,ytd,innerContainer,movie,videoContainer,video];
+                for(const node of chain) node.style.visibility='hidden';
+                document.body.append(outer);
+                Object.defineProperty(video,'paused',{configurable:true,value:false});
+                Object.defineProperty(video,'readyState',{configurable:true,value:4});
+                Object.defineProperty(video,'videoWidth',{configurable:true,value:1280});
+                Object.defineProperty(video,'error',{configurable:true,value:null});
+                const shell=document.createElement('yt-playability-error-supported-renderers');
+                const renderer=document.createElement('yt-player-error-message-renderer');
+                shell.append(renderer);document.body.append(shell);
+                movie.getPlayerResponse=()=>({videoDetails:{videoId:'hidden-chain-video'},playabilityStatus:{status:'OK'},
+                    streamingData:{adaptiveFormats:[{mimeType:'video/webm; codecs="vp9"'}]}});
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                const visible=chain.every(node=>getComputedStyle(node).visibility==='visible');
+                shell.remove();
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                const stable=getComputedStyle(video).visibility==='visible';
+                outer.remove();fixturePlayer.id='movie_player';
+                for(const name of ['paused','readyState','videoWidth','error']) delete video[name];
+                return visible && stable;
+            })();
+            """, "restore visibility on the hidden player chain once a recovered video is playing");
         await Evaluate(tab, "window.fixtureResponseBody=null;true;", "reset streamed enforcement fixture");
         await EvaluatePromise(tab, """
             return (async()=>{
