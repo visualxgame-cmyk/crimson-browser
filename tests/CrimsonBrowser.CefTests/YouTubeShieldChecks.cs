@@ -138,6 +138,45 @@ internal static class YouTubeShieldChecks
                     fixtureResponse.streamingData.adaptiveFormats.length===1 && recoveryCount===0;
             })();
             """, "clear the enforcement error shell when the response still carries playable streams");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                window.fixtureResponseBody=JSON.stringify({videoDetails:{videoId:'generic-shell-video'},
+                    playabilityStatus:{status:'ERROR',reason:'An error occurred',errorScreen:{playerErrorMessageRenderer:{}}},
+                    streamingData:{adaptiveFormats:[{mimeType:'video/webm; codecs="vp9"'}]}});
+                const response=await fetch('/youtubei/v1/player',{method:'POST',body:fixtureBody()});
+                fixtureResponse=await response.json();
+                window.recoveryCount=0;
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                return fixtureResponse.playabilityStatus.status==='OK' &&
+                    fixtureResponse.playabilityStatus.errorScreen===undefined &&
+                    fixtureResponse.playabilityStatus.reason===undefined && recoveryCount===0;
+            })();
+            """, "clear a standalone generic player error shell when the response still carries playable streams");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                const shell=document.createElement('yt-playability-error-supported-renderers');
+                const holder=document.createElement('div');
+                const renderer=document.createElement('yt-player-error-message-renderer');
+                holder.append(renderer);shell.append(holder);
+                const background=document.createElement('div');background.className='player-container-background';
+                document.body.append(shell,background);
+                const video=fixturePlayer.querySelector('video');
+                Object.defineProperty(video,'paused',{configurable:true,value:false});
+                Object.defineProperty(video,'readyState',{configurable:true,value:4});
+                Object.defineProperty(video,'videoWidth',{configurable:true,value:1280});
+                Object.defineProperty(video,'error',{configurable:true,value:null});
+                fixtureResponse={videoDetails:{videoId:'playing-shell-video'},playabilityStatus:{status:'OK'},
+                    streamingData:{adaptiveFormats:[{mimeType:'video/webm; codecs="vp9"'}]}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));
+                await Promise.resolve();
+                const hidden=shell.style.display==='none' && renderer.style.display==='none' &&
+                    background.style.display==='none';
+                shell.remove();background.remove();
+                for(const name of ['paused','readyState','videoWidth','error']) delete video[name];
+                return hidden;
+            })();
+            """, "remove the stale error shell and poster background once a recovered video is visibly playing");
         await Evaluate(tab, "window.fixtureResponseBody=null;true;", "reset streamed enforcement fixture");
         await EvaluatePromise(tab, """
             return (async()=>{

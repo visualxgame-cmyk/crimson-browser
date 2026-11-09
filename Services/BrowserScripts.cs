@@ -95,21 +95,21 @@ internal static class BrowserScripts
                                 }
                             }
                             if (enforcedId) enforcedVideos.add(enforcedId);
+                        }
 
-                            // YouTube pairs the enforcement renderer with a generic player
-                            // error screen. Removing the renderer alone leaves that error in
-                            // place, so the player reports "An error occurred" even though the
-                            // media is still present. Drop the error shell when streams exist
-                            // so playback starts normally; withhold it otherwise so the
-                            // playback-context recovery still has a signal.
-                            var enforcedPlayer = root.playabilityStatus ? root : root.playerResponse;
-                            var enforcedStatus = enforcedPlayer?.playabilityStatus;
-                            if (enforcedStatus && hasPlayableStream(enforcedPlayer)) {
-                                if (enforcedStatus.status === 'ERROR' || enforcedStatus.status === 'UNPLAYABLE')
-                                    enforcedStatus.status = 'OK';
-                                try { delete enforcedStatus.errorScreen; } catch (e) { }
-                                try { delete enforcedStatus.reason; } catch (e) { }
-                            }
+                        // YouTube can also return the generic player error screen on its own,
+                        // without the enforcement renderer, while still including playable
+                        // streams. The player then shows "An error occurred" over a video that
+                        // is actually playing. Drop that shell whenever the media is present;
+                        // withhold it otherwise so the playback recovery keeps its signal.
+                        var playerPayload = root.playabilityStatus ? root : root.playerResponse;
+                        var playerStatus = playerPayload?.playabilityStatus;
+                        if (playerStatus && hasPlayableStream(playerPayload) &&
+                            (enforced || isGenericPlayerError(playerStatus))) {
+                            if (playerStatus.status === 'ERROR' || playerStatus.status === 'UNPLAYABLE')
+                                playerStatus.status = 'OK';
+                            try { delete playerStatus.errorScreen; } catch (e) { }
+                            try { delete playerStatus.reason; } catch (e) { }
                         }
                     }
 
@@ -149,7 +149,8 @@ internal static class BrowserScripts
                                  text.indexOf('playerAds') !== -1 ||
                                  text.indexOf('adSlots') !== -1 ||
                                  text.indexOf('adBreakHeartbeatParams') !== -1 ||
-                                 text.indexOf('bkaEnforcementMessageViewModel') !== -1)) {
+                                 text.indexOf('bkaEnforcementMessageViewModel') !== -1 ||
+                                 text.indexOf('playerErrorMessageRenderer') !== -1)) {
                                 try { stripAds(result); } catch (e) { }
                             }
                             return result;
@@ -329,6 +330,16 @@ internal static class BrowserScripts
                         streaming.hlsManifestUrl));
                 }
 
+                // A plain playerErrorMessageRenderer is the "An error occurred" shell that
+                // YouTube may attach even when the media is still playable. CAPTCHA screens use
+                // a different renderer and must stay visible.
+                function isGenericPlayerError(status) {
+                    var screen = status && status.errorScreen;
+                    if (!screen || !screen.playerErrorMessageRenderer) return false;
+                    try { return JSON.stringify(screen).indexOf('playerCaptchaViewModel') === -1; }
+                    catch (e) { return true; }
+                }
+
                 function recoverBlockedPlayback() {
                     var current = player();
                     if (!enabled || !current || typeof current.getPlayerResponse !== 'function' ||
@@ -376,10 +387,36 @@ internal static class BrowserScripts
                     var start = response.playerConfig?.playbackStartConfig?.startSeconds || 0;
                     current.loadVideoById(id, start);
                 }
+                // When the account-level enforcement response arrives first, YouTube builds its
+                // watch-page error shell (poster background plus "An error occurred" overlay).
+                // Our playback recovery can then load the same video successfully, but that
+                // stale shell stays on top of the now-playing media. Remove it only while the
+                // player reports playable streams and the video is actually advancing.
+                function clearStaleErrorShell() {
+                    if (!enabled || !isYouTube()) return;
+                    var current = player();
+                    var video = current && current.querySelector('video');
+                    if (!video || video.paused || video.error || video.readyState < 2 || video.videoWidth <= 0) return;
+                    var response = null;
+                    try {
+                        response = typeof current.getPlayerResponse === 'function' ? current.getPlayerResponse() : null;
+                    } catch (e) { }
+                    if (!response || !hasPlayableStream(response)) return;
+                    var renderer = document.querySelector('yt-player-error-message-renderer');
+                    if (!renderer) return;
+                    var shell = renderer.closest('yt-playability-error-supported-renderers') || renderer.parentElement;
+                    if (shell && shell.style.display !== 'none') shell.style.display = 'none';
+                    if (renderer.style.display !== 'none') renderer.style.display = 'none';
+                    document.querySelectorAll('.player-container-background').forEach(function (background) {
+                        if (background.style.display !== 'none') background.style.display = 'none';
+                    });
+                }
+
                 var wasShowingAd = false;
                 function skipAd() {
                     if (!enabled || !isYouTube()) return;
                     recoverBlockedPlayback();
+                    clearStaleErrorShell();
                     if (!adShowing()) {
                         if (wasShowingAd) clickedButtons = new WeakSet();
                         wasShowingAd = false;
