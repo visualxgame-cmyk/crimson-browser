@@ -1,0 +1,42 @@
+<Window x:Class="CrimsonBrowser.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Crimson Browser" Width="440" Height="250"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True">
+    <Border CornerRadius="16" BorderThickness="1" BorderBrush="#3A202B" Background="#0D0E12">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28" ShadowDepth="6" Opacity="0.55" Color="Black" />
+        </Border.Effect>
+        <Grid>
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="CRIMSON" FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="36"
+                           FontWeight="Bold" Foreground="#F1F2F6" HorizontalAlignment="Center" />
+                <TextBlock Text="BROWSER" FontFamily="Segoe UI Variable Display, Segoe UI" FontSize="13"
+                           FontWeight="SemiBold" Foreground="#8E92A4" HorizontalAlignment="Center"
+                           Margin="2,2,0,0" />
+            </StackPanel>
+            <Grid VerticalAlignment="Bottom" Height="4" Margin="36,0,36,30" ClipToBounds="True">
+                <Border Background="#2A2230" CornerRadius="2" />
+                <Border x:Name="Pulse" Width="110" HorizontalAlignment="Left"
+                        Background="#E61937" CornerRadius="2">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="PulseTransform" />
+                    </Border.RenderTransform>
+                    <Border.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard RepeatBehavior="Forever">
+                                    <DoubleAnimation Storyboard.TargetName="PulseTransform"
+                                                     Storyboard.TargetProperty="X"
+                                                     From="-110" To="370" Duration="0:0:1.5" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Border.Triggers>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

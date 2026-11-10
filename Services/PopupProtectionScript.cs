@@ -12,12 +12,33 @@ internal static class PopupProtectionScript
                 (['accounts.google.com', 'accounts.youtube.com', 'login.microsoftonline.com', 'login.live.com'].includes(url.hostname) ||
                  ((url.hostname === 'youtube.com' || url.hostname.endsWith('.youtube.com')) && url.pathname.toLowerCase().startsWith('/signin')));
             const blocked = () => { try { CefSharp.PostMessage('crimson-popup-blocked'); } catch (_) {} };
+            const playerLike = element => {
+                if (!element || element === document.body || element === document.documentElement) return false;
+                if (element.tagName === 'VIDEO' || element.tagName === 'AUDIO' || element.tagName === 'IFRAME') return true;
+                const name = (element.id || '') + ' ' +
+                    (typeof element.className === 'string' ? element.className : '');
+                // Player containers are often divs while the real <video> is hidden
+                // behind a poster until the first play click.
+                return /(?:^|[\s_-])(?:player|video|jwplayer|jw-player|plyr|videojs|video-js|flowplayer|artplayer)(?:$|[\s_-])/i.test(name);
+            };
             function overlayLink(link, event, target) {
                 if (target.origin === location.origin) return false;
                 if (link.querySelector('video,audio')) return true;
                 if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
+                const stack = document.elementsFromPoint(event.clientX, event.clientY);
+                // Advertising overlays are frequently empty, player-sized cross-origin
+                // links laid over the controls. The underlying <video> may not exist yet
+                // on a poster screen, so also recognise the player container itself.
+                const rect = link.getBoundingClientRect();
+                if (rect.width >= 180 && rect.height >= 100) {
+                    const visible = link.textContent.trim().length > 0 ||
+                        getComputedStyle(link).backgroundImage !== 'none' ||
+                        !!link.querySelector('img,svg,picture,canvas,video,audio');
+                    if (!visible && stack.some(element => !link.contains(element) && playerLike(element)))
+                        return true;
+                }
                 // Inspect only the clicked point. No polling or document-wide media scan.
-                return document.elementsFromPoint(event.clientX, event.clientY).some(element =>
+                return stack.some(element =>
                     element.tagName === 'VIDEO' || element.tagName === 'AUDIO' ||
                     (element.tagName === 'IFRAME' && (element.hasAttribute('allowfullscreen') ||
                         /(?:autoplay|fullscreen)/i.test(element.getAttribute('allow') || ''))));

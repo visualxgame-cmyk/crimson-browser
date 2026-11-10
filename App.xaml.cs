@@ -10,6 +10,7 @@ public partial class App : Application
 {
     private SingleInstanceService? _singleInstance;
     private MainWindow? _mainWindow;
+    private StartupSplash? _splash;
     private readonly Queue<string> _pendingMessages = new();
     private bool _shuttingDown;
     private readonly HashSet<string> _reportedStorageErrors = new(StringComparer.Ordinal);
@@ -41,18 +42,30 @@ public partial class App : Application
         PendingStartupUrl = StartupUrl(e.Args);
 
         base.OnStartup(e);
+        // The splash lives on its own thread; keep the application alive until the
+        // main window is ready even if the splash is the only window for a moment.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
         ProfileStorageDiagnostics.Failed += ProfileStorageFailed;
 
         try
         {
+            _splash = StartupSplash.Show();
+            _ = Task.Run(StartupCleanup.RemoveStaleIncognitoProfiles);
             _mainWindow = new MainWindow(restoreSession: true, deferBrowserStartup: true);
             MainWindow = _mainWindow;
             _mainWindow.ContentRendered += MainWindow_FirstContentRendered;
+            // Loading libcef.dll and creating the engine cache is the slowest part of
+            // a cold start. Do it while only the splash is visible, so Windows never
+            // paints "Not Responding" on the browser window.
+            CefRuntime.Initialize();
             _mainWindow.Show();
+            ShutdownMode = ShutdownMode.OnLastWindowClose;
             ShieldService.Instance.PropertyChanged += PopupSettingsChanged;
         }
         catch (Exception ex)
         {
+            _splash?.Close();
+            _splash = null;
             LogException("Startup", ex);
             MessageBox.Show(ex.Message, "Crimson Browser", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
@@ -69,24 +82,36 @@ public partial class App : Application
     {
         if (sender is not MainWindow window) return;
         window.ContentRendered -= MainWindow_FirstContentRendered;
-        // Give WPF its first frame before loading the native CEF engine. Initialize
-        // and Shutdown remain on this same application thread, as required by CEF.
+        // Give WPF its first frame before creating the initial browser. The engine
+        // itself was initialized before the window became visible.
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (_shuttingDown || !window.IsLoaded) return;
+            if (_shuttingDown || !window.IsLoaded)
+            {
+                CloseSplash();
+                return;
+            }
             try
             {
-                CefRuntime.Initialize();
+                if (!CefRuntime.IsInitialized) CefRuntime.Initialize();
                 window.CompleteBrowserStartup();
-                _ = Task.Run(StartupCleanup.RemoveStaleIncognitoProfiles);
             }
             catch (Exception ex)
             {
                 LogException("Engine startup", ex);
+                CloseSplash();
                 MessageBox.Show(window, ex.Message, "Crimson Browser — CEF", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
+                return;
             }
+            CloseSplash();
         }), DispatcherPriority.Background);
+    }
+
+    private void CloseSplash()
+    {
+        _splash?.Close();
+        _splash = null;
     }
 
     private static void ForwardToRunningInstance(string message)
@@ -139,6 +164,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _shuttingDown = true;
+        CloseSplash();
         foreach (var window in Windows.OfType<MainWindow>().ToArray()) window.DisposeBrowsers();
         bool historySaved = HistoryService.FlushIfCreated();
         bool downloadsSaved = DownloadsService.FlushIfCreated();

@@ -103,6 +103,17 @@ internal static class Program
                     <a id="normal-link" href="https://smoke.crimson/two.html" target="_blank" style="position:absolute;top:250px">Article</a>
                     </body>
                     """);
+                File.WriteAllText(Path.Combine(root, "player-poster-fixture.html"), """
+                    <!doctype html><title>Poster overlay fixture</title><body style="margin:0">
+                    <div class="video-player" style="position:absolute;left:0;top:0;width:320px;height:180px;background:#000">
+                      <a id="poster-ad" href="https://random-ad.test/landing" target="_blank"
+                         style="position:absolute;left:0;top:0;width:320px;height:180px;z-index:2"
+                         onclick="window.posterAdClicks=(window.posterAdClicks||0)+1"></a>
+                      <button id="poster-play" style="position:absolute;left:10px;top:150px;z-index:1"
+                              onclick="window.posterPlayClicks=(window.posterPlayClicks||0)+1">Play</button>
+                    </div>
+                    </body>
+                    """);
                 using (var wave = new BinaryWriter(File.Create(Path.Combine(root, "silence.wav"))))
                 {
                     wave.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wave.Write(8036);
@@ -231,6 +242,31 @@ internal static class Program
                 await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
                     "{\"expression\":\"window.open('https://accounts.google.com/ServiceLogin','signin','width=400,height=500')\",\"userGesture\":true}"));
                 await Until(() => popup == "https://accounts.google.com/ServiceLogin", "Google authentication windows remain available");
+                tab.Navigate("https://smoke.crimson/player-poster-fixture.html");
+                await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                    (await tab.WebView.EvaluateScriptAsync("document.title==='Poster overlay fixture' && typeof window.__crimsonAllowPopup==='function'")).Result is true,
+                    "poster player fixture ready");
+                popup = null;
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.posterAdClicks===1")).Result is true,
+                    "poster overlay click reaches its own handler");
+                Check(popup == null && tab.Url == "https://smoke.crimson/player-poster-fixture.html",
+                    "an empty player-sized ad overlay cannot open or replace the tab");
+                await tab.WebView.EvaluateScriptAsync("document.getElementById('poster-ad').removeAttribute('target')");
+                popup = null;
+                await Cef.UIThreadTaskFactory.StartNew(() =>
+                {
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, false, 1);
+                    host.SendMouseClickEvent(new CefSharp.MouseEvent(60, 60, CefEventFlags.None), MouseButtonType.Left, true, 1);
+                });
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.posterAdClicks===2")).Result is true,
+                    "same-tab poster overlay click reaches its own handler");
+                Check(tab.Url == "https://smoke.crimson/player-poster-fixture.html",
+                    "an empty player-sized ad overlay cannot navigate the current tab");
                 tab.Navigate("https://smoke.crimson/one.html");
                 await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "normal fixture restored");
                 string? shortcut = null;
