@@ -114,6 +114,11 @@ internal static class Program
                     </div>
                     </body>
                     """);
+                File.WriteAllText(Path.Combine(root, "trap-fixture.html"), """
+                    <!doctype html><title>Popunder trap fixture</title><body style="margin:0">
+                    <button id="make-trap" onclick="window.makeTrapClicks=(window.makeTrapClicks||0)+1;var t=document.createElement('div');t.style='position:fixed;display:block;width:100%;height:100%;top:0;left:0;right:0;bottom:0;background-color:rgba(0,0,0,0);z-index:300000;';t.setAttribute('data-trap','1');t.addEventListener('click',function(){window.trapClicks=(window.trapClicks||0)+1;});document.body.appendChild(t);">Make trap</button>
+                    </body>
+                    """);
                 using (var wave = new BinaryWriter(File.Create(Path.Combine(root, "silence.wav"))))
                 {
                     wave.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wave.Write(8036);
@@ -187,7 +192,7 @@ internal static class Program
                 await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "back navigation");
                 tab.Navigate("https://smoke.crimson/player-fixture.html");
                 await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
-                    (await tab.WebView.EvaluateScriptAsync("document.title==='Popup player fixture' && typeof window.__crimsonSetPopupProtection==='function'")).Result is true,
+                    (await tab.WebView.EvaluateScriptAsync("document.title==='Popup player fixture' && typeof window.__crimsonSetPopupProtection==='function' && typeof window.googleAd==='object'")).Result is true,
                     "player popup protection is installed");
                 popup = null;
                 await Cef.UIThreadTaskFactory.StartNew(() => host.ExecuteDevToolsMethod(0, "Runtime.evaluate",
@@ -267,6 +272,15 @@ internal static class Program
                     "same-tab poster overlay click reaches its own handler");
                 Check(tab.Url == "https://smoke.crimson/player-poster-fixture.html",
                     "an empty player-sized ad overlay cannot navigate the current tab");
+                tab.Navigate("https://smoke.crimson/trap-fixture.html");
+                await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                    (await tab.WebView.EvaluateScriptAsync("document.title==='Popunder trap fixture' && typeof window.__crimsonSetAdProtection==='function'")).Result is true,
+                    "popunder click-trap fixture ready");
+                await tab.WebView.EvaluateScriptAsync("document.getElementById('make-trap').click()");
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("document.querySelector('[data-trap]')===null")).Result is true,
+                    "transparent full-screen popunder click trap is removed");
+                Check((await tab.WebView.EvaluateScriptAsync("window.makeTrapClicks===1 && typeof window.trapClicks==='undefined'")).Result is true,
+                    "removing the click trap leaves the page's own handlers intact");
                 tab.Navigate("https://smoke.crimson/one.html");
                 await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "normal fixture restored");
                 string? shortcut = null;

@@ -145,6 +145,17 @@ try
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://www.youtube.com/api/stats/ads?event=playback&ad_type=video&adslot=1"), "YouTube ad playback reporting does not break the player");
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://rr1.googlevideo.com/videoplayback?ad_type=video&adslot=1&sig=fixture"), "signed YouTube media transport remains playable");
     Assert(ShieldRequestPolicy.ShouldBlockUrl("https://googlevideo.com.evil.test/videoplayback?ad_type=video"), "media exception requires an actual Googlevideo host");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://advtpe.com/redirect"), "anti-adblock redirect hosts are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://rh.bleaklyousel.cyou/cx/*Xk*3dtMVe4qSUw1vM0MIcqBRc*MovTYJx1uwPpzBYg8igcc5nsS1qBlytiwehosHfjM7l*c2m*6JurJql56SnI4L6wncSpLdDEXgqqYd"),
+        "popunder redirector shapes are blocked on rotating hostnames");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://2osb.com/smart.php?link=11574846&var=fixture"), "popunder smart redirects are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://fhvfd.com/api/submit_form_request?p=fixture&ts=1"), "popunder form submissions are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://agiledevfuture.buzz/indexindouble.php?subid=fixture"), "popunder landing pages are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://example.test/landing?md=eyJ1YWgiOnsiYSI6Ing4NiJ9"), "popunder telemetry payloads are blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/cx/short"), "short content paths are not mistaken for redirectors");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/smart.php?page=2"), "unrelated smart.php queries are not blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://streamtape.com/e/Ky8RM39GOVF0mLR/"), "the video host itself stays reachable");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://anime-nexus.io/nexus/anime/shaman-king/1"), "the page hosting the player stays reachable");
     Assert(PopupNavigationPolicy.ShouldBlock("https://popads.net/open", true), "advertising popups are blocked even with user activation");
     Assert(PopupNavigationPolicy.ShouldBlock("https://example.test/", false), "automatic popups are blocked");
     Assert(!PopupNavigationPolicy.ShouldBlock("https://example.test/article", true), "explicit links proceed to intent verification");

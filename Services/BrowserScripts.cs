@@ -17,6 +17,14 @@ internal static class BrowserScripts
                 var enabled = window.__crimsonAdProtectionEnabled !== false;
                 window.__crimsonAdShield = true;
 
+                // Some players only reveal the video when a global that their ad script
+                // would define exists. Once that script is blocked the check fails and
+                // the page redirects the current tab to an advertising host. Provide the
+                // bait before page scripts run so the redirect never fires.
+                if (enabled && typeof window.googleAd === 'undefined') {
+                    try { window.googleAd = {}; } catch (_) {}
+                }
+
                 function isYouTube() {
                     var host = (location.hostname || '').toLowerCase();
                     return host === 'youtube.com' ||
@@ -523,6 +531,32 @@ internal static class BrowserScripts
                 var documentObserver = new MutationObserver(function() {
                     if (!observedPlayer || !observedPlayer.isConnected) observePlayer();
                 });
+
+                // Popunder scripts place an empty, fully transparent div over the whole
+                // player and attach their ad click handler to it, so the first click fires
+                // an ad instead of playback. Remove only that exact shape (fixed, full
+                // viewport, no content, transparent, very high z-index). The page's own
+                // click handlers still receive the event afterwards.
+                function adClickTrap(element) {
+                    if (!element || element.nodeType !== 1 || element.tagName !== 'DIV') return false;
+                    if (element.id || (typeof element.className === 'string' && element.className.trim())) return false;
+                    if (element.children.length || (element.textContent || '').trim()) return false;
+                    var style = getComputedStyle(element);
+                    if (style.position !== 'fixed' || style.display === 'none' || style.visibility === 'hidden') return false;
+                    if (style.pointerEvents === 'none') return false;
+                    if (style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent') return false;
+                    if (parseInt(style.zIndex, 10) < 100000) return false;
+                    var rect = element.getBoundingClientRect();
+                    return rect.width >= innerWidth * 0.9 && rect.height >= innerHeight * 0.9;
+                }
+                var trapObserver = new MutationObserver(function(records) {
+                    if (!enabled) return;
+                    for (var i = 0; i < records.length; i++) {
+                        var added = records[i].addedNodes;
+                        for (var j = 0; j < added.length; j++)
+                            if (adClickTrap(added[j])) added[j].remove();
+                    }
+                });
                 window.__crimsonSetAdProtection = function(value) {
                     enabled = !!value;
                     window.__crimsonAdProtectionEnabled = enabled;
@@ -535,8 +569,11 @@ internal static class BrowserScripts
                     }
                     playerObserver.disconnect();
                     documentObserver.disconnect();
+                    trapObserver.disconnect();
                     observedPlayer = null;
-                    if (!enabled || !isYouTube()) return;
+                    if (!enabled) return;
+                    trapObserver.observe(document.documentElement || document, {childList:true, subtree:true});
+                    if (!isYouTube()) return;
                     documentObserver.observe(document, {childList:true, subtree:true});
                     observePlayer();
                     kick();

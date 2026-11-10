@@ -76,7 +76,12 @@ internal static class ShieldRequestPolicy
         "exdynsrv.com",
         "realsrv.com",
         "realsrvcdn.com",
-        "adx18.com"
+        "adx18.com",
+        // Anti-adblock redirect and popunder networks seen on video hosts.
+        "advtpe.com",
+        "stareobjectedcipher.com",
+        "fhvfd.com",
+        "2osb.com"
     };
 
     // URLs that are ad/tracking endpoints but live on domains we cannot block wholesale.
@@ -121,6 +126,7 @@ internal static class ShieldRequestPolicy
         if (MatchesDomain(uri.IdnHost, "googlevideo.com") && uri.AbsolutePath == "/videoplayback") return false;
         if (MatchesDomain(uri.IdnHost, "youtube.com") && uri.AbsolutePath is
             "/api/stats/ads" or "/api/stats/atr" or "/ptracking" or "/youtubei/v1/log_event") return false;
+        if (LooksLikePopupRedirect(uri)) return true;
         foreach (string rule in BlockedDomains)
             if (MatchesHostAndPath(uri, rule)) return true;
         foreach (string rule in BlockedUrlFragments)
@@ -141,6 +147,24 @@ internal static class ShieldRequestPolicy
                     (!requiresQuery || uri.Query.Length > 0)) return true;
             }
         }
+        return false;
+    }
+
+    // Popunder networks rotate throwaway hostnames but keep recognisable request
+    // shapes. Matching the shape keeps them out even before a hostname is listed.
+    private static bool LooksLikePopupRedirect(Uri uri)
+    {
+        ReadOnlySpan<char> path = uri.AbsolutePath;
+        if (path.Contains("/api/submit_form_request", StringComparison.OrdinalIgnoreCase)) return true;
+        if (path.Contains("indexindouble.php", StringComparison.OrdinalIgnoreCase) ||
+            path.Contains("indexdouble.php", StringComparison.OrdinalIgnoreCase)) return true;
+        if (path.EndsWith("/smart.php", StringComparison.OrdinalIgnoreCase) &&
+            HasQueryKey(uri.Query.AsSpan(), "link")) return true;
+        // Redirector paths look like /cx/<long random token>.
+        int cx = path.IndexOf("/cx/", StringComparison.OrdinalIgnoreCase);
+        if (cx >= 0 && path.Length - cx >= 48) return true;
+        // Popunder telemetry carries a base64 JSON blob beginning with {"uah".
+        if (uri.Query.AsSpan().Contains("md=eyJ1YWgi", StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 
