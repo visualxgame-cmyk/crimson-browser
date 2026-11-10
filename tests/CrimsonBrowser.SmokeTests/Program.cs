@@ -156,6 +156,13 @@ try
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/smart.php?page=2"), "unrelated smart.php queries are not blocked");
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://streamtape.com/e/Ky8RM39GOVF0mLR/"), "the video host itself stays reachable");
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://anime-nexus.io/nexus/anime/shaman-king/1"), "the page hosting the player stays reachable");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://imasdk.googleapis.com/js/sdkloader/ima3.js"), "video ad SDK requests are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://ads.example.test/vast.xml?zone=fixture"), "VAST ad tags are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://ads.example.test/vast/linear?zone=fixture"), "VAST tag paths are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/player/vpaid.js"), "VPAID ad scripts are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/tag?ad_tag=campaign"), "ad tag queries are blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/articles/vast-landscape-guide"), "ordinary article paths are not ad tags");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/movies/feature-film.mp4"), "ordinary video files remain reachable");
     Assert(PopupNavigationPolicy.ShouldBlock("https://popads.net/open", true), "advertising popups are blocked even with user activation");
     Assert(PopupNavigationPolicy.ShouldBlock("https://example.test/", false), "automatic popups are blocked");
     Assert(!PopupNavigationPolicy.ShouldBlock("https://example.test/article", true), "explicit links proceed to intent verification");

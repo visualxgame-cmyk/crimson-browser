@@ -20,9 +20,11 @@ internal static class BrowserScripts
                 // Some players only reveal the video when a global that their ad script
                 // would define exists. Once that script is blocked the check fails and
                 // the page redirects the current tab to an advertising host. Provide the
-                // bait before page scripts run so the redirect never fires.
-                if (enabled && typeof window.googleAd === 'undefined') {
-                    try { window.googleAd = {}; } catch (_) {}
+                // bait before page scripts run so the redirect never fires. canRunAds is
+                // the equivalent bait used by older anti-adblock checks.
+                if (enabled) {
+                    try { if (typeof window.googleAd === 'undefined') window.googleAd = {}; } catch (_) {}
+                    try { if (typeof window.canRunAds === 'undefined') window.canRunAds = true; } catch (_) {}
                 }
 
                 function isYouTube() {
@@ -169,41 +171,63 @@ internal static class BrowserScripts
                         };
                     } catch (e) { }
 
-                    // Use YouTube's WEB channel playback context only after its specific
-                    // ad-block enforcement response. Ordinary playback, login, live chat,
-                    // comments and other origins keep their original request bodies.
+                    // Use YouTube's alternate playback contexts only after a playback
+                    // failure that looks like ad-block enforcement. clientScreen CHANNEL
+                    // on its own is answered with the generic "try again later" error, so
+                    // it is retained only as a last-resort context. Ordinary playback,
+                    // login, live chat, comments and other origins keep their original
+                    // request bodies.
                     var playbackRecoveries = new Map();
-                    var playbackModes = ['channel', 'lactmilli', 'yahi', 'inline'];
+                    var playbackModes = ['lactmilli', 'yahi', 'inline', 'channel'];
+                    // YouTube Music uses the WEB_REMIX client. Its player request bodies
+                    // are gzip-compressed, so the same recovery runs after decoding them.
+                    // Switching to the plain WEB watch client is the strongest fallback.
+                    var musicModes = ['remix-lact', 'remix-yahi', 'remix-web', 'remix-inline'];
                     var nativeParse = JSON.parse;
                     var nativeStringify = JSON.stringify;
+                    function playbackModesFor(request) {
+                        var name = request.context?.client?.clientName;
+                        if (name === 'WEB') return playbackModes;
+                        if (name === 'WEB_REMIX') return musicModes;
+                        return null;
+                    }
                     function preparePlayerRequest(request) {
                         if (!enabled || !request || typeof request !== 'object' ||
-                            request.context?.client?.clientName !== 'WEB' ||
-                            !request.playbackContext?.contentPlaybackContext || location.pathname.startsWith('/shorts/')) return request;
+                            !request.playbackContext?.contentPlaybackContext ||
+                            location.pathname.startsWith('/shorts/')) return request;
+                        var modes = playbackModesFor(request);
+                        if (!modes) return request;
                         var recovery = playbackRecoveries.get(request.videoId);
                         if (!recovery || recovery.attempt < 0) return request;
-                        var mode = playbackModes[recovery.attempt];
+                        var mode = modes[recovery.attempt];
+                        if (!mode) return request;
                         var client = Object.assign({}, request.context.client);
                         var playback = Object.assign({}, request.playbackContext.contentPlaybackContext);
                         var result = Object.assign({}, request, {
                             context: Object.assign({}, request.context, {client:client}),
                             playbackContext: Object.assign({}, request.playbackContext, {contentPlaybackContext:playback})
                         });
-                        if (mode === 'channel') client.clientScreen = 'CHANNEL';
-                        else if (mode === 'lactmilli') result.params = '8AUB';
-                        else if (mode === 'yahi') result.params = 'YAHI';
-                        else if (mode === 'inline') playback.isInlinePlaybackNoAd = true;
-                        if (typeof client.userAgent === 'string') {
+                        if (mode === 'channel' || mode === 'remix-channel') client.clientScreen = 'CHANNEL';
+                        else if (mode === 'lactmilli' || mode === 'remix-lact') result.params = '8AUB';
+                        else if (mode === 'yahi' || mode === 'remix-yahi') result.params = 'YAHI';
+                        else if (mode === 'inline' || mode === 'remix-inline') playback.isInlinePlaybackNoAd = true;
+                        else if (mode === 'remix-web') {
+                            client.clientName = 'WEB';
+                            client.clientVersion = String(client.clientVersion || '').replace(/^1\./, '2.');
+                            client.clientScreen = 'WATCH';
+                        }
+                        if (typeof client.userAgent === 'string' && mode.indexOf('remix-') !== 0) {
                             client.userAgent = client.userAgent.replace(/; (?:channel|lactmilli|yahi|inline)\b/g, '')
                                 .replace(/(Mozilla\/5\.0 \([^)]+)/, '$1; ' + mode);
                         }
-                        if (mode !== 'yahi') playback.lactMilliseconds = String(Date.now());
+                        if (mode !== 'yahi' && mode !== 'remix-yahi')
+                            playback.lactMilliseconds = String(Date.now());
                         playback.referer = (playback.referer || location.href).replace(/(?:#reloadxhr)?$/, '#reloadxhr');
                         return result;
                     }
                     // Some YouTube transports capture fetch/XHR before CEF's context
-                    // notification. Adapt serialization too, only after a proven enforcement
-                    // response and only for that video's WEB playback request.
+                    // notification. Adapt serialization too, only after a proven playback
+                    // failure and only for that video's playback request.
                     function recoveryStringify(value, replacer, space) {
                         return nativeStringify.call(this, preparePlayerRequest(value), replacer, space);
                     }
@@ -224,6 +248,41 @@ internal static class BrowserScripts
                             return modified === request ? body : nativeStringify(modified);
                         } catch (e) { return body; }
                     }
+                    // YouTube Music sends the player body as a gzip-compressed Request.
+                    // Decode it so the recovery context reaches the server instead of
+                    // leaving the compressed payload unchanged.
+                    async function decodePlayerBody(body) {
+                        if (typeof body === 'string' || body == null) return body;
+                        try {
+                            var buffer = body instanceof Blob ? await body.arrayBuffer() : body;
+                            var bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) :
+                                ArrayBuffer.isView(buffer) ?
+                                    new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength) : null;
+                            if (!bytes) return null;
+                            if (bytes.length > 1 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+                                if (typeof DecompressionStream !== 'function') return null;
+                                var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+                                return await new Response(stream).text();
+                            }
+                            return new TextDecoder().decode(bytes);
+                        } catch (e) { return null; }
+                    }
+                    // The rewritten body is plain UTF-8 JSON. Drop the stale gzip
+                    // content headers and align the WEB client headers when the music
+                    // recovery switches to the plain WEB client.
+                    function recoveryHeaders(headers, bodyText) {
+                        headers.delete('content-encoding');
+                        headers.delete('content-length');
+                        try {
+                            var parsed = nativeParse(bodyText);
+                            if (parsed?.context?.client?.clientName === 'WEB' &&
+                                headers.get('x-youtube-client-name') === '67') {
+                                headers.set('x-youtube-client-name', '1');
+                                headers.set('x-youtube-client-version', parsed.context.client.clientVersion);
+                            }
+                        } catch (e) { }
+                        return headers;
+                    }
                     // Response.json does not call the page's JSON.parse override.
                     // Keep the native Response itself (headers, URL, streaming and cloning).
                     function playerResponse(response) {
@@ -238,14 +297,36 @@ internal static class BrowserScripts
                     var nativeFetch = window.fetch;
                     if (nativeFetch) window.fetch = async function(input, init) {
                         var endpoint = playerEndpoint(typeof input === 'string' || input instanceof URL ? input : input?.url);
-                        if (endpoint && init && typeof init.body === 'string') {
-                            var body = playerBody(init.body);
-                            if (body !== init.body) init = Object.assign({}, init, {body:body});
-                        } else if (enabled && endpoint && playbackRecoveries.size > 0 && input instanceof Request &&
-                            input.method === 'POST' && !(init && init.body != null)) {
-                            var original = await input.clone().text();
-                            var modified = playerBody(original);
-                            if (modified !== original) input = new Request(input, {body:modified});
+                        if (enabled && endpoint && playbackRecoveries.size > 0) {
+                            try {
+                                if (init && init.body != null) {
+                                    var bodyText = await decodePlayerBody(init.body);
+                                    if (bodyText != null) {
+                                        var rewritten = playerBody(bodyText);
+                                        if (rewritten !== bodyText) {
+                                            var headers = new Headers(init.headers ||
+                                                (input instanceof Request ? input.headers : undefined));
+                                            init = Object.assign({}, init, {
+                                                body: rewritten,
+                                                headers: recoveryHeaders(headers, rewritten)
+                                            });
+                                        }
+                                    }
+                                } else if (input instanceof Request && input.method === 'POST') {
+                                    var original = await decodePlayerBody(await input.clone().arrayBuffer());
+                                    if (original != null) {
+                                        var modified = playerBody(original);
+                                        if (modified !== original) {
+                                            var requestHeaders = new Headers(input.headers);
+                                            input = new Request(input, Object.assign({}, init || {}, {
+                                                body: modified,
+                                                headers: recoveryHeaders(requestHeaders, modified)
+                                            }));
+                                            init = undefined;
+                                        }
+                                    }
+                                }
+                            } catch (e) { }
                         }
                         var response = await nativeFetch.call(this, input, init);
                         return enabled && endpoint ? playerResponse(response) : response;
@@ -273,8 +354,23 @@ internal static class BrowserScripts
                     '[class*="ad-slot"]',
                     '[class*="ad-banner"]',
                     '[class*="sponsored"]',
+                    '[class*="advert"]',
+                    '[id*="advert"]',
+                    '[data-ad-slot]',
+                    '[data-ad-client]',
                     '.ad-slot',
                     '.ad-banner',
+                    '.ad-overlay',
+                    '.ad-wrapper',
+                    '.ad-placeholder',
+                    '.ad-unit',
+                    '.ads-container',
+                    '.ima-ad-container',
+                    '.vjs-ad-container',
+                    '.jw-flag-ads .jw-ad',
+                    'iframe[src*="doubleclick.net"]',
+                    'iframe[src*="googlesyndication.com"]',
+                    'iframe[src*="imasdk"]',
                     '#player-ads',
                     '#masthead-ad',
                     'ytd-ad-slot-renderer',
@@ -348,8 +444,18 @@ internal static class BrowserScripts
                 function isGenericPlayerError(status) {
                     var screen = status && status.errorScreen;
                     if (!screen || !screen.playerErrorMessageRenderer) return false;
-                    try { return JSON.stringify(screen).indexOf('playerCaptchaViewModel') === -1; }
+                    try { return nativeStringify(screen).indexOf('playerCaptchaViewModel') === -1; }
                     catch (e) { return true; }
+                }
+
+                // YouTube Music often reports the generic "A apărut o eroare. Încearcă
+                // mai târziu." failure as a bare ERROR/UNPLAYABLE status without an error
+                // screen. Retrying the bounded playback contexts is safe; a private,
+                // age-gated or CAPTCHA video keeps its final error after the attempts.
+                function isRecoverableGenericError(status, response) {
+                    if (!status || (status.status !== 'ERROR' && status.status !== 'UNPLAYABLE')) return false;
+                    if (hasPlayableStream(response)) return false;
+                    return !status.errorScreen || isGenericPlayerError(status);
                 }
 
                 function recoverBlockedPlayback() {
@@ -377,6 +483,7 @@ internal static class BrowserScripts
                     // WEB_PAGE_TYPE_UNKNOWN with the playback-help link is the older
                     // enforcement signature; a plain 3037019 link alone stays untouched.
                     var adBlockMessage = enforcedFailure ||
+                        isRecoverableGenericError(status, response) ||
                         error.includes('openAdAllowlistInstructionCommand') ||
                         (status.status === 'ERROR' && error.includes('WEB_PAGE_TYPE_UNKNOWN') &&
                          error.includes('https://support.google.com/youtube/answer/3037019'));
@@ -392,7 +499,8 @@ internal static class BrowserScripts
                         recovery = {attempt:-1, seen:new WeakSet()};
                         playbackRecoveries.set(id, recovery);
                     }
-                    if (recovery.seen.has(response) || recovery.attempt + 1 >= playbackModes.length) return;
+                    if (recovery.seen.has(response) ||
+                        recovery.attempt + 1 >= Math.max(playbackModes.length, musicModes.length)) return;
                     recovery.seen.add(response);
                     recovery.attempt++;
                     installRecoverySerialization();
@@ -418,10 +526,10 @@ internal static class BrowserScripts
                     var shouldReveal = !!id && revealedVideos.has(id);
                     if (!shouldReveal) {
                         // Start only once recovery actually produced advancing media, so a real
-                        // error keeps its shell and its hidden player.
+                        // error keeps its shell and its hidden player. YouTube Music has no
+                        // yt-player-error-message-renderer, so the media state alone decides.
                         if (video.paused || video.error || video.readyState < 2 || video.videoWidth <= 0) return;
                         if (!response || !hasPlayableStream(response)) return;
-                        if (!renderer) return;
                         shouldReveal = true;
                         if (id) {
                             if (revealedVideos.size >= 64) revealedVideos.delete(revealedVideos.values().next().value);

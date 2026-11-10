@@ -19,7 +19,7 @@ internal static class YouTubeShieldChecks
             window.sentRequests=[];
             window.fetch=async function(input,init){
                 const body=init?.body ?? (input instanceof Request ? await input.clone().text() : null);
-                sentRequests.push({url:typeof input==='string'?input:input.url,body});
+                sentRequests.push({url:typeof input==='string'?input:input.url,body,headers:init?.headers??null});
                 return new Response(window.fixtureResponseBody || '{"adSlots":[1],"auxiliaryUi":{"messageRenderers":{"bkaEnforcementMessageViewModel":{"title":"wall"}}},"errorScreen":{"enforcementMessageViewModel":{"primaryButton":{"onTap":{"innertubeCommand":{"openAdAllowlistInstructionCommand":{}}}}}},"streamingData":{"marker":"keep-stream"}}',{
                     status:200,headers:{'X-Fixture':'keep-header','Content-Type':'application/json'}});
             };
@@ -89,25 +89,23 @@ internal static class YouTubeShieldChecks
                 const other=JSON.parse(fixtureBody());other.videoId='live-video';
                 await fetch('/youtubei/v1/player',{method:'POST',body:JSON.stringify(other)});
                 const live=JSON.parse(sentRequests.at(-1).body);
-                return recovered.context.client.clientScreen==='CHANNEL' && requestInput.context.client.clientScreen==='CHANNEL' &&
-                    xhrBody.context.client.clientScreen==='CHANNEL' && recovered.attestationRequest.marker==='keep-proof' &&
+                return recovered.params==='8AUB' && recovered.context.client.clientScreen==='WATCH' &&
+                    requestInput.params==='8AUB' && xhrBody.params==='8AUB' &&
+                    recovered.attestationRequest.marker==='keep-proof' &&
                     recovered.playbackContext.contentPlaybackContext.signatureTimestamp===123 &&
                     chat.context.client.clientScreen==='WATCH' && live.context.client.clientScreen==='WATCH';
             })();
-            """, "scope channel recovery to the blocked video across fetch, Request and XHR without altering live chat or verification data");
+            """, "scope lactmilli recovery to the blocked video across fetch, Request and XHR without altering live chat or verification data");
         await EvaluatePromise(tab, """
             return (async()=>{
                 const original=JSON.parse(fixtureBody());
                 const encoded=JSON.parse(JSON.stringify(original));
-                if(encoded.context.client.clientScreen!=='CHANNEL' || original.context.client.clientScreen!=='WATCH' ||
+                if(encoded.params!=='8AUB' || original.context.client.clientScreen!=='WATCH' ||
                     encoded.playbackContext.contentPlaybackContext.referer.indexOf('#reloadxhr')<0 ||
                     !encoded.playbackContext.contentPlaybackContext.lactMilliseconds) return false;
                 fixtureResponse={videoDetails:{videoId:'fixture-video'},playabilityStatus:{status:'UNPLAYABLE',errorScreen:{
                     playerInterstitialRenderer:{content:{interstitialViewModel:{description:{content:'Generic playback failure'},
                     support:'https://support.google.com/youtube/answer/3037019'}}}}}};
-                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
-                const lact=JSON.parse(JSON.stringify(original));
-                fixtureResponse=structuredClone(fixtureResponse);
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
                 const yahi=JSON.parse(JSON.stringify(original));
                 fixtureResponse=structuredClone(fixtureResponse);
@@ -115,8 +113,12 @@ internal static class YouTubeShieldChecks
                 const inline=JSON.parse(JSON.stringify(original));
                 fixtureResponse=structuredClone(fixtureResponse);
                 document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
-                return recoveryCount===4 && lact.params==='8AUB' && yahi.params==='YAHI' &&
+                const channel=JSON.parse(JSON.stringify(original));
+                fixtureResponse=structuredClone(fixtureResponse);
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                return recoveryCount===4 && yahi.params==='YAHI' &&
                     inline.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd===true &&
+                    channel.context.client.clientScreen==='CHANNEL' &&
                     fixtureResponse.playabilityStatus.status==='UNPLAYABLE' && original.context.client.clientScreen==='WATCH';
             })();
             """, "adapt captured serializers and advance bounded playback contexts only on new server responses");
@@ -248,6 +250,73 @@ internal static class YouTubeShieldChecks
                 return recoveryCount===before && video.playbackRate===1.5 && Math.abs(video.volume-0.35)<0.001 && !video.muted && skips===1;
             })();
             """, "retain CAPTCHA and account errors and user media settings while using available skip controls");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                fixturePlayer.className='';
+                window.recoveryCount=0;
+                fixtureResponse={videoDetails:{videoId:'bare-error-video'},playabilityStatus:{status:'ERROR',reason:'An error occurred'}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                return recoveryCount===1 && recoveredId==='bare-error-video';
+            })();
+            """, "recover a bare generic playback error even without enforcement metadata");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                fixturePlayer.className='';
+                window.recoveryCount=0;
+                fixtureResponse={videoDetails:{videoId:'music-error-video'},playabilityStatus:{status:'ERROR'}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                if(recoveryCount!==1) return false;
+                const body={videoId:'music-error-video',context:{client:{clientName:'WEB_REMIX',
+                    clientVersion:'1.20261104.00.00',userAgent:navigator.userAgent,clientScreen:'WATCH_FULL_SCREEN'}},
+                    playbackContext:{contentPlaybackContext:{signatureTimestamp:1,referer:'https://music.youtube.com/watch?v=music-error-video'}},
+                    cpn:'fixture',serviceIntegrityDimensions:{poToken:'keep-token'}};
+                const gzip=async value=>new Uint8Array(await new Response(new Blob([value]).stream()
+                    .pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+                async function sendMusic(bodyValue){
+                    sentRequests.length=0;
+                    await fetch('/youtubei/v1/player',{method:'POST',headers:{'content-type':'application/json',
+                        'content-encoding':'gzip','x-youtube-client-name':'67','x-youtube-client-version':'1.20261104.00.00'},
+                        body:await gzip(JSON.stringify(bodyValue))});
+                    return sentRequests.at(-1);
+                }
+                const first=await sendMusic(body);
+                const firstBody=typeof first.body==='string'?JSON.parse(first.body):null;
+                if(!firstBody || firstBody.context.client.clientName!=='WEB_REMIX' || firstBody.params!=='8AUB' ||
+                    firstBody.serviceIntegrityDimensions.poToken!=='keep-token' ||
+                    new Headers(first.headers).get('content-encoding')!==null) return false;
+                fixtureResponse={videoDetails:{videoId:'music-error-video'},playabilityStatus:{status:'ERROR'}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                fixtureResponse=structuredClone(fixtureResponse);
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                const third=await sendMusic(body);
+                const thirdBody=typeof third.body==='string'?JSON.parse(third.body):null;
+                return !!thirdBody && thirdBody.context.client.clientName==='WEB' &&
+                    thirdBody.context.client.clientVersion.indexOf('2.')===0 &&
+                    new Headers(third.headers).get('x-youtube-client-name')==='1' &&
+                    new Headers(third.headers).get('content-encoding')===null;
+            })();
+            """, "decode gzip WEB_REMIX player bodies and switch music recovery to the plain WEB client");
+        await EvaluatePromise(tab, """
+            return (async()=>{
+                const video=fixturePlayer.querySelector('video');
+                const wrapper=document.createElement('div');
+                const music=document.createElement('ytmusic-player');
+                wrapper.style.visibility='hidden';music.style.visibility='hidden';
+                document.body.append(wrapper);wrapper.append(music);music.append(fixturePlayer);
+                Object.defineProperty(video,'paused',{configurable:true,value:false});
+                Object.defineProperty(video,'readyState',{configurable:true,value:4});
+                Object.defineProperty(video,'videoWidth',{configurable:true,value:1280});
+                Object.defineProperty(video,'error',{configurable:true,value:null});
+                fixtureResponse={videoDetails:{videoId:'music-visible-video'},playabilityStatus:{status:'OK'},
+                    streamingData:{adaptiveFormats:[{mimeType:'audio/webm'}]}};
+                document.dispatchEvent(new Event('yt-page-data-updated'));await Promise.resolve();
+                const visible=getComputedStyle(wrapper).visibility==='visible' &&
+                    getComputedStyle(music).visibility==='visible';
+                document.body.append(fixturePlayer);wrapper.remove();
+                for(const name of ['paused','readyState','videoWidth','error']) delete video[name];
+                return visible;
+            })();
+            """, "reveal a YouTube Music player chain without a desktop error renderer");
         await Evaluate(tab, BrowserScripts.ConfigureAdProtection(false) + "\ntrue;", "disable filtering on an already open document");
         await EvaluatePromise(tab, """
             return (async()=>{

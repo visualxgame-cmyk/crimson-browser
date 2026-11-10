@@ -61,10 +61,18 @@ internal static class Program
                     window.Show();
                     await Until(() => tab.WebView.IsBrowserInitialized && tab.WebView.CanExecuteJavascriptInMainFrame, "media probe ready");
                     Console.WriteLine("CODECS: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({h264:MediaSource.isTypeSupported('video/mp4; codecs=\"avc1.42E01E\"'),aac:MediaSource.isTypeSupported('audio/mp4; codecs=\"mp4a.40.2\"'),vp9:MediaSource.isTypeSupported('video/webm; codecs=\"vp9\"'),opus:MediaSource.isTypeSupported('audio/webm; codecs=\"opus\"')})")).Result);
+                    using (var consentCookies = await context.GetCookieManagerAsync())
+                    {
+                        await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "SOCS", Value = "CAI", Domain = ".youtube.com", Path = "/" });
+                        await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "CONSENT", Value = "YES+cb", Domain = ".youtube.com", Path = "/" });
+                    }
                     tab.Navigate(probeUrl);
+                    string readyScript = probeUrl.Contains("music.youtube.com", StringComparison.OrdinalIgnoreCase)
+                        ? "!!document.querySelector('video') || location.hostname === 'consent.youtube.com'"
+                        : "!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'";
                     await UntilAsync(async () =>
                     {
-                        var response = await ReadPublicPage("!!window.ytInitialPlayerResponse || location.hostname === 'consent.youtube.com'");
+                        var response = await ReadPublicPage(readyScript);
                         return response?.Result is true;
                     }, "public live response available");
                     Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
@@ -74,8 +82,11 @@ internal static class Program
                             "public live player is created", args.Contains("--interactive-consent") ? 120 : 20);
                         var firstFrame = await tab.WebView.EvaluateScriptAsync("document.querySelector('video').getVideoPlaybackQuality().totalVideoFrames");
                         double initialFrames = Convert.ToDouble(firstFrame.Result);
-                        // Muted playback does not require a fabricated user gesture.
-                        await ReadPublicPage("(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play().catch(error=>{window.__crimsonPlaybackError=error.name;});return true;})()");
+                        // Muted playback does not require a fabricated user gesture, but
+                        // DevTools supplies activation consistently across CEF builds.
+                        var liveHost = tab.WebView.GetBrowser().GetHost();
+                        await Cef.UIThreadTaskFactory.StartNew(() => liveHost.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                            "{\"expression\":\"(()=>{const v=document.querySelector('video');v.muted=true;document.getElementById('movie_player')?.playVideo?.();v.play()})()\",\"userGesture\":true}"));
                         try { await UntilAsync(async () =>
                         {
                             var playback = await ReadPublicPage("(()=>{const v=document.querySelector('video'),p=document.getElementById('movie_player');return !!v && !!p && !p.classList.contains('ad-showing') && !v.error && !v.paused && v.videoWidth>0 && v.getVideoPlaybackQuality().totalVideoFrames>" +

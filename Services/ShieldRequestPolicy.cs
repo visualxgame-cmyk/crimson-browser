@@ -81,7 +81,49 @@ internal static class ShieldRequestPolicy
         "advtpe.com",
         "stareobjectedcipher.com",
         "fhvfd.com",
-        "2osb.com"
+        "2osb.com",
+        // Video ad servers and VAST/VPAID ad exchanges.
+        "2mdn.net",
+        "imasdk.googleapis.com",
+        "innovid.com",
+        "springserve.com",
+        "tremorvideo.com",
+        "freewheel.tv",
+        "fwmrm.net",
+        "yieldlab.net",
+        "smartclip.net",
+        "stickyadstv.com",
+        "gumgum.com",
+        "lijit.com",
+        "sovrn.com",
+        "33across.com",
+        "sharethrough.com",
+        "triplelift.com",
+        "indexexchange.com",
+        "improvedigital.com",
+        "conversantmedia.com",
+        "zemanta.com",
+        "nativo.com",
+        "adition.com",
+        "adhese.com",
+        "undertone.com",
+        "districtm.io",
+        "adhigh.net",
+        "adnium.com",
+        "exponential.com",
+        "tribalfusion.com",
+        "vrtcal.com",
+        "smaato.net",
+        "mopub.com",
+        "inmobi.com",
+        "applovin.com",
+        "unityads.unity3d.com",
+        "vungle.com",
+        "chartboost.com",
+        "ironsrc.com",
+        "fyber.com",
+        "supersonicads.com",
+        "doubleverify.com"
     };
 
     // URLs that are ad/tracking endpoints but live on domains we cannot block wholesale.
@@ -106,6 +148,12 @@ internal static class ShieldRequestPolicy
         // content and ads. Cancelling that transport can strand the player in ad mode.
         "adslot=",
         "ad_slot=",
+        "ad_tag=",
+        "adtag=",
+        "vast=",
+        "vpaid",
+        "ima3.js",
+        "ads-loader",
         "/telemetry?",
         "/tracker?"
     };
@@ -127,6 +175,7 @@ internal static class ShieldRequestPolicy
         if (MatchesDomain(uri.IdnHost, "youtube.com") && uri.AbsolutePath is
             "/api/stats/ads" or "/api/stats/atr" or "/ptracking" or "/youtubei/v1/log_event") return false;
         if (LooksLikePopupRedirect(uri)) return true;
+        if (LooksLikeAdTagPath(uri.AbsolutePath)) return true;
         foreach (string rule in BlockedDomains)
             if (MatchesHostAndPath(uri, rule)) return true;
         foreach (string rule in BlockedUrlFragments)
@@ -149,6 +198,13 @@ internal static class ShieldRequestPolicy
         }
         return false;
     }
+
+    // VAST/VPAID ad tags commonly use /vast, /vast.xml or /vast/... paths. These
+    // are specific enough that ordinary article paths are not mistaken for ads.
+    private static bool LooksLikeAdTagPath(ReadOnlySpan<char> path) =>
+        path.EndsWith("/vast", StringComparison.OrdinalIgnoreCase) ||
+        path.EndsWith("/vast.xml", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("/vast/", StringComparison.OrdinalIgnoreCase);
 
     // Popunder networks rotate throwaway hostnames but keep recognisable request
     // shapes. Matching the shape keeps them out even before a hostname is listed.
