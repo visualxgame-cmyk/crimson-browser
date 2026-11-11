@@ -124,6 +124,11 @@ internal static class BrowserScripts
                                 playerStatus.status = 'OK';
                             try { delete playerStatus.errorScreen; } catch (e) { }
                             try { delete playerStatus.reason; } catch (e) { }
+                            // The watch page may already have built its unavailable shell from
+                            // this response. Reconcile the page immediately after the caller
+                            // receives the filtered data instead of waiting for the player's
+                            // next media event.
+                            try { queueMicrotask(function () { kick(); }); } catch (e) { }
                         }
                     }
 
@@ -183,6 +188,17 @@ internal static class BrowserScripts
                     // are gzip-compressed, so the same recovery runs after decoding them.
                     // Switching to the plain WEB watch client is the strongest fallback.
                     var musicModes = ['remix-lact', 'remix-yahi', 'remix-web', 'remix-inline'];
+                    // Once this profile has seen playback enforcement, every later watch
+                    // request starts in the working context instead of failing first. The
+                    // first failure makes YouTube schedule a playlist advance even when the
+                    // recovery produces playable media, which looked like non-stop skipping.
+                    // Persisting the marker prevents that on later videos and sessions.
+                    var proactiveMode = null;
+                    try { proactiveMode = localStorage.getItem('crimson-playback-mode'); } catch (e) { }
+                    function rememberPlaybackMode(mode) {
+                        proactiveMode = mode;
+                        try { localStorage.setItem('crimson-playback-mode', mode); } catch (e) { }
+                    }
                     var nativeParse = JSON.parse;
                     var nativeStringify = JSON.stringify;
                     function playbackModesFor(request) {
@@ -191,16 +207,16 @@ internal static class BrowserScripts
                         if (name === 'WEB_REMIX') return musicModes;
                         return null;
                     }
-                    function preparePlayerRequest(request) {
-                        if (!enabled || !request || typeof request !== 'object' ||
-                            !request.playbackContext?.contentPlaybackContext ||
-                            location.pathname.startsWith('/shorts/')) return request;
+                    function playbackModeFor(request) {
                         var modes = playbackModesFor(request);
-                        if (!modes) return request;
+                        if (!modes) return null;
                         var recovery = playbackRecoveries.get(request.videoId);
-                        if (!recovery || recovery.attempt < 0) return request;
-                        var mode = modes[recovery.attempt];
-                        if (!mode) return request;
+                        if (recovery && recovery.attempt >= 0) return modes[recovery.attempt] || null;
+                        // The marker is only proven for the plain WEB client.
+                        if (request.context?.client?.clientName === 'WEB' && proactiveMode) return proactiveMode;
+                        return null;
+                    }
+                    function applyPlaybackMode(request, mode) {
                         var client = Object.assign({}, request.context.client);
                         var playback = Object.assign({}, request.playbackContext.contentPlaybackContext);
                         var result = Object.assign({}, request, {
@@ -225,6 +241,14 @@ internal static class BrowserScripts
                         playback.referer = (playback.referer || location.href).replace(/(?:#reloadxhr)?$/, '#reloadxhr');
                         return result;
                     }
+                    function preparePlayerRequest(request) {
+                        if (!enabled || !request || typeof request !== 'object' ||
+                            !request.playbackContext?.contentPlaybackContext ||
+                            location.pathname.startsWith('/shorts/')) return request;
+                        var mode = playbackModeFor(request);
+                        if (!mode) return request;
+                        return applyPlaybackMode(request, mode);
+                    }
                     // Some YouTube transports capture fetch/XHR before CEF's context
                     // notification. Adapt serialization too, only after a proven playback
                     // failure and only for that video's playback request.
@@ -241,7 +265,8 @@ internal static class BrowserScripts
                         } catch (e) { return false; }
                     }
                     function playerBody(body) {
-                        if (!enabled || playbackRecoveries.size === 0 || typeof body !== 'string') return body;
+                        if (!enabled || (playbackRecoveries.size === 0 && !proactiveMode) ||
+                            typeof body !== 'string') return body;
                         try {
                             var request = nativeParse(body);
                             var modified = preparePlayerRequest(request);
@@ -297,7 +322,7 @@ internal static class BrowserScripts
                     var nativeFetch = window.fetch;
                     if (nativeFetch) window.fetch = async function(input, init) {
                         var endpoint = playerEndpoint(typeof input === 'string' || input instanceof URL ? input : input?.url);
-                        if (enabled && endpoint && playbackRecoveries.size > 0) {
+                        if (enabled && endpoint && (playbackRecoveries.size > 0 || proactiveMode)) {
                             try {
                                 if (init && init.body != null) {
                                     var bodyText = await decodePlayerBody(init.body);
@@ -522,6 +547,71 @@ internal static class BrowserScripts
                         response = typeof current.getPlayerResponse === 'function' ? current.getPlayerResponse() : null;
                     } catch (e) { }
                     var id = response?.videoDetails?.videoId || new URL(location.href).searchParams.get('v');
+                    if (!response || !hasPlayableStream(response)) return;
+                    var recovery = playbackRecoveries.get(id);
+                    // The shell is only safe to remove when the media is actually advancing,
+                    // not merely because a response happened to include stream metadata.
+                    var mediaPlaying = !video.paused && !video.error &&
+                        video.readyState >= 2 && video.videoWidth > 0;
+                    // The enforcement response also marks the whole watch page unavailable.
+                    // Recovery can then produce playable streams while that stale page state
+                    // remains, and YouTube's playlist manager advances to the next video after
+                    // a few seconds. That is what looked like continuous skipping through a
+                    // mix. Clear the stale shell as soon as streams exist; a genuine
+                    // unavailable, account or CAPTCHA response carries no streams and keeps
+                    // its explanation.
+                    if ((recovery && recovery.attempt >= 0) || enforcedVideos.has(id) ||
+                        revealedVideos.has(id) || mediaPlaying) {
+                        // The mode that just produced these playable streams is proven for
+                        // this account. Remember it so later watch requests start there
+                        // instead of failing first and letting YouTube skip the video.
+                        if (recovery && recovery.attempt >= 0 &&
+                            location.hostname !== 'music.youtube.com') {
+                            var proven = playbackModes[recovery.attempt];
+                            if (proven && proactiveMode !== proven) rememberPlaybackMode(proven);
+                        }
+                        document.querySelectorAll('ytd-watch-flexy[player-unavailable], ytd-watch[player-unavailable], ytd-player[player-unavailable]').forEach(function (node) {
+                            node.removeAttribute('player-unavailable');
+                        });
+                        document.querySelectorAll('yt-playability-error-supported-renderers').forEach(function (node) {
+                            if (node.style.display !== 'none') node.style.display = 'none';
+                        });
+                        document.querySelectorAll('#player-error-message-container').forEach(function (node) {
+                            if (node.style.display !== 'none') node.style.display = 'none';
+                        });
+                        document.querySelectorAll('#movie_player .ytp-error').forEach(function (node) {
+                            if (node.style.display !== 'none') node.style.display = 'none';
+                        });
+                        document.querySelectorAll('.player-container-background').forEach(function (background) {
+                            if (background.style.display !== 'none') background.style.display = 'none';
+                        });
+                        // ytd-watch-flexy keeps the enforcement ERROR in playerData even after
+                        // the player itself recovered, and its shouldProceedToNextVideo_ observer
+                        // reads that stale status. In a playlist or mix that schedules a skip
+                        // to the next video after five seconds, on every page data update, so
+                        // songs advance continuously. Once real streams exist, clear the stale
+                        // status and cancel any skip that was already scheduled.
+                        var staleStatus = null;
+                        try {
+                            var watch = document.querySelector('ytd-watch-flexy');
+                            staleStatus = watch && watch.playerData && watch.playerData.playabilityStatus;
+                        } catch (e) { }
+                        if (staleStatus && staleStatus.status !== 'OK' &&
+                            staleStatus.status !== 'LIVE_STREAM_OFFLINE' &&
+                            (!staleStatus.errorScreen || isGenericPlayerError(staleStatus) ||
+                             staleStatus.status === 'ERROR' || staleStatus.status === 'UNPLAYABLE')) {
+                            staleStatus.status = 'OK';
+                            delete staleStatus.reason;
+                            delete staleStatus.errorScreen;
+                            delete staleStatus.errorDetails;
+                            [document.querySelector('yt-playlist-manager'),
+                             document.querySelector('ytd-watch-flexy')].forEach(function (node) {
+                                if (node && typeof node.cancelVideoSkip === 'function') {
+                                    try { node.cancelVideoSkip(); } catch (e) { }
+                                }
+                            });
+                        }
+                    }
                     var renderer = document.querySelector('yt-player-error-message-renderer');
                     var shouldReveal = !!id && revealedVideos.has(id);
                     if (!shouldReveal) {
@@ -529,21 +619,16 @@ internal static class BrowserScripts
                         // error keeps its shell and its hidden player. YouTube Music has no
                         // yt-player-error-message-renderer, so the media state alone decides.
                         if (video.paused || video.error || video.readyState < 2 || video.videoWidth <= 0) return;
-                        if (!response || !hasPlayableStream(response)) return;
                         shouldReveal = true;
                         if (id) {
                             if (revealedVideos.size >= 64) revealedVideos.delete(revealedVideos.values().next().value);
                             revealedVideos.add(id);
                         }
                     }
-                    if (!response || !hasPlayableStream(response)) return;
                     if (renderer) {
                         var shell = renderer.closest('yt-playability-error-supported-renderers') || renderer.parentElement;
                         if (shell && shell.style.display !== 'none') shell.style.display = 'none';
                         if (renderer.style.display !== 'none') renderer.style.display = 'none';
-                        document.querySelectorAll('.player-container-background').forEach(function (background) {
-                            if (background.style.display !== 'none') background.style.display = 'none';
-                        });
                     }
                     if (shouldReveal) revealActivePlayer(video);
                 }

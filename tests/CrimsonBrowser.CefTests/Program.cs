@@ -33,14 +33,15 @@ internal static class Program
             int exitCode = 0;
             try
             {
-                CrimsonBrowser.Services.CefRuntime.Initialize(root,
+                string? profileOverride = args.FirstOrDefault(a => a.StartsWith("--profile=", StringComparison.Ordinal))?[10..];
+                CrimsonBrowser.Services.CefRuntime.Initialize(profileOverride ?? root,
                     args.FirstOrDefault(a => a.StartsWith("--subprocess=", StringComparison.Ordinal))?[13..]);
-                Check(CrimsonBrowser.Services.CefRuntime.IsInitialized, "production CEF initialization succeeds with an isolated profile");
+                Check(CrimsonBrowser.Services.CefRuntime.IsInitialized, "production CEF initialization succeeds");
                 var context = Cef.GetGlobalRequestContext();
                 string? probeUrl = args.FirstOrDefault(argument => argument.StartsWith("--probe-live=", StringComparison.Ordinal))?[13..];
                 if (probeUrl != null)
                 {
-                    tab = new BrowserTab(context, isIncognito: true);
+                    tab = new BrowserTab(context, isIncognito: profileOverride == null);
                     int navigationEpoch = 0;
                     tab.WebView.FrameLoadStart += (_, frame) => { if (frame.Frame.IsMain) Interlocked.Increment(ref navigationEpoch); };
                     tab.InitializationFailed += (_, reason) => Console.Error.WriteLine("LIVE ENGINE ERROR: " + reason);
@@ -63,8 +64,11 @@ internal static class Program
                     Console.WriteLine("CODECS: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({h264:MediaSource.isTypeSupported('video/mp4; codecs=\"avc1.42E01E\"'),aac:MediaSource.isTypeSupported('audio/mp4; codecs=\"mp4a.40.2\"'),vp9:MediaSource.isTypeSupported('video/webm; codecs=\"vp9\"'),opus:MediaSource.isTypeSupported('audio/webm; codecs=\"opus\"')})")).Result);
                     using (var consentCookies = await context.GetCookieManagerAsync())
                     {
-                        await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "SOCS", Value = "CAI", Domain = ".youtube.com", Path = "/" });
-                        await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "CONSENT", Value = "YES+cb", Domain = ".youtube.com", Path = "/" });
+                        if (profileOverride == null)
+                        {
+                            await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "SOCS", Value = "CAI", Domain = ".youtube.com", Path = "/" });
+                            await consentCookies.SetCookieAsync("https://www.youtube.com/", new Cookie { Name = "CONSENT", Value = "YES+cb", Domain = ".youtube.com", Path = "/" });
+                        }
                     }
                     tab.Navigate(probeUrl);
                     string readyScript = probeUrl.Contains("music.youtube.com", StringComparison.OrdinalIgnoreCase)
@@ -76,6 +80,137 @@ internal static class Program
                         return response?.Result is true;
                     }, "public live response available");
                     Console.WriteLine("LIVE: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify({host:location.hostname,title:document.title,status:window.ytInitialPlayerResponse?.playabilityStatus,live:window.ytInitialPlayerResponse?.videoDetails?.isLiveContent,liveNow:window.ytInitialPlayerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow,formats:[...new Set((window.ytInitialPlayerResponse?.streamingData?.adaptiveFormats||[]).map(f=>f.mimeType))],mediaError:document.querySelector('video')?.error?.code})")).Result);
+                    if (args.Contains("--diag-player") || args.Contains("--diag-natural"))
+                    {
+                        if (args.Contains("--diag-natural"))
+                            await tab.WebView.EvaluateScriptAsync("window.__crimsonSetAdProtection?.(false);");
+                        await tab.WebView.EvaluateScriptAsync("""
+                            window.__diag = [];
+                            window.__diagEvents = [];
+                            ['error','stalled','waiting','playing','pause','ended','emptied','abort','durationchange','loadedmetadata'].forEach(function (name) {
+                                document.addEventListener(name, function (event) {
+                                    var v = event.target;
+                                    if (v && v.tagName === 'VIDEO') window.__diagEvents.push({ at: Date.now(), event: name,
+                                        code: v.error?.code, time: v.currentTime, duration: v.duration,
+                                        ready: v.readyState, network: v.networkState });
+                                }, true);
+                            });
+                            ['yt-navigate-start','yt-navigate-finish','yt-page-data-updated'].forEach(function (name) {
+                                document.addEventListener(name, function () {
+                                    const v = document.querySelector('video');
+                                    window.__diagEvents.push({ at: Date.now(), event: name,
+                                        v: new URLSearchParams(location.search).get('v'),
+                                        time: v ? Math.round(v.currentTime * 10) / 10 : null,
+                                        dur: v && isFinite(v.duration) ? Math.round(v.duration) : null,
+                                        paused: v ? v.paused : null, ended: v ? v.ended : null,
+                                        ready: v ? v.readyState : null });
+                                }, true);
+                            });
+                            window.__diagNext = [];
+                            window.__diagDecode = async function(input, init) {
+                                try {
+                                    let raw = init?.body;
+                                    if (raw == null && input instanceof Request) raw = await input.clone().arrayBuffer();
+                                    if (typeof raw === 'string') return raw;
+                                    if (raw && raw.byteLength != null) {
+                                        const bytes = new Uint8Array(raw);
+                                        if (bytes[0] === 0x1f && bytes[1] === 0x8b && typeof DecompressionStream === 'function') {
+                                            const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+                                            return await new Response(stream).text();
+                                        }
+                                        return new TextDecoder().decode(bytes);
+                                    }
+                                } catch (e) { return 'DECODE ' + e; }
+                                return null;
+                            };
+                            window.__diagRecord = function(source, url, text) {
+                                let parsed = null;
+                                try { parsed = text ? JSON.parse(text) : null; } catch (e) {}
+                                const record = { source, at: Date.now(),
+                                    ua: parsed?.context?.client?.userAgent,
+                                    params: parsed?.params,
+                                    screen: parsed?.context?.client?.clientScreen,
+                                    inline: parsed?.playbackContext?.contentPlaybackContext?.isInlinePlaybackNoAd,
+                                    attest: !!parsed?.attestationRequest };
+                                window.__diag.push(record);
+                                return record;
+                            };
+                            window.__diagResponse = async function(record, response) {
+                                try {
+                                    const data = await response.clone().json();
+                                    const status = data?.playabilityStatus;
+                                    record.status = status?.status;
+                                    record.reason = status?.reason;
+                                    record.streams = !!(data?.streamingData?.adaptiveFormats?.length || data?.streamingData?.formats?.length);
+                                    record.err = status?.errorScreen ? JSON.stringify(status.errorScreen).slice(0, 400) : null;
+                                    record.video = data?.videoDetails?.videoId;
+                                } catch (e) { record.decode = String(e); }
+                                return response;
+                            };
+                            const diagFetch = window.fetch;
+                            window.fetch = async function(input, init) {
+                                const url = typeof input === 'string' ? input : input?.url || '';
+                                if (!url.includes('/youtubei/v1/player')) {
+                                    const response = await diagFetch.apply(this, arguments);
+                                    if (url.includes('/youtubei/v1/next')) {
+                                        try {
+                                            const text = await response.clone().text();
+                                            window.__diagNext.push({ at: Date.now(), url: url.slice(0, 120),
+                                                enforcement: text.includes('282054944'),
+                                                errorScreen: text.includes('errorScreen'),
+                                                statusError: (text.match(/"status":"ERROR"/g) || []).length,
+                                                statusUnplayable: (text.match(/"status":"UNPLAYABLE"/g) || []).length,
+                                                playerResponses: (text.match(/"playabilityStatus"/g) || []).length,
+                                                length: text.length });
+                                        } catch (e) { window.__diagNext.push({ at: Date.now(), decode: String(e) }); }
+                                    }
+                                    return response;
+                                }
+                                const text = await window.__diagDecode(input, init);
+                                const record = window.__diagRecord('fetch', url, text);
+                                return window.__diagResponse(record, await diagFetch.apply(this, arguments));
+                            };
+                            const diagOpen = XMLHttpRequest.prototype.open, diagSend = XMLHttpRequest.prototype.send;
+                            XMLHttpRequest.prototype.open = function(method, url) {
+                                this.__diagUrl = url;
+                                this.__diagPlayer = String(method).toUpperCase() === 'POST' && String(url).includes('/youtubei/v1/player');
+                                return diagOpen.apply(this, arguments);
+                            };
+                            XMLHttpRequest.prototype.send = function(body) {
+                                if (this.__diagPlayer) {
+                                    const record = window.__diagRecord('xhr', String(this.__diagUrl || ''), typeof body === 'string' ? body : null);
+                                    this.addEventListener('load', () => {
+                                        try {
+                                            const data = JSON.parse(this.responseText);
+                                            const status = data?.playabilityStatus;
+                                            record.status = status?.status;
+                                            record.reason = status?.reason;
+                                            record.streams = !!(data?.streamingData?.adaptiveFormats?.length || data?.streamingData?.formats?.length);
+                                            record.err = status?.errorScreen ? JSON.stringify(status.errorScreen).slice(0, 400) : null;
+                                        } catch (e) { record.decode = String(e); }
+                                    });
+                                }
+                                return diagSend.apply(this, arguments);
+                            };
+                            true;
+                            """);
+                        int diagSeconds = args.Contains("--diag-long") ? 75 : 25;
+                        for (int i = 0; i < diagSeconds; i++)
+                        {
+                            var state = await ReadPublicPage("JSON.stringify({v:new URLSearchParams(location.search).get('v'),list:new URLSearchParams(location.search).get('list'),title:document.title,status:document.getElementById('movie_player')?.getPlayerResponse?.()?.playabilityStatus?.status,pageStatus:document.querySelector('ytd-watch-flexy')?.playerData?.playabilityStatus?.status,pageReason:document.querySelector('ytd-watch-flexy')?.playerData?.playabilityStatus?.reason,playerState:document.getElementById('movie_player')?.getPlayerState?.(),respV:document.getElementById('movie_player')?.getPlayerResponse?.()?.videoDetails?.videoId,respStreams:(()=>{const s=document.getElementById('movie_player')?.getPlayerResponse?.()?.streamingData;return s?((s.adaptiveFormats?.length||0)+'/'+(s.formats?.length||0)):null})(),unavailable:document.querySelector('ytd-watch-flexy')?.hasAttribute('player-unavailable'),text:(document.querySelector('#movie_player .ytp-error-content-wrap')?.innerText||document.querySelector('#player-error-message-container')?.innerText||'').slice(0,80),overlay:(()=>{const e=document.querySelector('#movie_player .ytp-error')||document.querySelector('yt-playability-error-supported-renderers');if(!e)return null;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {display:s.display,visibility:s.visibility,opacity:s.opacity,w:Math.round(r.width),h:Math.round(r.height)}})(),video:[...document.querySelectorAll('video')].map(v=>({paused:v.paused,time:Math.round(v.currentTime*10)/10,dur:isFinite(v.duration)?Math.round(v.duration):null,width:v.videoWidth,err:v.error?.code,ready:v.readyState,net:v.networkState,src:(v.currentSrc||'').slice(0,60) }))})");
+                            Console.WriteLine($"DIAG {i}: " + state?.Result);
+                            if (i == 2 || (args.Contains("--diag-gesture") && i % 2 == 0))
+                            {
+                                var liveHostDiag = tab.WebView.GetBrowser().GetHost();
+                                await Cef.UIThreadTaskFactory.StartNew(() => liveHostDiag.ExecuteDevToolsMethod(0, "Runtime.evaluate",
+                                    "{\"expression\":\"(()=>{const v=document.querySelector('video');if(v){v.muted=true;}document.getElementById('movie_player')?.playVideo?.();v?.play?.()})()\",\"userGesture\":true}"));
+                            }
+                            await Task.Delay(1000);
+                        }
+                        Console.WriteLine("DIAG REQUESTS: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify(window.__diag)")).Result);
+                        Console.WriteLine("DIAG EVENTS: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify(window.__diagEvents)")).Result);
+                        Console.WriteLine("DIAG NEXT: " + (await tab.WebView.EvaluateScriptAsync("JSON.stringify(window.__diagNext)")).Result);
+                    }
                     if (args.Contains("--require-live-playback"))
                     {
                         await UntilAsync(async () => (await ReadPublicPage("(()=>{const consent=document.querySelector('ytd-consent-bump-v2-lightbox');return location.hostname!=='consent.youtube.com' && !!document.querySelector('video') && !(consent && consent.getClientRects().length)})()"))?.Result is true,
