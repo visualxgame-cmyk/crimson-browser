@@ -416,7 +416,93 @@ internal static class BrowserScripts
                     '.ytp-ad-badge',
                     '.ytp-ad-progress-list',
                     '.ytp-ad-survey',
-                    '.video-ads'
+                    '.video-ads',
+                    // Google Publisher Tag, AdSense and AdThrive/Ezoic slots.
+                    '.gpt-ad',
+                    '.dfp-ad',
+                    '.google-ad',
+                    '.google-ads',
+                    '.adthrive-ad',
+                    '.adthrive-content',
+                    '.ezoic-ad',
+                    '.ezoic-adpicker-ad',
+                    '[id^="ezoic"]',
+                    '[id^="google_ads_iframe"]',
+                    'iframe[id^="google_ads_iframe"]',
+                    '[id^="aswift_"]',
+                    'iframe[name^="aswift_"]',
+                    '[data-google-query-id]',
+                    'div[id^="div-gpt-ad"]',
+                    '.adsense',
+                    '.adslot',
+                    '.ad-slot-container',
+                    // Native recommendation widgets.
+                    '.taboola',
+                    '#taboola',
+                    '[id^="taboola"]',
+                    '[class^="taboola"]',
+                    '.trc_related_container',
+                    '.trc_rbox',
+                    '.outbrain',
+                    '#outbrain',
+                    '[id^="outbrain"]',
+                    '[class^="outbrain"]',
+                    '.OUTBRAIN',
+                    '.mgid',
+                    '[id^="mgid"]',
+                    '[class^="mgid"]',
+                    '.revcontent',
+                    '[id^="revcontent"]',
+                    '.zergnet',
+                    // Common self-hosted ad containers.
+                    '.adbox',
+                    '.adsbox',
+                    '.adunit',
+                    '.ad-zone',
+                    '.adzone',
+                    '.ad-area',
+                    '.ad-wrap',
+                    '.ad-leaderboard',
+                    '.ad-rectangle',
+                    '.ad-sidebar',
+                    '.ad-sticky',
+                    '.ad-header',
+                    '.ad-footer',
+                    '.ad-top',
+                    '.ad-bottom',
+                    '.ad-mobile',
+                    '.ad-label',
+                    '.ad-notice',
+                    '.advertisement',
+                    '.advertisements',
+                    '.advertising',
+                    '.advertorial',
+                    '.ad-holder',
+                    '.ad-space',
+                    '.sponsor-ad',
+                    '.sponsored-ad',
+                    '.sponsored-content',
+                    '.promoted-content',
+                    '.native-ad',
+                    '.native-advertisement',
+                    '.content-ad',
+                    '.widget-ad',
+                    '[aria-label="Advertisement"]',
+                    '[aria-label="Advertisements"]',
+                    '[aria-label="Ad"]',
+                    '[aria-label="Reklama"]',
+                    '[data-ad]',
+                    '[data-ads]',
+                    '[data-advertisement]',
+                    '[data-ad-unit]',
+                    'iframe[src*="adservice"]',
+                    'iframe[src*="amazon-adsystem"]',
+                    'iframe[src*="googletagservices"]',
+                    'iframe[src*="adnxs"]',
+                    'iframe[src*="criteo"]',
+                    'iframe[src*="taboola"]',
+                    'iframe[src*="outbrain"]',
+                    'iframe[src*="mgid"]'
                 ].join(',') + '{ display: none !important; }';
 
                 function injectCss() {
@@ -450,7 +536,32 @@ internal static class BrowserScripts
                 function adShowing() {
                     var current = player();
                     if (current && current.classList.contains('ad-showing')) return true;
-                    return !!document.querySelector('.html5-video-player.ad-showing');
+                    if (document.querySelector('.html5-video-player.ad-showing')) return true;
+                    if (isYouTube()) return false;
+                    return !!document.querySelector('.ima-ad-container, .vjs-ad-playing, .jw-flag-ads, .ad-overlay');
+                }
+
+                // Non-YouTube players rarely expose the same controls as YouTube. Look
+                // only inside containers that explicitly identify an ad so an ordinary
+                // page button labelled "Skip" or "Close" is never clicked.
+                function clickAdText() {
+                    var roots = document.querySelectorAll('.ima-ad-container, .vjs-ad-playing, .jw-flag-ads, .ad-overlay');
+                    for (var r = 0; r < roots.length; r++) {
+                        var candidates = roots[r].querySelectorAll('button, a, [role="button"]');
+                        for (var i = 0; i < candidates.length; i++) {
+                            var candidate = candidates[i];
+                            if (candidate.disabled || clickedButtons.has(candidate)) continue;
+                            var text = (candidate.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                            if (text === 'skip ad' || text === 'skip ads' || text === 'skip' ||
+                                text === 'skip advertisement' || text === 'sari peste reclama' ||
+                                text === 'sari reclama' || text === 'inchide reclama' ||
+                                text === 'close ad' || text === 'close') {
+                                clickedButtons.add(candidate);
+                                try { candidate.click(); return true; } catch (e) { }
+                            }
+                        }
+                    }
+                    return false;
                 }
 
                 function hasPlayableStream(response) {
@@ -653,7 +764,7 @@ internal static class BrowserScripts
 
                 var wasShowingAd = false;
                 function skipAd() {
-                    if (!enabled || !isYouTube()) return;
+                    if (!enabled) return;
                     recoverBlockedPlayback();
                     clearStaleErrorShell();
                     if (!adShowing()) {
@@ -670,8 +781,17 @@ internal static class BrowserScripts
                         '.ytp-skip-ad-button',
                         '.ytp-ad-skip-button-container button',
                         'button.ytp-ad-skip-button',
-                        '.ytp-ad-overlay-close-button'
+                        '.ytp-ad-overlay-close-button',
+                        '.ima-skip-button',
+                        '.ima-ad-container .ima-skip-button',
+                        '.ima-ad-container button[aria-label*="skip" i]',
+                        '.vjs-ad-skip-button',
+                        '.jw-ad-skip-button',
+                        '.jw-ad-skip',
+                        'button[class*="skip-ad"]',
+                        '[id*="skip-ad"]'
                     ]);
+                    if (!isYouTube()) clickAdText();
                 }
 
                 var scheduled = false;
@@ -684,9 +804,23 @@ internal static class BrowserScripts
                 // The player class flips between content and ad mode; react to the flip at once.
                 var observedPlayer = null;
                 var playerObserver = new MutationObserver(kick);
-                function observePlayer() {
-                    if (!enabled || !isYouTube()) return;
+                function playerRoot() {
                     var current = player();
+                    if (current) return current;
+                    var video = document.querySelector('video');
+                    if (!video) return null;
+                    var known = video.closest('.video-js, .jwplayer, .html5-video-player, .ima-ad-container');
+                    if (known) return known;
+                    for (var node = video.parentElement; node && node !== document.body &&
+                        node !== document.documentElement; node = node.parentElement) {
+                        var name = ((node.id || '') + ' ' + (typeof node.className === 'string' ? node.className : '')).toLowerCase();
+                        if (name.indexOf('player') >= 0) return node;
+                    }
+                    return video.parentElement;
+                }
+                function observePlayer() {
+                    if (!enabled) return;
+                    var current = playerRoot();
                     if (current === observedPlayer) return;
                     playerObserver.disconnect();
                     observedPlayer = current;
@@ -766,7 +900,6 @@ internal static class BrowserScripts
                     observedPlayer = null;
                     if (!enabled) return;
                     trapObserver.observe(document.documentElement || document, {childList:true, subtree:true});
-                    if (!isYouTube()) return;
                     documentObserver.observe(document, {childList:true, subtree:true});
                     observePlayer();
                     kick();

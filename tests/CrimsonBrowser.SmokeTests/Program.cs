@@ -161,6 +161,17 @@ try
     Assert(ShieldRequestPolicy.ShouldBlockUrl("https://ads.example.test/vast/linear?zone=fixture"), "VAST tag paths are blocked");
     Assert(ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/player/vpaid.js"), "VPAID ad scripts are blocked");
     Assert(ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/tag?ad_tag=campaign"), "ad tag queries are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/js/prebid.js"), "Prebid ad auctions are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://example.test/ads/banner.png"), "self-hosted ad directories are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://example.test/ads.php?zone=1"), "self-hosted ad scripts are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://example.test/article?adunit=123"), "ad unit query parameters are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://ads.tiktok.com/i18n/pixel/events.js"), "social ad pixels are blocked");
+    Assert(ShieldRequestPolicy.ShouldBlockUrl("https://securepubads.g.doubleclick.net/tag/js/gpt.js"), "Google Publisher Tag is blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/uploads/photo.jpg"), "upload paths are not advertising directories");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/articles/ads-guide"), "article titles mentioning ads are not blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/advertisement-article"), "article titles mentioning advertising are not blocked");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/video.mp4?adunitprice=10"), "similar query names do not match ad unit filters");
+    Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/article?download=1"), "download parameters are not ad units");
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://example.test/articles/vast-landscape-guide"), "ordinary article paths are not ad tags");
     Assert(!ShieldRequestPolicy.ShouldBlockUrl("https://cdn.example.test/movies/feature-film.mp4"), "ordinary video files remain reachable");
     Assert(PopupNavigationPolicy.ShouldBlock("https://popads.net/open", true), "advertising popups are blocked even with user activation");

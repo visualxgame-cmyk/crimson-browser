@@ -265,6 +265,15 @@ internal static class Program
                     <button id="make-trap" onclick="window.makeTrapClicks=(window.makeTrapClicks||0)+1;var t=document.createElement('div');t.style='position:fixed;display:block;width:100%;height:100%;top:0;left:0;right:0;bottom:0;background-color:rgba(0,0,0,0);z-index:300000;';t.setAttribute('data-trap','1');t.addEventListener('click',function(){window.trapClicks=(window.trapClicks||0)+1;});document.body.appendChild(t);">Make trap</button>
                     </body>
                     """);
+                File.WriteAllText(Path.Combine(root, "ad-skip-fixture.html"), """
+                    <!doctype html><title>Generic ad skip fixture</title><body style="margin:0">
+                    <video style="position:absolute;left:0;top:0;width:320px;height:180px"></video>
+                    <div class="ima-ad-container" style="position:absolute;left:0;top:0;width:320px;height:180px">
+                      <button class="ima-skip-button" onclick="window.adSkipClicks=(window.adSkipClicks||0)+1">Skip Ad</button>
+                    </div>
+                    <button id="normal-skip" style="position:absolute;left:200px;top:220px" onclick="window.normalSkipClicks=(window.normalSkipClicks||0)+1">Skip</button>
+                    </body>
+                    """);
                 using (var wave = new BinaryWriter(File.Create(Path.Combine(root, "silence.wav"))))
                 {
                     wave.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); wave.Write(8036);
@@ -427,6 +436,14 @@ internal static class Program
                     "transparent full-screen popunder click trap is removed");
                 Check((await tab.WebView.EvaluateScriptAsync("window.makeTrapClicks===1 && typeof window.trapClicks==='undefined'")).Result is true,
                     "removing the click trap leaves the page's own handlers intact");
+                tab.Navigate("https://smoke.crimson/ad-skip-fixture.html");
+                await UntilAsync(async () => tab.WebView.CanExecuteJavascriptInMainFrame &&
+                    (await tab.WebView.EvaluateScriptAsync("document.title==='Generic ad skip fixture' && typeof window.__crimsonSetAdProtection==='function'")).Result is true,
+                    "generic ad skip fixture ready");
+                await UntilAsync(async () => (await tab.WebView.EvaluateScriptAsync("window.adSkipClicks===1")).Result is true,
+                    "generic video ad skip control is clicked");
+                Check((await tab.WebView.EvaluateScriptAsync("typeof window.normalSkipClicks==='undefined'")).Result is true,
+                    "ordinary page buttons labelled Skip are not clicked");
                 tab.Navigate("https://smoke.crimson/one.html");
                 await Until(() => tab.Title == "CEF Test One" && !tab.IsLoading, "normal fixture restored");
                 string? shortcut = null;
